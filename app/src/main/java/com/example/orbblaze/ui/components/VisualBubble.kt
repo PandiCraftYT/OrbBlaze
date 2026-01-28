@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 
@@ -22,54 +23,59 @@ fun VisualBubble(
     Box(
         modifier = modifier
             .size(44.dp)
-            .padding(1.dp) // Pequeño margen para que no se toquen
+            .padding(1.dp)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val radius = size.minDimension / 2f
-            val centerOffset = Offset(size.width / 2, size.height / 2)
+            val center = Offset(size.width / 2, size.height / 2)
 
-            // 1. CUERPO PRINCIPAL (Degradado 3D)
-            // Simula luz viniendo de arriba a la izquierda
+            // Colores para la gema y el oro
+            val gemBase = color
+            val gemDark = color.copy(red = color.red * 0.5f, green = color.green * 0.5f, blue = color.blue * 0.5f)
+            val gemHighlight = Color.White.copy(alpha = 0.8f)
+
+            val goldDark = Color(0xFFB8860B) // Oro oscuro
+            val goldLight = Color(0xFFFFD700) // Oro brillante
+
+            // 1. EL ENGARCE DE ORO (Borde exterior)
+            drawCircle(
+                brush = Brush.sweepGradient(
+                    colors = listOf(goldDark, goldLight, goldDark, goldLight, goldDark),
+                    center = center
+                ),
+                radius = radius - 2f,
+                center = center,
+                style = Stroke(width = 4f)
+            )
+
+            // 2. LA GEMA CENTRAL (Cuerpo principal)
+            // Gradiente radial para dar profundidad y aspecto de piedra preciosa pulida
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.6f), // Brillo central (punto de luz)
-                        color,                          // Color real
-                        color.copy(red = color.red * 0.8f, green = color.green * 0.8f, blue = color.blue * 0.8f) // Sombra borde
+                        gemBase,    // Centro brillante
+                        gemDark     // Bordes oscuros
                     ),
-                    center = Offset(size.width * 0.3f, size.height * 0.3f),
-                    radius = radius * 1.2f
+                    center = center.copy(y = center.y - radius * 0.2f), // Luz viene de arriba
+                    radius = radius * 0.9f
                 ),
-                radius = radius,
-                center = centerOffset
+                radius = radius * 0.85f,
+                center = center
             )
 
-            // 2. BORDE SUTIL (Para definir la forma en fondos claros)
-            drawCircle(
-                color = color.copy(alpha = 0.5f),
-                radius = radius,
-                center = centerOffset,
-                style = Stroke(width = 2f)
-            )
-
-            // 3. REFLEJO ESPECULAR (El "brillo de caramelo")
-            // Dibuja un óvalo blanco nítido arriba a la izquierda
+            // 3. BRILLO ESPECULAR (El "toque" de joya)
+            // Un reflejo blanco nítido en la parte superior
             drawOval(
-                color = Color.White.copy(alpha = 0.9f),
-                topLeft = Offset(size.width * 0.2f, size.height * 0.15f),
-                size = Size(size.width * 0.25f, size.height * 0.15f)
+                color = gemHighlight,
+                topLeft = Offset(center.x - radius * 0.5f, center.y - radius * 0.7f),
+                size = Size(radius * 0.6f, radius * 0.4f)
             )
 
-            // 4. LUZ DE REBOTE (Rim Light abajo a la derecha)
-            // Un pequeño reflejo suave abajo para dar transparencia
-            drawArc(
-                color = Color.White.copy(alpha = 0.4f),
-                startAngle = 0f,
-                sweepAngle = 90f,
-                useCenter = false,
-                topLeft = Offset(size.width * 0.2f, size.height * 0.2f),
-                size = Size(size.width * 0.6f, size.height * 0.6f),
-                style = Stroke(width = 3f)
+            // 4. PEQUEÑO BRILLO SECUNDARIO (Abajo)
+            drawOval(
+                color = gemHighlight.copy(alpha = 0.4f),
+                topLeft = Offset(center.x + radius * 0.2f, center.y + radius * 0.3f),
+                size = Size(radius * 0.2f, radius * 0.15f)
             )
         }
     }
