@@ -2,10 +2,12 @@ package com.example.orbblaze.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Colores vibrantes para las burbujas
+val BubbleRed = Color(0xFFFF5F5F)
+val BubbleBlue = Color(0xFF5AC8FA)
+val BubbleGreen = Color(0xFF4CD964)
+val BubblePurple = Color(0xFFAF52DE)
+val BubbleYellow = Color(0xFFFFD60A)
+val BubbleCyan = Color(0xFF64D2FF)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val GameBackground = Color(0xFF0F172A)

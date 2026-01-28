@@ -9,46 +9,36 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
+// Definimos el esquema de colores para el juego (usando tus colores nuevos)
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = BubbleCyan,       // Usamos el Cyan como color principal
+    secondary = BubblePurple,    // Púrpura para elementos secundarios
+    tertiary = BubbleBlue,       // Azul para acentos
+    background = GameBackground, // Nuestro fondo oscuro
+    surface = GameBackground,
+    onPrimary = Color.White,
+    onBackground = Color.White,
+    onSurface = Color.White
 )
 
+// Para un juego estético, a veces es mejor forzar el tema oscuro
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    primary = BubbleBlue,
+    secondary = BubblePurple,
+    tertiary = BubbleCyan
 )
 
 @Composable
 fun OrbBlazeTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // Lo desactivamos para que no rompa nuestra estética
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    // Forzamos el esquema oscuro para que el juego siempre se vea "bonito"
+    val colorScheme = if (darkTheme) DarkColorScheme else DarkColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,
