@@ -17,3 +17,11 @@ data class Bubble(
     val color: BubbleColor,
     val state: BubbleState = BubbleState.STATIONARY
 )
+
+data class Projectile(
+    val x: Float,
+    val y: Float,
+    val color: BubbleColor,
+    val velocityX: Float,
+    val velocityY: Float
+)
