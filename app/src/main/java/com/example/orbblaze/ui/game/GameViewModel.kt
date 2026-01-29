@@ -64,25 +64,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val matchFinder = MatchFinder()
     private val prefs = application.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
 
-    // --- ESTADO DEL JUEGO ---
     var bubblesByPosition by mutableStateOf<Map<GridPosition, Bubble>>(emptyMap())
         private set
-
     var gameState by mutableStateOf(GameState.PLAYING)
         private set
-
     var isPaused by mutableStateOf(false)
         private set
-
     var shooterAngle by mutableStateOf(0f)
         private set
-
     var score by mutableStateOf(0)
         private set
-
     var highScore by mutableStateOf(0)
         private set
-
     var shotsFiredCount by mutableStateOf(0)
         private set
     private val DROP_THRESHOLD = 6
@@ -90,7 +83,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     var soundEvent by mutableStateOf<SoundType?>(null)
         private set
-
     var vibrationEvent by mutableStateOf<Boolean>(false)
         private set
 
@@ -171,14 +163,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun updateAngle(touchX: Float, touchY: Float, screenWidth: Float, screenHeight: Float) {
         if (gameState != GameState.PLAYING || isPaused) return
         val centerX = screenWidth / 2f
-        val centerY = screenHeight
+        val shooterY = screenHeight * 0.82f
         val dx = touchX - centerX
-        val dy = centerY - touchY
+        val dy = shooterY - touchY
         val angleInRadians = atan2(dx, dy)
         shooterAngle = Math.toDegrees(angleInRadians.toDouble()).toFloat().coerceIn(-80f, 80f)
     }
 
-    fun onShoot(screenWidth: Float, screenHeight: Float) {
+    fun onShoot(screenWidth: Float, screenHeight: Float, shooterYPx: Float) {
         if (gameState != GameState.PLAYING || isPaused) return
         if (activeProjectile != null) return
         val m = metrics ?: return
@@ -188,9 +180,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         triggerVibration()
 
         val angleRad = Math.toRadians(shooterAngle.toDouble())
-        val speed = 25f
+        val speed = 35f
         val startX = screenWidth / 2f
-        val startY = screenHeight - 140f
+        val startY = shooterYPx
 
         activeProjectile = Projectile(
             x = startX,
@@ -222,12 +214,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ✅ CORREGIDO: Probabilidades ajustadas para Modo Normal
     private fun generateNewBubbleColor(): BubbleColor {
         val rand = Math.random()
         return when {
-            rand < 0.01 -> BubbleColor.RAINBOW // 1% Probabilidad (Muy rara)
-            rand < 0.04 -> BubbleColor.BOMB    // 3% Probabilidad (Poco común)
+            rand < 0.01 -> BubbleColor.RAINBOW
+            rand < 0.04 -> BubbleColor.BOMB
             else -> BubbleColor.values().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
         }
     }
@@ -337,7 +328,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             newGrid[GridPosition(pos.row + 1, pos.col)] = bubble
         }
 
-        // Rellenar Fila 0 con 10 columnas
         for (col in 0 until COLUMNS_COUNT) {
             newGrid[GridPosition(0, col)] = Bubble(color = generateNewBubbleColor())
         }
@@ -350,23 +340,39 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         metrics?.let { checkGameConditions(it) }
     }
 
+    // ✅ LOGICA DE SNAP CORREGIDA (INTELIGENTE)
     private fun snapToGrid(x: Float, y: Float, color: BubbleColor) {
         val m = metrics ?: return
-        val row = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt().coerceAtLeast(0)
-        val xOffset = if (row % 2 != 0) (m.bubbleDiameter / 2f) else 0f
-        val col = ((x - (m.boardStartPadding + xOffset)) / m.horizontalSpacing).roundToInt().coerceAtLeast(0)
-        val newPos = GridPosition(row, col)
+
+        // 1. Calculamos la posición aproximada
+        val estimatedRow = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt().coerceAtLeast(0)
+        val xOffsetEst = if (estimatedRow % 2 != 0) (m.bubbleDiameter / 2f) else 0f
+        val estimatedCol = ((x - (m.boardStartPadding + xOffsetEst)) / m.horizontalSpacing).roundToInt().coerceAtLeast(0)
+        val estimatedPos = GridPosition(estimatedRow, estimatedCol)
+
+        // 2. Buscamos TODOS los vecinos posibles alrededor de esa estimación
+        // Esto incluye el punto estimado y sus 6 vecinos.
+        val candidates = getNeighborsAll(estimatedPos) + estimatedPos
+
+        // 3. Filtramos solo los que son válidos (dentro del tablero) y están VACÍOS
+        val validEmptySpots = candidates.filter { pos ->
+            pos.row >= 0 && pos.col >= 0 && pos.col < COLUMNS_COUNT && !bubblesByPosition.containsKey(pos)
+        }
+
+        // 4. ELEGIR EL MEJOR: El que esté geométricamente más cerca del proyectil (x,y)
+        // Esto permite que si la bola entró profundo en un hueco, el hueco gane sobre la burbuja de enfrente.
+        val finalPos = validEmptySpots.minByOrNull { pos ->
+            val (cx, cy) = getBubbleCenter(pos)
+            val dx = x - cx
+            val dy = y - cy
+            dx * dx + dy * dy // Distancia cuadrada
+        } ?: estimatedPos // Fallback por seguridad
 
         val newGrid = bubblesByPosition.toMutableMap()
-        val finalPos = if (newGrid.containsKey(newPos)) findNearestFreeNeighbor(newPos, newGrid) ?: newPos else newPos
 
         when (color) {
-            BubbleColor.BOMB -> {
-                explodeAt(finalPos, newGrid)
-            }
-            BubbleColor.RAINBOW -> {
-                handleRainbowAt(finalPos, newGrid, x, y)
-            }
+            BubbleColor.BOMB -> explodeAt(finalPos, newGrid)
+            BubbleColor.RAINBOW -> handleRainbowAt(finalPos, newGrid, x, y)
             else -> {
                 newGrid[finalPos] = Bubble(color = color)
                 val matches = matchFinder.findMatches(finalPos, newGrid)
@@ -395,13 +401,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         triggerVibration()
         val count = matches.size
 
-        // Puntos
         val points = (count * 10) + ((count - 3) * 20)
         score += points
         spawnFloatingText(x, y, "+$points")
         updateHighScore()
 
-        // Explosiones
         matches.forEach { pos ->
             val bubbleColor = grid[pos]?.color ?: visualColor
             grid.remove(pos)
@@ -516,14 +520,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Helper para obtener vecinos ocupados (ya existente)
     private fun getNeighbors(pos: GridPosition, grid: Map<GridPosition, Bubble>): List<GridPosition> {
+        return getNeighborsAll(pos).filter { grid.containsKey(it) }
+    }
+
+    // ✅ NUEVO HELPER: Devuelve todas las coordenadas vecinas (ocupadas o no)
+    private fun getNeighborsAll(pos: GridPosition): List<GridPosition> {
         val offsets = if (pos.row % 2 == 0) {
             listOf(-1 to -1, -1 to 0, 0 to -1, 0 to 1, 1 to -1, 1 to 0)
         } else {
             listOf(-1 to 0, -1 to 1, 0 to -1, 0 to 1, 1 to 0, 1 to 1)
         }
         return offsets.map { GridPosition(pos.row + it.first, pos.col + it.second) }
-            .filter { grid.containsKey(it) }
     }
 
     private fun checkGameConditions(m: BoardMetricsPx) {
@@ -544,20 +553,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ✅ COLISIÓN FINA (70%): Permite entrar en esquinas
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
-        val m = metrics ?: return false; val collideDist = m.bubbleDiameter * 0.95f
+        val m = metrics ?: return false
+        val collideDist = m.bubbleDiameter * 0.70f // 70% del tamaño visual
         return bubblesByPosition.keys.any { pos ->
-            val (cx, cy) = getBubbleCenter(pos); distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist
+            val (cx, cy) = getBubbleCenter(pos)
+            distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist
         }
     }
+
     private fun distancePointToSegment(cx: Float, cy: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
         val abx = bx - ax; val aby = by - ay; val acx = cx - ax; val acy = cy - ay
         val abLen2 = abx * abx + aby * aby; if (abLen2 == 0f) return hypot(cx - ax, cy - ay)
         var t = (acx * abx + acy * aby) / abLen2; t = t.coerceIn(0f, 1f)
         return hypot(cx - (ax + t * abx), cy - (ay + t * aby))
     }
+    // NOTA: findNearestFreeNeighbor YA NO SE USA, la lógica nueva está en snapToGrid
     private fun findNearestFreeNeighbor(pos: GridPosition, grid: Map<GridPosition, Bubble>): GridPosition? {
-        val candidates = listOf(GridPosition(pos.row, pos.col - 1), GridPosition(pos.row, pos.col + 1), GridPosition(pos.row - 1, pos.col), GridPosition(pos.row + 1, pos.col), GridPosition(pos.row - 1, pos.col + if (pos.row % 2 != 0) 1 else -1), GridPosition(pos.row + 1, pos.col + if (pos.row % 2 != 0) 1 else -1))
+        val candidates = getNeighborsAll(pos)
         return candidates.firstOrNull { !grid.containsKey(it) && it.row >= 0 && it.col >= 0 }
     }
     private fun getBubbleCenter(pos: GridPosition): Pair<Float, Float> {

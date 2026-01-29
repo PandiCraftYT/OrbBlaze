@@ -20,6 +20,7 @@ class SoundManager(val context: Context) {
     private val prefs = context.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
     private var sfxVolume: Float = prefs.getFloat("sfx_volume", 1.0f)
     private var musicVolume: Float = prefs.getFloat("music_volume", 0.5f)
+    private var isMusicMuted: Boolean = prefs.getBoolean("music_muted", false)
 
     init {
         val audioAttributes = AudioAttributes.Builder()
@@ -49,8 +50,11 @@ class SoundManager(val context: Context) {
 
     private fun initMusic() {
         try {
-            mediaPlayer = MediaPlayer.create(context, R.raw.music_background)
-            mediaPlayer?.isLooping = true
+            if (mediaPlayer == null) {
+                mediaPlayer = MediaPlayer.create(context, R.raw.music_background)
+                // ✅ ESTO HACE EL BUCLE INFINITO
+                mediaPlayer?.isLooping = true
+            }
             updateMusicVolume()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -59,21 +63,31 @@ class SoundManager(val context: Context) {
 
     // --- FUNCIONES PARA ACTUALIZACIÓN EN TIEMPO REAL ---
 
-    // ✅ NUEVO: Actualiza volumen de música al instante
     fun setMusicVol(vol: Float) {
         musicVolume = vol
-        updateMusicVolume()
+        // Si no está muteado, actualizamos el volumen real
+        if (!isMusicMuted) {
+            updateMusicVolume()
+        }
     }
 
-    // ✅ NUEVO: Actualiza volumen de efectos al instante
     fun setSfxVol(vol: Float) {
         sfxVolume = vol
     }
 
-    // Recarga desde preferencias (para cuando cambias de pantalla)
+    // ✅ NUEVO: Función para activar/desactivar Mute
+    fun setMusicMute(muted: Boolean) {
+        isMusicMuted = muted
+        prefs.edit().putBoolean("music_muted", muted).apply()
+        updateMusicVolume()
+    }
+
+    fun isMusicMuted(): Boolean = isMusicMuted
+
     fun refreshSettings() {
         sfxVolume = prefs.getFloat("sfx_volume", 1.0f)
         musicVolume = prefs.getFloat("music_volume", 0.5f)
+        isMusicMuted = prefs.getBoolean("music_muted", false)
         updateMusicVolume()
     }
 
@@ -83,12 +97,24 @@ class SoundManager(val context: Context) {
     }
 
     private fun updateMusicVolume() {
-        mediaPlayer?.setVolume(musicVolume, musicVolume)
+        // Si está muteado, volumen 0. Si no, el volumen del slider.
+        val finalVolume = if (isMusicMuted) 0f else musicVolume
+        try {
+            mediaPlayer?.setVolume(finalVolume, finalVolume)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun startMusic() {
-        if (mediaPlayer?.isPlaying == false) {
-            mediaPlayer?.start()
+        try {
+            if (mediaPlayer == null) initMusic()
+
+            if (mediaPlayer?.isPlaying == false) {
+                mediaPlayer?.start()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

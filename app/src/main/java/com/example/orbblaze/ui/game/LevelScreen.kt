@@ -1,12 +1,13 @@
 package com.example.orbblaze.ui.game
 
 import android.annotation.SuppressLint
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -66,49 +66,80 @@ fun LevelScreen(
     val haptic = LocalHapticFeedback.current
     var volumeSlider by remember { mutableStateOf(viewModel.getSfxVolume()) }
 
+    // Estado para la línea guía
+    var isAiming by remember { mutableStateOf(false) }
+
+    // Animación maestra para optimizar rendimiento (1 sola para todos los arcoíris)
+    val infiniteTransition = rememberInfiniteTransition(label = "master_rainbow")
+    val masterRainbowRotation by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
+        label = "rotation"
+    )
+
     LaunchedEffect(gameState) {
-        if (gameState != GameState.PLAYING) {
-            soundManager.pauseMusic()
-        } else {
-            soundManager.startMusic()
-        }
+        if (gameState != GameState.PLAYING) soundManager.pauseMusic() else soundManager.startMusic()
     }
-
     LaunchedEffect(soundEvent) {
-        soundEvent?.let {
-            soundManager.play(it)
-            viewModel.clearSoundEvent()
-        }
+        soundEvent?.let { soundManager.play(it); viewModel.clearSoundEvent() }
     }
-
     LaunchedEffect(vibrationEvent) {
-        if (vibrationEvent) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            viewModel.clearVibrationEvent()
-        }
+        if (vibrationEvent) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.clearVibrationEvent() }
     }
 
     val density = LocalDensity.current
     val backgroundBrush = Brush.verticalGradient(colors = listOf(BgTop, BgBottom))
 
-    // ✅ MODIFICADO: Movemos BoxWithConstraints al principio para envolver todo
+    // ✅ CORRECCIÓN DE ALTURA: 142dp coincide exactamente con las manos del Panda
+    val shooterHeightDp = 142.dp
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundBrush)
             .systemBarsPadding()
+            // ✅ SISTEMA DE CONTROL UNIFICADO (SIN CONFLICTOS)
             .pointerInput(Unit) {
-                detectDragGestures { change: PointerInputChange, _ ->
-                    viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat())
-                }
-            }
-            .pointerInput(Unit) {
-                detectTapGestures {
-                    viewModel.onShoot(size.width.toFloat(), size.height.toFloat())
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val startPos = down.position
+
+                    // Zona del Panda (para cambiar bola)
+                    val pandaZoneRadius = 120.dp.toPx()
+                    val centerX = size.width / 2
+                    val pandaTopY = size.height - 220.dp.toPx()
+
+                    val isPandaClick = startPos.x >= (centerX - pandaZoneRadius) &&
+                            startPos.x <= (centerX + pandaZoneRadius) &&
+                            startPos.y >= pandaTopY
+
+                    if (isPandaClick) {
+                        // Si toca al panda, espera a que suelte y cambia
+                        do { val event = awaitPointerEvent() } while (event.changes.any { it.pressed })
+                        viewModel.swapBubbles()
+                    } else {
+                        // Si toca la pantalla: APUNTAR
+                        isAiming = true
+                        viewModel.updateAngle(startPos.x, startPos.y, size.width.toFloat(), size.height.toFloat())
+
+                        // Bucle de arrastre (Sigue la línea mientras el dedo esté puesto)
+                        do {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.find { it.id == down.id }
+                            if (change != null && change.pressed) {
+                                viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat())
+                            }
+                        } while (event.changes.any { it.pressed })
+
+                        // AL SOLTAR: DISPARAR
+                        isAiming = false
+                        val handsYPx = size.height - with(density) { shooterHeightDp.toPx() }
+                        viewModel.onShoot(size.width.toFloat(), size.height.toFloat(), handsYPx)
+                    }
                 }
             }
     ) {
-        // --- CÁLCULO DE MÉTRICAS SIMÉTRICAS ---
+        // Métricas Simétricas (10 Columnas)
         val screenWidth = constraints.maxWidth.toFloat()
         val bubbleSize = 44.dp
         val bubbleDiameterPx = with(density) { bubbleSize.toPx() }
@@ -118,69 +149,52 @@ fun LevelScreen(
         val verticalSpacing = 36.dp
         val boardTopPaddingPx = with(density) { 80.dp.toPx() }
         val ceilingYPx = boardTopPaddingPx + bubbleDiameterPx * 0.2f
-
-        // ✅ CÁLCULO CLAVE PARA CENTRAR: Asumimos 10 columnas (como en el ViewModel)
         val numCols = 10
         val totalGridWidth = numCols * horizontalSpacingPx
-        // Calculamos el espacio sobrante y lo dividimos entre 2. Aseguramos un mínimo de 8dp.
-        val minSideMargin = with(density) { 8.dp.toPx() }
-        val centeredPadding = ((screenWidth - totalGridWidth) / 2f).coerceAtLeast(minSideMargin)
+        val offset = bubbleDiameterPx / 2f
+        val centeredPadding = ((screenWidth - totalGridWidth) / 2f) - (offset / 4f)
 
-        // Actualizamos las métricas en el ViewModel con el nuevo padding centrado
         SideEffect {
-            viewModel.setBoardMetrics(
-                BoardMetricsPx(
-                    bubbleDiameter = bubbleDiameterPx,
-                    horizontalSpacing = horizontalSpacingPx,
-                    verticalSpacing = with(density) { verticalSpacing.toPx() },
-                    boardTopPadding = boardTopPaddingPx,
-                    boardStartPadding = centeredPadding, // ¡Usamos el padding centrado!
-                    ceilingY = ceilingYPx
-                )
-            )
+            viewModel.setBoardMetrics(BoardMetricsPx(bubbleDiameterPx, horizontalSpacingPx, with(density) { verticalSpacing.toPx() }, boardTopPaddingPx, centeredPadding, ceilingYPx))
         }
 
         // 1. CANVAS (Línea guía, partículas, textos)
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val baseHeightPx = with(density) { 150.dp.toPx() }
-            val start = Offset(size.width / 2f, size.height - baseHeightPx)
-            val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
-            var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
-            val dlen = hypot(dirX, dirY).coerceAtLeast(0.0001f); dirX /= dlen; dirY /= dlen
-            val leftWall = bubbleRadiusPx; val rightWall = size.width - bubbleRadiusPx
-            val guideLength = size.height * 0.7f; var remaining = guideLength
-            var current = start; var bounced = false
-            val guideColor = Color.White.copy(alpha = 0.6f)
-            val stroke = Stroke(width = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 20f), 0f), cap = StrokeCap.Round)
+            val handsYPx = size.height - with(density) { shooterHeightDp.toPx() }
+            val start = Offset(size.width / 2f, handsYPx) // La línea sale de las manos
+
+            if (isAiming) {
+                val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
+                var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
+                val dlen = hypot(dirX, dirY).coerceAtLeast(0.0001f); dirX /= dlen; dirY /= dlen
+                val leftWall = bubbleRadiusPx; val rightWall = size.width - bubbleRadiusPx
+                var remaining = size.height * 0.7f; var current = start; var bounced = false
+                val guideColor = Color.White.copy(alpha = 0.6f)
+                val stroke = Stroke(width = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 20f), 0f), cap = StrokeCap.Round)
+
+                while (remaining > 0f) {
+                    val tToWall = when { dirX > 0f -> (rightWall - current.x) / dirX; dirX < 0f -> (leftWall - current.x) / dirX; else -> Float.POSITIVE_INFINITY }
+                    val distToWall = tToWall
+                    if (distToWall.isInfinite() || distToWall.isNaN() || distToWall >= remaining || bounced) {
+                        val end = Offset(current.x + dirX * remaining, current.y + dirY * remaining)
+                        drawLine(guideColor, current, end, strokeWidth = 5f, pathEffect = stroke.pathEffect, cap = stroke.cap)
+                        drawCircle(guideColor, 8f, end); break
+                    }
+                    val hitPoint = Offset(current.x + dirX * distToWall, current.y + dirY * distToWall)
+                    drawLine(guideColor, current, hitPoint, strokeWidth = 5f, pathEffect = stroke.pathEffect, cap = stroke.cap)
+                    remaining -= distToWall; dirX *= -1f; current = hitPoint; bounced = true
+                }
+            }
 
             val dangerY = boardTopPaddingPx + (verticalSpacing.toPx() * 12)
             drawLine(color = Color.Red.copy(alpha = 0.3f), start = Offset(0f, dangerY), end = Offset(size.width, dangerY), strokeWidth = 4f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f)))
 
-            while (remaining > 0f) {
-                val tToWall = when { dirX > 0f -> (rightWall - current.x) / dirX; dirX < 0f -> (leftWall - current.x) / dirX; else -> Float.POSITIVE_INFINITY }
-                val distToWall = tToWall
-                if (distToWall.isInfinite() || distToWall.isNaN() || distToWall >= remaining || bounced) {
-                    val end = Offset(x = current.x + dirX * remaining, y = current.y + dirY * remaining)
-                    drawLine(guideColor, current, end, strokeWidth = 5f, pathEffect = stroke.pathEffect, cap = stroke.cap)
-                    drawCircle(guideColor, 8f, end); break
-                }
-                val hitPoint = Offset(x = current.x + dirX * distToWall, y = current.y + dirY * distToWall)
-                drawLine(guideColor, current, hitPoint, strokeWidth = 5f, pathEffect = stroke.pathEffect, cap = stroke.cap)
-                remaining -= distToWall; dirX *= -1f; current = hitPoint; bounced = true
-            }
-
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
 
             drawIntoCanvas { canvas ->
-                val paint = android.graphics.Paint().apply {
-                    textSize = 60f
-                    textAlign = android.graphics.Paint.Align.CENTER
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                }
-
+                val paint = android.graphics.Paint().apply { textSize = 60f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD }
                 floatingTexts.forEach { ft ->
-                    paint.color = android.graphics.Color.WHITE
-                    paint.alpha = (ft.life * 255).toInt().coerceIn(0, 255)
+                    paint.color = android.graphics.Color.WHITE; paint.alpha = (ft.life * 255).toInt().coerceIn(0, 255)
                     paint.setShadowLayer(5f, 2f, 2f, android.graphics.Color.BLACK)
                     canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paint)
                 }
@@ -193,25 +207,22 @@ fun LevelScreen(
                 val rowOffsetPx = if (pos.row % 2 != 0) (bubbleDiameterPx / 2f) else 0f
                 val xPosPx = centeredPadding + rowOffsetPx + (pos.col * horizontalSpacingPx)
                 val yPosPx = boardTopPaddingPx + (pos.row * with(density) { verticalSpacing.toPx() })
-
                 VisualBubble(
                     color = mapBubbleColor(bubble.color),
-                    isRainbow = bubble.color == BubbleColor.RAINBOW, // ✅ AQUÍ ACTIVAMOS EL EFECTO
+                    isRainbow = bubble.color == BubbleColor.RAINBOW,
+                    rainbowRotation = masterRainbowRotation,
                     modifier = Modifier.offset(x = with(density) { xPosPx.toDp() }, y = with(density) { yPosPx.toDp() })
                 )
             }
         }
 
-        // 3. PROYECTIL (BOLA VOLADORA)
+        // 3. PROYECTIL
         activeProjectile?.let { projectile ->
             VisualBubble(
                 color = mapBubbleColor(projectile.color),
-                // ✅ ESTA ES LA LÍNEA QUE FALTABA:
                 isRainbow = projectile.color == BubbleColor.RAINBOW,
-                modifier = Modifier.offset(
-                    x = with(density) { projectile.x.toDp() } - (bubbleSize / 2),
-                    y = with(density) { projectile.y.toDp() } - (bubbleSize / 2)
-                )
+                rainbowRotation = masterRainbowRotation,
+                modifier = Modifier.offset(x = with(density) { projectile.x.toDp() } - (bubbleSize / 2), y = with(density) { projectile.y.toDp() } - (bubbleSize / 2))
             )
         }
 
@@ -219,28 +230,18 @@ fun LevelScreen(
         PandaShooter(
             angle = viewModel.shooterAngle,
             currentBubbleColor = mapBubbleColor(currentBubbleColor),
-            // ✅ CORRECCIÓN: Le decimos TRUE si el enum es RAINBOW
             isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW,
-
             nextBubbleColor = mapBubbleColor(previewBubbleColor),
-            // ✅ CORRECCIÓN: Lo mismo para la siguiente
             isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW,
-
+            rainbowRotation = masterRainbowRotation,
             shotTick = viewModel.shotTick,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .offset(y = (-10).dp)
-                .pointerInput(Unit) { detectTapGestures { viewModel.swapBubbles() } }
+            modifier = Modifier.align(Alignment.BottomCenter).offset(y = (-10).dp)
         )
 
         // BARRA SUPERIOR
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-                .align(Alignment.TopCenter),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp).align(Alignment.TopCenter),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Box {
@@ -249,127 +250,46 @@ fun LevelScreen(
                 }
                 Text(text = "BEST: $highScore", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f), letterSpacing = 1.sp))
             }
-
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.2f))
-                    .clickable { viewModel.togglePause() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Configuración",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
+            Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.2f)).clickable { viewModel.togglePause() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Settings, "Configuración", tint = Color.White, modifier = Modifier.size(32.dp))
             }
         }
 
-        // OVERLAY PAUSA
+        // OVERLAY PAUSA / GAME OVER
         if (isPaused && gameState == GameState.PLAYING) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.8f))
-                    .pointerInput(Unit) { detectTapGestures { } },
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)).clickable {}, contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "PAUSA",
-                        style = TextStyle(fontSize = 48.sp, fontWeight = FontWeight.Black, color = Color(0xFFFFD700), shadow = Shadow(color = Color.Black, blurRadius = 10f))
-                    )
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF64FFDA)).clickable { viewModel.togglePause() }.padding(horizontal = 40.dp, vertical = 16.dp)) {
-                        Text(text = "CONTINUAR", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E)))
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White).clickable { viewModel.restartGame() }.padding(horizontal = 40.dp, vertical = 16.dp)) {
-                        Text(text = "REINICIAR", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black))
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
+                    Text("PAUSA", style = TextStyle(fontSize = 48.sp, fontWeight = FontWeight.Black, color = Color(0xFFFFD700)))
+                    Spacer(Modifier.height(32.dp))
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF64FFDA)).clickable { viewModel.togglePause() }.padding(40.dp, 16.dp)) { Text("CONTINUAR", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E))) }
+                    Spacer(Modifier.height(24.dp))
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color.White).clickable { viewModel.restartGame() }.padding(40.dp, 16.dp)) { Text("REINICIAR", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black)) }
+                    Spacer(Modifier.height(24.dp))
                     Text("VOLUMEN EFECTOS", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold))
-                    Slider(
-                        value = volumeSlider,
-                        onValueChange = {
-                            volumeSlider = it
-                            viewModel.setSfxVolume(it)
-                            soundManager.refreshSettings()
-                        },
-                        colors = SliderDefaults.colors(thumbColor = Color(0xFFFFD700), activeTrackColor = Color.White),
-                        modifier = Modifier.width(200.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Box(
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.Transparent).border(2.dp, Color.White, RoundedCornerShape(50))
-                            .clickable {
-                                soundManager.startMusic()
-                                viewModel.restartGame()
-                                onMenuClick()
-                            }
-                            .padding(horizontal = 40.dp, vertical = 12.dp)
-                    ) {
-                        Text(text = "SALIR", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White))
-                    }
+                    Slider(value = volumeSlider, onValueChange = { volumeSlider = it; viewModel.setSfxVolume(it); soundManager.refreshSettings() }, colors = SliderDefaults.colors(thumbColor = Color(0xFFFFD700), activeTrackColor = Color.White), modifier = Modifier.width(200.dp))
+                    Spacer(Modifier.height(24.dp))
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color.Transparent).border(2.dp, Color.White, RoundedCornerShape(50)).clickable { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }.padding(40.dp, 12.dp)) { Text("SALIR", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)) }
                 }
             }
         }
-
-        // OVERLAY GAME OVER / WIN
         if (gameState != GameState.PLAYING) {
-            Box(
-                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)).clickable(enabled = false) {},
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)).clickable {}, contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val titleText = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER"
-                    val titleColor = if (gameState == GameState.WON) Color(0xFFFFD700) else Color(0xFFFF4D4D)
-                    Text(text = titleText, style = TextStyle(fontSize = 48.sp, fontWeight = FontWeight.Black, color = titleColor, shadow = Shadow(color = Color.Black, blurRadius = 10f)))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = "Puntuación Final: $score", style = TextStyle(fontSize = 24.sp, color = Color.White, fontWeight = FontWeight.Bold))
-                    Text(text = "Mejor Récord: $highScore", style = TextStyle(fontSize = 18.sp, color = Color.Gray, fontWeight = FontWeight.Normal))
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White).border(4.dp, titleColor, RoundedCornerShape(50))
-                        .clickable { viewModel.restartGame() }.padding(horizontal = 32.dp, vertical = 16.dp)) {
-                        Text(text = "REINICIAR", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black))
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.Transparent).border(2.dp, Color.White, RoundedCornerShape(50))
-                        .clickable {
-                            soundManager.startMusic()
-                            viewModel.restartGame()
-                            onMenuClick()
-                        }
-                        .padding(horizontal = 32.dp, vertical = 12.dp)) {
-                        Text(text = "MENÚ PRINCIPAL", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White))
-                    }
+                    val title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER"; val col = if (gameState == GameState.WON) Color(0xFFFFD700) else Color(0xFFFF4D4D)
+                    Text(title, style = TextStyle(fontSize = 48.sp, fontWeight = FontWeight.Black, color = col))
+                    Spacer(Modifier.height(16.dp))
+                    Text("Final: $score", style = TextStyle(fontSize = 24.sp, color = Color.White, fontWeight = FontWeight.Bold))
+                    Spacer(Modifier.height(32.dp))
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color.White).border(4.dp, col, RoundedCornerShape(50)).clickable { viewModel.restartGame() }.padding(32.dp, 16.dp)) { Text("REINICIAR", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black)) }
+                    Spacer(Modifier.height(24.dp))
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color.Transparent).border(2.dp, Color.White, RoundedCornerShape(50)).clickable { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }.padding(32.dp, 12.dp)) { Text("MENÚ PRINCIPAL", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)) }
                 }
             }
         }
     }
 }
 
-
-// Al final del archivo:
 fun mapBubbleColor(type: BubbleColor): Color = when (type) {
-    BubbleColor.RED -> BubbleRed
-    BubbleColor.BLUE -> BubbleBlue
-    BubbleColor.GREEN -> BubbleGreen
-    BubbleColor.PURPLE -> BubblePurple
-    BubbleColor.YELLOW -> BubbleYellow
-    BubbleColor.CYAN -> BubbleCyan
-    BubbleColor.BOMB -> Color(0xFF212121)
-    BubbleColor.RAINBOW -> Color.White // Color base, VisualBubble dibujará el arcoíris encima
+    BubbleColor.RED -> BubbleRed; BubbleColor.BLUE -> BubbleBlue; BubbleColor.GREEN -> BubbleGreen; BubbleColor.PURPLE -> BubblePurple; BubbleColor.YELLOW -> BubbleYellow; BubbleColor.CYAN -> BubbleCyan; BubbleColor.BOMB -> Color(0xFF212121)
+    BubbleColor.RAINBOW -> Color.White
 }
