@@ -52,7 +52,6 @@ class SoundManager(val context: Context) {
         try {
             if (mediaPlayer == null) {
                 mediaPlayer = MediaPlayer.create(context, R.raw.music_background)
-                // ✅ ESTO HACE EL BUCLE INFINITO
                 mediaPlayer?.isLooping = true
             }
             updateMusicVolume()
@@ -61,11 +60,8 @@ class SoundManager(val context: Context) {
         }
     }
 
-    // --- FUNCIONES PARA ACTUALIZACIÓN EN TIEMPO REAL ---
-
     fun setMusicVol(vol: Float) {
         musicVolume = vol
-        // Si no está muteado, actualizamos el volumen real
         if (!isMusicMuted) {
             updateMusicVolume()
         }
@@ -75,7 +71,6 @@ class SoundManager(val context: Context) {
         sfxVolume = vol
     }
 
-    // ✅ NUEVO: Función para activar/desactivar Mute
     fun setMusicMute(muted: Boolean) {
         isMusicMuted = muted
         prefs.edit().putBoolean("music_muted", muted).apply()
@@ -97,7 +92,6 @@ class SoundManager(val context: Context) {
     }
 
     private fun updateMusicVolume() {
-        // Si está muteado, volumen 0. Si no, el volumen del slider.
         val finalVolume = if (isMusicMuted) 0f else musicVolume
         try {
             mediaPlayer?.setVolume(finalVolume, finalVolume)
@@ -109,7 +103,6 @@ class SoundManager(val context: Context) {
     fun startMusic() {
         try {
             if (mediaPlayer == null) initMusic()
-
             if (mediaPlayer?.isPlaying == false) {
                 mediaPlayer?.start()
             }
@@ -119,14 +112,26 @@ class SoundManager(val context: Context) {
     }
 
     fun pauseMusic() {
-        if (mediaPlayer?.isPlaying == true) {
-            mediaPlayer?.pause()
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.pause()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
+    // ✅ CORRECCIÓN CLAVE: Aseguramos que todo se detenga y limpie
     fun release() {
-        soundPool.release()
-        mediaPlayer?.release()
-        mediaPlayer = null
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+            }
+            mediaPlayer?.release()
+            mediaPlayer = null
+            soundPool.release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
