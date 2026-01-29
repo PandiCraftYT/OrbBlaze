@@ -37,6 +37,14 @@ data class GameParticle(
     val life: Float
 )
 
+data class FloatingText(
+    val id: Long,
+    val x: Float,
+    val y: Float,
+    val text: String,
+    val life: Float
+)
+
 data class BoardMetricsPx(
     val bubbleDiameter: Float,
     val horizontalSpacing: Float,
@@ -56,6 +64,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val matchFinder = MatchFinder()
     private val prefs = application.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
 
+    // --- ESTADO DEL JUEGO ---
     var bubblesByPosition by mutableStateOf<Map<GridPosition, Bubble>>(emptyMap())
         private set
 
@@ -73,6 +82,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     var highScore by mutableStateOf(0)
         private set
+
+    var shotsFiredCount by mutableStateOf(0)
+        private set
+    private val DROP_THRESHOLD = 6
+    private val COLUMNS_COUNT = 10
 
     var soundEvent by mutableStateOf<SoundType?>(null)
         private set
@@ -94,9 +108,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     val particles = mutableStateListOf<GameParticle>()
+    val floatingTexts = mutableStateListOf<FloatingText>()
 
     private var metrics: BoardMetricsPx? = null
     private var particleIdCounter = 0L
+    private var textIdCounter = 0L
 
     private val bubbleRadius: Float
         get() = (metrics?.bubbleDiameter ?: 44f) / 2f
@@ -112,14 +128,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadLevel() {
-        engine.setupInitialLevel(rows = 6, cols = 8)
+        engine.setupInitialLevel(rows = 6, cols = COLUMNS_COUNT)
         bubblesByPosition = engine.gridState
         nextBubbleColor = generateNewBubbleColor()
         previewBubbleColor = generateNewBubbleColor()
         score = 0
         gameState = GameState.PLAYING
         isPaused = false
+        shotsFiredCount = 0
         particles.clear()
+        floatingTexts.clear()
     }
 
     fun restartGame() {
@@ -132,19 +150,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- CONFIGURACIÓN ---
     fun setSfxVolume(volume: Float) {
         prefs.edit().putFloat("sfx_volume", volume).apply()
     }
     fun getSfxVolume(): Float = prefs.getFloat("sfx_volume", 1.0f)
 
-    // ✅ NUEVO: Guardar volumen música
     fun setMusicVolume(volume: Float) {
         prefs.edit().putFloat("music_volume", volume).apply()
     }
     fun getMusicVolume(): Float = prefs.getFloat("music_volume", 0.5f)
 
-    // ✅ NUEVO: Resetear Récord
     fun resetHighScore() {
         highScore = 0
         prefs.edit().putInt("high_score", 0).apply()
@@ -207,10 +222,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ✅ CORREGIDO: Probabilidades ajustadas para Modo Normal
     private fun generateNewBubbleColor(): BubbleColor {
-        val colors = BubbleColor.values().filter { it != BubbleColor.BOMB }
-        if (Math.random() < 0.10) return BubbleColor.BOMB
-        return colors.random()
+        val rand = Math.random()
+        return when {
+            rand < 0.01 -> BubbleColor.RAINBOW // 1% Probabilidad (Muy rara)
+            rand < 0.04 -> BubbleColor.BOMB    // 3% Probabilidad (Poco común)
+            else -> BubbleColor.values().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
+        }
     }
 
     private fun updateHighScore() {
@@ -270,6 +289,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
+
+                if (floatingTexts.isNotEmpty()) {
+                    val txtIterator = floatingTexts.iterator()
+                    while (txtIterator.hasNext()) {
+                        val t = txtIterator.next()
+                        val newY = t.y - 2.0f
+                        val newLife = t.life - 0.02f
+                        if (newLife <= 0f) txtIterator.remove()
+                        else {
+                            val idx = floatingTexts.indexOf(t)
+                            if (idx != -1) floatingTexts[idx] = t.copy(y = newY, life = newLife)
+                        }
+                    }
+                }
+
                 delay(16)
             }
         }
@@ -284,58 +318,212 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun spawnFloatingText(x: Float, y: Float, text: String) {
+        floatingTexts.add(
+            FloatingText(
+                id = textIdCounter++,
+                x = x,
+                y = y,
+                text = text,
+                life = 1.0f
+            )
+        )
+    }
+
+    private fun dropCeiling() {
+        val newGrid = mutableMapOf<GridPosition, Bubble>()
+
+        bubblesByPosition.forEach { (pos, bubble) ->
+            newGrid[GridPosition(pos.row + 1, pos.col)] = bubble
+        }
+
+        // Rellenar Fila 0 con 10 columnas
+        for (col in 0 until COLUMNS_COUNT) {
+            newGrid[GridPosition(0, col)] = Bubble(color = generateNewBubbleColor())
+        }
+
+        bubblesByPosition = newGrid
+        soundEvent = SoundType.STICK
+        triggerVibration()
+
+        removeFloatingBubbles(newGrid)
+        metrics?.let { checkGameConditions(it) }
+    }
+
     private fun snapToGrid(x: Float, y: Float, color: BubbleColor) {
         val m = metrics ?: return
         val row = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt().coerceAtLeast(0)
         val xOffset = if (row % 2 != 0) (m.bubbleDiameter / 2f) else 0f
         val col = ((x - (m.boardStartPadding + xOffset)) / m.horizontalSpacing).roundToInt().coerceAtLeast(0)
         val newPos = GridPosition(row, col)
+
         val newGrid = bubblesByPosition.toMutableMap()
         val finalPos = if (newGrid.containsKey(newPos)) findNearestFreeNeighbor(newPos, newGrid) ?: newPos else newPos
 
-        if (color == BubbleColor.BOMB) {
-            explodeAt(finalPos, newGrid)
-        } else {
-            newGrid[finalPos] = Bubble(color = color)
-            val matches = matchFinder.findMatches(finalPos, newGrid)
-            if (matches.size >= 3) {
-                soundEvent = SoundType.POP
-                triggerVibration()
-                val count = matches.size
-                score += (count * 10) + ((count - 3) * 20)
-                updateHighScore()
-
-                matches.forEach { pos ->
-                    newGrid.remove(pos)
-                    val (bx, by) = getBubbleCenter(pos)
-                    val bubbleColor = bubblesByPosition[pos]?.color ?: color
-                    spawnExplosion(bx, by, bubbleColor)
+        when (color) {
+            BubbleColor.BOMB -> {
+                explodeAt(finalPos, newGrid)
+            }
+            BubbleColor.RAINBOW -> {
+                handleRainbowAt(finalPos, newGrid, x, y)
+            }
+            else -> {
+                newGrid[finalPos] = Bubble(color = color)
+                val matches = matchFinder.findMatches(finalPos, newGrid)
+                if (matches.size >= 3) {
+                    processMatches(matches, newGrid, x, y, color)
+                } else {
+                    soundEvent = SoundType.STICK
                 }
-            } else {
-                soundEvent = SoundType.STICK
             }
         }
+
         bubblesByPosition = newGrid
         activeProjectile = null
-        checkGameConditions(m)
+
+        shotsFiredCount++
+        if (shotsFiredCount >= DROP_THRESHOLD) {
+            shotsFiredCount = 0
+            dropCeiling()
+        } else {
+            checkGameConditions(m)
+        }
+    }
+
+    private fun processMatches(matches: Set<GridPosition>, grid: MutableMap<GridPosition, Bubble>, x: Float, y: Float, visualColor: BubbleColor) {
+        soundEvent = SoundType.POP
+        triggerVibration()
+        val count = matches.size
+
+        // Puntos
+        val points = (count * 10) + ((count - 3) * 20)
+        score += points
+        spawnFloatingText(x, y, "+$points")
+        updateHighScore()
+
+        // Explosiones
+        matches.forEach { pos ->
+            val bubbleColor = grid[pos]?.color ?: visualColor
+            grid.remove(pos)
+            val (bx, by) = getBubbleCenter(pos)
+            spawnExplosion(bx, by, bubbleColor)
+        }
+
+        removeFloatingBubbles(grid)
+    }
+
+    private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float) {
+        val neighbors = getNeighbors(pos, grid)
+        val adjacentColors = neighbors.mapNotNull { grid[it]?.color }.distinct()
+            .filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
+
+        if (adjacentColors.isEmpty()) {
+            val fallbackColor = generateNewBubbleColor().takeIf { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB } ?: BubbleColor.RED
+            grid[pos] = Bubble(color = fallbackColor)
+            soundEvent = SoundType.STICK
+            return
+        }
+
+        val bubblesToPop = mutableSetOf<GridPosition>()
+        bubblesToPop.add(pos)
+
+        var comboTriggered = false
+        adjacentColors.forEach { neighborColor ->
+            grid[pos] = Bubble(color = neighborColor)
+            val matches = matchFinder.findMatches(pos, grid)
+            if (matches.size >= 3) {
+                bubblesToPop.addAll(matches)
+                comboTriggered = true
+            }
+        }
+
+        if (comboTriggered) {
+            processMatches(bubblesToPop, grid, fx, fy, BubbleColor.RAINBOW)
+        } else {
+            grid[pos] = Bubble(color = adjacentColors.first())
+            soundEvent = SoundType.STICK
+        }
     }
 
     private fun explodeAt(center: GridPosition, grid: MutableMap<GridPosition, Bubble>) {
         soundEvent = SoundType.EXPLODE
         triggerVibration()
-        val radius = listOf(center, GridPosition(center.row, center.col - 1), GridPosition(center.row, center.col + 1), GridPosition(center.row - 1, center.col), GridPosition(center.row + 1, center.col), GridPosition(center.row - 1, center.col + if (center.row % 2 != 0) 1 else -1), GridPosition(center.row + 1, center.col + if (center.row % 2 != 0) 1 else -1))
+        val radius = getNeighbors(center, grid) + center
         var destroyedCount = 0
+
         radius.forEach { pos ->
-            if (grid.containsKey(pos)) {
-                val (bx, by) = getBubbleCenter(pos)
+            if (grid.containsKey(pos) || pos == center) {
                 val targetColor = grid[pos]?.color ?: BubbleColor.BOMB
-                spawnExplosion(bx, by, targetColor)
-                grid.remove(pos)
-                destroyedCount++
+                if(grid.containsKey(pos)) {
+                    val (bx, by) = getBubbleCenter(pos)
+                    spawnExplosion(bx, by, targetColor)
+                    grid.remove(pos)
+                    destroyedCount++
+                }
             }
         }
-        score += destroyedCount * 50
+
+        val points = destroyedCount * 50
+        score += points
+        val (cx, cy) = getBubbleCenter(center)
+        spawnFloatingText(cx, cy, "+$points")
         updateHighScore()
+
+        removeFloatingBubbles(grid)
+    }
+
+    private fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
+        val visited = mutableSetOf<GridPosition>()
+        val queue = ArrayDeque<GridPosition>()
+
+        val ceilingBubbles = grid.keys.filter { it.row == 0 }
+        queue.addAll(ceilingBubbles)
+        visited.addAll(ceilingBubbles)
+
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            val neighbors = getNeighbors(current, grid)
+            for (neighbor in neighbors) {
+                if (!visited.contains(neighbor)) {
+                    visited.add(neighbor)
+                    queue.add(neighbor)
+                }
+            }
+        }
+
+        val floating = grid.keys.filter { !visited.contains(it) }
+
+        if (floating.isNotEmpty()) {
+            var droppedPoints = 0
+            floating.forEach { pos ->
+                val bubble = grid[pos]
+                grid.remove(pos)
+
+                val (bx, by) = getBubbleCenter(pos)
+                val color = bubble?.color ?: BubbleColor.BLUE
+                spawnExplosion(bx, by, color)
+
+                droppedPoints += 20
+            }
+
+            if (droppedPoints > 0) {
+                score += droppedPoints
+                metrics?.let {
+                    spawnFloatingText(it.boardStartPadding + 200f, it.boardTopPadding + 400f, "DROP! +$droppedPoints")
+                }
+                updateHighScore()
+            }
+        }
+    }
+
+    private fun getNeighbors(pos: GridPosition, grid: Map<GridPosition, Bubble>): List<GridPosition> {
+        val offsets = if (pos.row % 2 == 0) {
+            listOf(-1 to -1, -1 to 0, 0 to -1, 0 to 1, 1 to -1, 1 to 0)
+        } else {
+            listOf(-1 to 0, -1 to 1, 0 to -1, 0 to 1, 1 to 0, 1 to 1)
+        }
+        return offsets.map { GridPosition(pos.row + it.first, pos.col + it.second) }
+            .filter { grid.containsKey(it) }
     }
 
     private fun checkGameConditions(m: BoardMetricsPx) {

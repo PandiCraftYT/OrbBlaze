@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
@@ -44,7 +46,7 @@ import kotlin.math.sin
 @Composable
 fun LevelScreen(
     viewModel: GameViewModel = viewModel(),
-    soundManager: SoundManager, // ✅ AHORA RECIBE EL MANAGER GLOBAL
+    soundManager: SoundManager,
     onMenuClick: () -> Unit = {}
 ) {
     val bubbles = viewModel.bubblesByPosition
@@ -53,6 +55,8 @@ fun LevelScreen(
     val highScore = viewModel.highScore
     val gameState = viewModel.gameState
     val particles = viewModel.particles
+    val floatingTexts = viewModel.floatingTexts
+
     val currentBubbleColor = viewModel.currentBubbleColor
     val previewBubbleColor = viewModel.previewBubbleColor
     val soundEvent = viewModel.soundEvent
@@ -62,13 +66,10 @@ fun LevelScreen(
     val haptic = LocalHapticFeedback.current
     var volumeSlider by remember { mutableStateOf(viewModel.getSfxVolume()) }
 
-    // ✅ NUEVO: Control inteligente de música según el estado del juego
     LaunchedEffect(gameState) {
         if (gameState != GameState.PLAYING) {
-            // Si Ganaste o Perdiste -> PAUSA MÚSICA para escuchar el SFX
             soundManager.pauseMusic()
         } else {
-            // Si estás Jugando -> ASEGURA QUE SUENE LA MÚSICA
             soundManager.startMusic()
         }
     }
@@ -88,19 +89,9 @@ fun LevelScreen(
     }
 
     val density = LocalDensity.current
-    val bubbleSize = 44.dp
-    val bubbleDiameterPx = with(density) { bubbleSize.toPx() }
-    val bubbleRadiusPx = bubbleDiameterPx / 2f
-    val horizontalSpacing = 40.dp
-    val verticalSpacing = 36.dp
-    val boardTopPaddingPx = with(density) { 80.dp.toPx() }
-    val boardStartPaddingPx = with(density) { (8.dp + 16.dp).toPx() }
-    val ceilingYPx = boardTopPaddingPx + bubbleDiameterPx * 0.2f
-
-    viewModel.setBoardMetrics(BoardMetricsPx(bubbleDiameterPx, with(density) { horizontalSpacing.toPx() }, with(density) { verticalSpacing.toPx() }, boardTopPaddingPx, boardStartPaddingPx, ceilingYPx))
-
     val backgroundBrush = Brush.verticalGradient(colors = listOf(BgTop, BgBottom))
 
+    // ✅ MODIFICADO: Movemos BoxWithConstraints al principio para envolver todo
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -117,7 +108,39 @@ fun LevelScreen(
                 }
             }
     ) {
-        // 1. CANVAS
+        // --- CÁLCULO DE MÉTRICAS SIMÉTRICAS ---
+        val screenWidth = constraints.maxWidth.toFloat()
+        val bubbleSize = 44.dp
+        val bubbleDiameterPx = with(density) { bubbleSize.toPx() }
+        val bubbleRadiusPx = bubbleDiameterPx / 2f
+        val horizontalSpacing = 40.dp
+        val horizontalSpacingPx = with(density) { horizontalSpacing.toPx() }
+        val verticalSpacing = 36.dp
+        val boardTopPaddingPx = with(density) { 80.dp.toPx() }
+        val ceilingYPx = boardTopPaddingPx + bubbleDiameterPx * 0.2f
+
+        // ✅ CÁLCULO CLAVE PARA CENTRAR: Asumimos 10 columnas (como en el ViewModel)
+        val numCols = 10
+        val totalGridWidth = numCols * horizontalSpacingPx
+        // Calculamos el espacio sobrante y lo dividimos entre 2. Aseguramos un mínimo de 8dp.
+        val minSideMargin = with(density) { 8.dp.toPx() }
+        val centeredPadding = ((screenWidth - totalGridWidth) / 2f).coerceAtLeast(minSideMargin)
+
+        // Actualizamos las métricas en el ViewModel con el nuevo padding centrado
+        SideEffect {
+            viewModel.setBoardMetrics(
+                BoardMetricsPx(
+                    bubbleDiameter = bubbleDiameterPx,
+                    horizontalSpacing = horizontalSpacingPx,
+                    verticalSpacing = with(density) { verticalSpacing.toPx() },
+                    boardTopPadding = boardTopPaddingPx,
+                    boardStartPadding = centeredPadding, // ¡Usamos el padding centrado!
+                    ceilingY = ceilingYPx
+                )
+            )
+        }
+
+        // 1. CANVAS (Línea guía, partículas, textos)
         Canvas(modifier = Modifier.fillMaxSize()) {
             val baseHeightPx = with(density) { 150.dp.toPx() }
             val start = Offset(size.width / 2f, size.height - baseHeightPx)
@@ -147,27 +170,67 @@ fun LevelScreen(
             }
 
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
-        }
 
-        // 2. TABLERO
-        Box(modifier = Modifier.fillMaxSize().padding(top = 80.dp, start = 8.dp, end = 8.dp)) {
-            bubbles.entries.forEach { (pos, bubble) ->
-                val xOffset = if (pos.row % 2 != 0) (bubbleSize / 2) else 0.dp
-                val xPos = (pos.col * horizontalSpacing.value).dp + xOffset + 16.dp
-                val yPos = (pos.row * verticalSpacing.value).dp
-                VisualBubble(color = mapBubbleColor(bubble.color), modifier = Modifier.offset(x = xPos, y = yPos))
+            drawIntoCanvas { canvas ->
+                val paint = android.graphics.Paint().apply {
+                    textSize = 60f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                }
+
+                floatingTexts.forEach { ft ->
+                    paint.color = android.graphics.Color.WHITE
+                    paint.alpha = (ft.life * 255).toInt().coerceIn(0, 255)
+                    paint.setShadowLayer(5f, 2f, 2f, android.graphics.Color.BLACK)
+                    canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paint)
+                }
             }
         }
 
-        // 3. PROYECTIL
+        // 2. TABLERO
+        Box(modifier = Modifier.fillMaxSize()) {
+            bubbles.entries.forEach { (pos, bubble) ->
+                val rowOffsetPx = if (pos.row % 2 != 0) (bubbleDiameterPx / 2f) else 0f
+                val xPosPx = centeredPadding + rowOffsetPx + (pos.col * horizontalSpacingPx)
+                val yPosPx = boardTopPaddingPx + (pos.row * with(density) { verticalSpacing.toPx() })
+
+                VisualBubble(
+                    color = mapBubbleColor(bubble.color),
+                    isRainbow = bubble.color == BubbleColor.RAINBOW, // ✅ AQUÍ ACTIVAMOS EL EFECTO
+                    modifier = Modifier.offset(x = with(density) { xPosPx.toDp() }, y = with(density) { yPosPx.toDp() })
+                )
+            }
+        }
+
+        // 3. PROYECTIL (BOLA VOLADORA)
         activeProjectile?.let { projectile ->
-            VisualBubble(color = mapBubbleColor(projectile.color), modifier = Modifier.offset(x = with(density) { projectile.x.toDp() } - (bubbleSize / 2), y = with(density) { projectile.y.toDp() } - (bubbleSize / 2)))
+            VisualBubble(
+                color = mapBubbleColor(projectile.color),
+                // ✅ ESTA ES LA LÍNEA QUE FALTABA:
+                isRainbow = projectile.color == BubbleColor.RAINBOW,
+                modifier = Modifier.offset(
+                    x = with(density) { projectile.x.toDp() } - (bubbleSize / 2),
+                    y = with(density) { projectile.y.toDp() } - (bubbleSize / 2)
+                )
+            )
         }
 
         // 4. PANDA
         PandaShooter(
-            angle = viewModel.shooterAngle, currentBubbleColor = mapBubbleColor(currentBubbleColor), nextBubbleColor = mapBubbleColor(previewBubbleColor), shotTick = viewModel.shotTick,
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = (-10).dp).pointerInput(Unit) { detectTapGestures { viewModel.swapBubbles() } }
+            angle = viewModel.shooterAngle,
+            currentBubbleColor = mapBubbleColor(currentBubbleColor),
+            // ✅ CORRECCIÓN: Le decimos TRUE si el enum es RAINBOW
+            isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW,
+
+            nextBubbleColor = mapBubbleColor(previewBubbleColor),
+            // ✅ CORRECCIÓN: Lo mismo para la siguiente
+            isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW,
+
+            shotTick = viewModel.shotTick,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = (-10).dp)
+                .pointerInput(Unit) { detectTapGestures { viewModel.swapBubbles() } }
         )
 
         // BARRA SUPERIOR
@@ -249,7 +312,7 @@ fun LevelScreen(
                     Box(
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.Transparent).border(2.dp, Color.White, RoundedCornerShape(50))
                             .clickable {
-                                soundManager.startMusic() // Reactivar música al salir
+                                soundManager.startMusic()
                                 viewModel.restartGame()
                                 onMenuClick()
                             }
@@ -285,7 +348,7 @@ fun LevelScreen(
 
                     Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.Transparent).border(2.dp, Color.White, RoundedCornerShape(50))
                         .clickable {
-                            soundManager.startMusic() // Reactivar música al salir
+                            soundManager.startMusic()
                             viewModel.restartGame()
                             onMenuClick()
                         }
@@ -298,6 +361,15 @@ fun LevelScreen(
     }
 }
 
+
+// Al final del archivo:
 fun mapBubbleColor(type: BubbleColor): Color = when (type) {
-    BubbleColor.RED -> BubbleRed; BubbleColor.BLUE -> BubbleBlue; BubbleColor.GREEN -> BubbleGreen; BubbleColor.PURPLE -> BubblePurple; BubbleColor.YELLOW -> BubbleYellow; BubbleColor.CYAN -> BubbleCyan; BubbleColor.BOMB -> Color(0xFF212121)
+    BubbleColor.RED -> BubbleRed
+    BubbleColor.BLUE -> BubbleBlue
+    BubbleColor.GREEN -> BubbleGreen
+    BubbleColor.PURPLE -> BubblePurple
+    BubbleColor.YELLOW -> BubbleYellow
+    BubbleColor.CYAN -> BubbleCyan
+    BubbleColor.BOMB -> Color(0xFF212121)
+    BubbleColor.RAINBOW -> Color.White // Color base, VisualBubble dibujará el arcoíris encima
 }
