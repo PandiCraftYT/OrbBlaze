@@ -2,22 +2,23 @@ package com.example.orbblaze.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// --- PALETA DEL TESORO PIRATA (Gemas y Oro) ---
-// Colores ricos y profundos que parecen joyas.
+// --- PALETA CARTOON VIBRANTE ---
+val BubbleRed = Color(0xFFFF4D4D)    // Rojo Fresa
+val BubbleBlue = Color(0xFF1E90FF)   // Azul Dodger
+val BubbleGreen = Color(0xFF32CD32)  // Verde Lima
+val BubblePurple = Color(0xFF9370DB) // Púrpura Medio
+val BubbleYellow = Color(0xFFFFD700) // Amarillo Oro
+val BubbleCyan = Color(0xFF00E5FF)   // Cyan Brillante
 
-val BubbleRed = Color(0xFFD32F2F)    // Rubí Sangre
-val BubbleBlue = Color(0xFF1976D2)   // Zafiro Profundo
-val BubbleGreen = Color(0xFF388E3C)  // Esmeralda
-val BubblePurple = Color(0xFF7B1FA2) // Amatista Real
-val BubbleYellow = Color(0xFFFFD700) // Doblón de Oro
-val BubbleCyan = Color(0xFF0097A7)   // Turquesa del Caribe
+// --- COLORES DE FONDO ---
+val BgTop = Color(0xFF87CEFA)    // Azul cielo claro
+val BgBottom = Color(0xFFB0E0E6) // Azul polvo
 
-// --- COLORES DE AMBIENTE (Mapa Antiguo) ---
-// Un tono beige/arena que simula un pergamino viejo o una playa.
-val GameBackground = Color(0xFFEEDC82) // Arena dorada / Pergamino viejo
+// ✅ CORRECCIÓN: Definimos GameBackground para que Theme.kt no falle.
+// Lo igualamos al color del cielo para mantener la coherencia.
+val GameBackground = BgTop
 
-// Colores extra para materiales
-val WoodDark = Color(0xFF4E342E)
-val WoodLight = Color(0xFF8D6E63)
-val BronzeDark = Color(0xFF5D4037)
-val BronzeLight = Color(0xFFBCAAA4)
+// --- COLORES DEL PANDA ---
+val PandaWhite = Color(0xFFF8F8FF) // Blanco Fantasma
+val PandaBlack = Color(0xFF2D2D2D) // Negro Suave
+val PandaCheek = Color(0xFFFFB6C1) // Rosado

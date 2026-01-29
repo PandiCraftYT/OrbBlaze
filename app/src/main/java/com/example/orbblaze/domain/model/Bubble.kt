@@ -3,7 +3,7 @@ package com.example.orbblaze.domain.model
 import androidx.compose.ui.graphics.Color
 import java.util.UUID
 
-enum class BubbleColor { RED, BLUE, GREEN, YELLOW, PURPLE, CYAN }
+enum class BubbleColor { RED, BLUE, GREEN, YELLOW, PURPLE, CYAN, BOMB }
 
 enum class BubbleState {
     STATIONARY,

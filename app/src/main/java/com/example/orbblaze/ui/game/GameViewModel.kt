@@ -1,9 +1,12 @@
 package com.example.orbblaze.ui.game
 
+import android.app.Application
+import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.domain.engine.LevelEngine
 import com.example.orbblaze.domain.engine.MatchFinder
@@ -11,10 +14,10 @@ import com.example.orbblaze.domain.model.Bubble
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.domain.model.GridPosition
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.*
 
-// Asegúrate de tener esta data class en domain/model/Bubble.kt, si no, pégala al final de este archivo temporalmente
 data class Projectile(
     val x: Float,
     val y: Float,
@@ -22,52 +25,136 @@ data class Projectile(
     val velocityX: Float,
     val velocityY: Float
 )
+
+data class GameParticle(
+    val id: Long,
+    val x: Float,
+    val y: Float,
+    val vx: Float,
+    val vy: Float,
+    val color: BubbleColor,
+    val size: Float,
+    val life: Float
+)
+
 data class BoardMetricsPx(
     val bubbleDiameter: Float,
     val horizontalSpacing: Float,
     val verticalSpacing: Float,
-    val boardTopPadding: Float,     // donde empieza el tablero (PX)
-    val boardStartPadding: Float,   // padding izquierdo real (PX)
-    val ceilingY: Float             // “techo” donde se pega (PX)
+    val boardTopPadding: Float,
+    val boardStartPadding: Float,
+    val ceilingY: Float
 )
 
-class GameViewModel : ViewModel() {
+enum class GameState {
+    PLAYING, WON, LOST
+}
+
+class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val engine = LevelEngine()
     private val matchFinder = MatchFinder()
+    private val prefs = application.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
 
     var bubblesByPosition by mutableStateOf<Map<GridPosition, Bubble>>(emptyMap())
+        private set
+
+    var gameState by mutableStateOf(GameState.PLAYING)
+        private set
+
+    var isPaused by mutableStateOf(false)
         private set
 
     var shooterAngle by mutableStateOf(0f)
         private set
 
+    var score by mutableStateOf(0)
+        private set
+
+    var highScore by mutableStateOf(0)
+        private set
+
+    var soundEvent by mutableStateOf<SoundType?>(null)
+        private set
+
+    var vibrationEvent by mutableStateOf<Boolean>(false)
+        private set
+
     var nextBubbleColor by mutableStateOf(BubbleColor.values().random())
         private set
+    var previewBubbleColor by mutableStateOf(BubbleColor.values().random())
+        private set
+
+    val currentBubbleColor: BubbleColor
+        get() = nextBubbleColor
+
     var shotTick by mutableStateOf(0)
         private set
     var activeProjectile by mutableStateOf<Projectile?>(null)
         private set
 
-    // ✅ NUEVO: métricas reales que vienen de Compose
-    private var metrics: BoardMetricsPx? = null
+    val particles = mutableStateListOf<GameParticle>()
 
-    // ✅ helper
+    private var metrics: BoardMetricsPx? = null
+    private var particleIdCounter = 0L
+
     private val bubbleRadius: Float
         get() = (metrics?.bubbleDiameter ?: 44f) / 2f
 
-    init { loadLevel() }
+    init {
+        highScore = prefs.getInt("high_score", 0)
+        loadLevel()
+        startParticleLoop()
+    }
 
     fun setBoardMetrics(metrics: BoardMetricsPx) {
         this.metrics = metrics
     }
 
     private fun loadLevel() {
-        engine.setupInitialLevel(rows = 10, cols = 8)
+        engine.setupInitialLevel(rows = 6, cols = 8)
         bubblesByPosition = engine.gridState
+        nextBubbleColor = generateNewBubbleColor()
+        previewBubbleColor = generateNewBubbleColor()
+        score = 0
+        gameState = GameState.PLAYING
+        isPaused = false
+        particles.clear()
     }
 
+    fun restartGame() {
+        loadLevel()
+    }
+
+    fun togglePause() {
+        if (gameState == GameState.PLAYING) {
+            isPaused = !isPaused
+        }
+    }
+
+    // --- CONFIGURACIÓN ---
+    fun setSfxVolume(volume: Float) {
+        prefs.edit().putFloat("sfx_volume", volume).apply()
+    }
+    fun getSfxVolume(): Float = prefs.getFloat("sfx_volume", 1.0f)
+
+    // ✅ NUEVO: Guardar volumen música
+    fun setMusicVolume(volume: Float) {
+        prefs.edit().putFloat("music_volume", volume).apply()
+    }
+    fun getMusicVolume(): Float = prefs.getFloat("music_volume", 0.5f)
+
+    // ✅ NUEVO: Resetear Récord
+    fun resetHighScore() {
+        highScore = 0
+        prefs.edit().putInt("high_score", 0).apply()
+    }
+
+    fun clearSoundEvent() { soundEvent = null }
+    fun clearVibrationEvent() { vibrationEvent = false }
+
     fun updateAngle(touchX: Float, touchY: Float, screenWidth: Float, screenHeight: Float) {
+        if (gameState != GameState.PLAYING || isPaused) return
         val centerX = screenWidth / 2f
         val centerY = screenHeight
         val dx = touchX - centerX
@@ -77,16 +164,18 @@ class GameViewModel : ViewModel() {
     }
 
     fun onShoot(screenWidth: Float, screenHeight: Float) {
+        if (gameState != GameState.PLAYING || isPaused) return
         if (activeProjectile != null) return
-        val m = metrics ?: return // ✅ sin métricas aún, no dispares
+        val m = metrics ?: return
+
+        shotTick++
+        soundEvent = SoundType.SHOOT
+        triggerVibration()
 
         val angleRad = Math.toRadians(shooterAngle.toDouble())
         val speed = 25f
-
-        // ✅ Origen del disparo: arriba de la base (ajústalo si quieres)
         val startX = screenWidth / 2f
-        val startY = screenHeight - 140f  // tu base mide 140.dp aprox; esto en px “a ojo”
-        // (si quieres exactitud total, también pásame shooterY desde UI)
+        val startY = screenHeight - 140f
 
         activeProjectile = Projectile(
             x = startX,
@@ -96,42 +185,62 @@ class GameViewModel : ViewModel() {
             velocityY = (-cos(angleRad) * speed).toFloat()
         )
 
-        nextBubbleColor = BubbleColor.values().random()
+        nextBubbleColor = previewBubbleColor
+        previewBubbleColor = generateNewBubbleColor()
         startPhysicsLoop(screenWidth)
+    }
+
+    fun swapBubbles() {
+        if (activeProjectile == null && gameState == GameState.PLAYING && !isPaused) {
+            val temp = nextBubbleColor
+            nextBubbleColor = previewBubbleColor
+            previewBubbleColor = temp
+            soundEvent = SoundType.SWAP
+            triggerVibration()
+        }
+    }
+
+    private fun triggerVibration() {
+        val isVibrationEnabled = prefs.getBoolean("vibration_enabled", true)
+        if (isVibrationEnabled) {
+            vibrationEvent = true
+        }
+    }
+
+    private fun generateNewBubbleColor(): BubbleColor {
+        val colors = BubbleColor.values().filter { it != BubbleColor.BOMB }
+        if (Math.random() < 0.10) return BubbleColor.BOMB
+        return colors.random()
+    }
+
+    private fun updateHighScore() {
+        if (score > highScore) {
+            highScore = score
+            prefs.edit().putInt("high_score", highScore).apply()
+        }
     }
 
     private fun startPhysicsLoop(screenWidth: Float) {
         viewModelScope.launch {
             while (activeProjectile != null) {
+                if (isPaused) {
+                    delay(100)
+                    continue
+                }
+
                 val m = metrics ?: break
                 val p = activeProjectile ?: break
+                val prevX = p.x; val prevY = p.y
+                var nextX = p.x + p.velocityX; var nextY = p.y + p.velocityY; var nextVx = p.velocityX
 
-                val prevX = p.x
-                val prevY = p.y
-
-                var nextX = p.x + p.velocityX
-                var nextY = p.y + p.velocityY
-                var nextVx = p.velocityX
-
-                // Rebote en paredes (con radio)
                 if (nextX - bubbleRadius <= 0f || nextX + bubbleRadius >= screenWidth) {
                     nextVx *= -1f
                     nextX = p.x + nextVx
                     nextY = p.y + p.velocityY
                 }
 
-                // Techo
-                if (nextY - bubbleRadius <= m.ceilingY) {
-                    snapToGrid(nextX, nextY, p.color)
-                    break
-                }
-
-                // ✅ COLISIÓN REAL: segmento prev->next contra burbujas
-                val hit = checkSweepCollision(prevX, prevY, nextX, nextY)
-                if (hit) {
-                    snapToGrid(nextX, nextY, p.color)
-                    break
-                }
+                if (nextY - bubbleRadius <= m.ceilingY) { snapToGrid(nextX, nextY, p.color); break }
+                if (checkSweepCollision(prevX, prevY, nextX, nextY)) { snapToGrid(nextX, nextY, p.color); break }
 
                 activeProjectile = p.copy(x = nextX, y = nextY, velocityX = nextVx)
                 delay(16)
@@ -139,104 +248,134 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
-        val m = metrics ?: return false
+    private fun startParticleLoop() {
+        viewModelScope.launch {
+            while (isActive) {
+                if (isPaused) {
+                    delay(100)
+                    continue
+                }
 
-        // distancia para choque: radio proyectil + radio burbuja
-        val collideDist = m.bubbleDiameter * 0.95f // ~diametro (ajusta 0.9-1.0)
-
-        // revisa todas (luego optimizamos)
-        return bubblesByPosition.keys.any { pos ->
-            val (cx, cy) = getBubbleCenter(pos)
-            distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist
+                if (particles.isNotEmpty()) {
+                    val iterator = particles.iterator()
+                    while (iterator.hasNext()) {
+                        val p = iterator.next()
+                        val newX = p.x + p.vx
+                        val newY = p.y + p.vy + 1.5f
+                        val newLife = p.life - 0.04f
+                        if (newLife <= 0f) iterator.remove()
+                        else {
+                            val index = particles.indexOf(p)
+                            if (index != -1) particles[index] = p.copy(x = newX, y = newY, life = newLife)
+                        }
+                    }
+                }
+                delay(16)
+            }
         }
     }
 
-    // Distancia de un punto C al segmento AB
-    private fun distancePointToSegment(
-        cx: Float, cy: Float,
-        ax: Float, ay: Float,
-        bx: Float, by: Float
-    ): Float {
-        val abx = bx - ax
-        val aby = by - ay
-        val acx = cx - ax
-        val acy = cy - ay
-
-        val abLen2 = abx * abx + aby * aby
-        if (abLen2 == 0f) return hypot(cx - ax, cy - ay)
-
-        var t = (acx * abx + acy * aby) / abLen2
-        t = t.coerceIn(0f, 1f)
-
-        val px = ax + t * abx
-        val py = ay + t * aby
-        return hypot(cx - px, cy - py)
-    }
-
-    private fun checkCollisionWithBubbles(x: Float, y: Float): Boolean {
-        val m = metrics ?: return false
-        val collisionDist = m.bubbleDiameter * 0.92f
-
-        return bubblesByPosition.keys.any { pos ->
-            val (bx, by) = getBubbleCenter(pos)
-            hypot(x - bx, y - by) < collisionDist
+    private fun spawnExplosion(cx: Float, cy: Float, color: BubbleColor) {
+        repeat(12) {
+            val angle = Random.nextDouble(0.0, 2 * Math.PI)
+            val speed = Random.nextDouble(5.0, 15.0)
+            val size = Random.nextDouble(10.0, 25.0).toFloat()
+            particles.add(GameParticle(particleIdCounter++, cx, cy, (cos(angle) * speed).toFloat(), (sin(angle) * speed).toFloat(), color, size, 1.0f))
         }
     }
 
     private fun snapToGrid(x: Float, y: Float, color: BubbleColor) {
         val m = metrics ?: return
-
-        // ✅ conversión consistente con tu dibujo
-        val row = ((y - m.boardTopPadding) / m.verticalSpacing)
-            .roundToInt()
-            .coerceAtLeast(0)
-
+        val row = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt().coerceAtLeast(0)
         val xOffset = if (row % 2 != 0) (m.bubbleDiameter / 2f) else 0f
-
-        val col = ((x - (m.boardStartPadding + xOffset)) / m.horizontalSpacing)
-            .roundToInt()
-            .coerceAtLeast(0)
-
+        val col = ((x - (m.boardStartPadding + xOffset)) / m.horizontalSpacing).roundToInt().coerceAtLeast(0)
         val newPos = GridPosition(row, col)
         val newGrid = bubblesByPosition.toMutableMap()
+        val finalPos = if (newGrid.containsKey(newPos)) findNearestFreeNeighbor(newPos, newGrid) ?: newPos else newPos
 
-        // ✅ si cae encima de una ocupada, busca una vecina libre cercana
-        val finalPos = if (newGrid.containsKey(newPos)) {
-            findNearestFreeNeighbor(newPos, newGrid) ?: newPos
-        } else newPos
+        if (color == BubbleColor.BOMB) {
+            explodeAt(finalPos, newGrid)
+        } else {
+            newGrid[finalPos] = Bubble(color = color)
+            val matches = matchFinder.findMatches(finalPos, newGrid)
+            if (matches.size >= 3) {
+                soundEvent = SoundType.POP
+                triggerVibration()
+                val count = matches.size
+                score += (count * 10) + ((count - 3) * 20)
+                updateHighScore()
 
-        newGrid[finalPos] = Bubble(color = color)
-
-        val matches = matchFinder.findMatches(finalPos, newGrid)
-        if (matches.size >= 3) matches.forEach { newGrid.remove(it) }
-
+                matches.forEach { pos ->
+                    newGrid.remove(pos)
+                    val (bx, by) = getBubbleCenter(pos)
+                    val bubbleColor = bubblesByPosition[pos]?.color ?: color
+                    spawnExplosion(bx, by, bubbleColor)
+                }
+            } else {
+                soundEvent = SoundType.STICK
+            }
+        }
         bubblesByPosition = newGrid
         activeProjectile = null
+        checkGameConditions(m)
     }
 
-    private fun findNearestFreeNeighbor(
-        pos: GridPosition,
-        grid: Map<GridPosition, Bubble>
-    ): GridPosition? {
-        // vecinos en grid hex “simple”
-        val candidates = listOf(
-            GridPosition(pos.row, pos.col - 1),
-            GridPosition(pos.row, pos.col + 1),
-            GridPosition(pos.row - 1, pos.col),
-            GridPosition(pos.row + 1, pos.col),
-            GridPosition(pos.row - 1, pos.col + if (pos.row % 2 != 0) 1 else -1),
-            GridPosition(pos.row + 1, pos.col + if (pos.row % 2 != 0) 1 else -1),
-        )
+    private fun explodeAt(center: GridPosition, grid: MutableMap<GridPosition, Bubble>) {
+        soundEvent = SoundType.EXPLODE
+        triggerVibration()
+        val radius = listOf(center, GridPosition(center.row, center.col - 1), GridPosition(center.row, center.col + 1), GridPosition(center.row - 1, center.col), GridPosition(center.row + 1, center.col), GridPosition(center.row - 1, center.col + if (center.row % 2 != 0) 1 else -1), GridPosition(center.row + 1, center.col + if (center.row % 2 != 0) 1 else -1))
+        var destroyedCount = 0
+        radius.forEach { pos ->
+            if (grid.containsKey(pos)) {
+                val (bx, by) = getBubbleCenter(pos)
+                val targetColor = grid[pos]?.color ?: BubbleColor.BOMB
+                spawnExplosion(bx, by, targetColor)
+                grid.remove(pos)
+                destroyedCount++
+            }
+        }
+        score += destroyedCount * 50
+        updateHighScore()
+    }
+
+    private fun checkGameConditions(m: BoardMetricsPx) {
+        if (bubblesByPosition.isEmpty()) {
+            gameState = GameState.WON
+            soundEvent = SoundType.WIN
+            return
+        }
+        val dangerY = m.boardTopPadding + (m.verticalSpacing * 12)
+        val reachedBottom = bubblesByPosition.keys.any { pos ->
+            val (_, y) = getBubbleCenter(pos)
+            (y + bubbleRadius) >= dangerY
+        }
+
+        if (reachedBottom) {
+            gameState = GameState.LOST
+            soundEvent = SoundType.LOSE
+        }
+    }
+
+    private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
+        val m = metrics ?: return false; val collideDist = m.bubbleDiameter * 0.95f
+        return bubblesByPosition.keys.any { pos ->
+            val (cx, cy) = getBubbleCenter(pos); distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist
+        }
+    }
+    private fun distancePointToSegment(cx: Float, cy: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
+        val abx = bx - ax; val aby = by - ay; val acx = cx - ax; val acy = cy - ay
+        val abLen2 = abx * abx + aby * aby; if (abLen2 == 0f) return hypot(cx - ax, cy - ay)
+        var t = (acx * abx + acy * aby) / abLen2; t = t.coerceIn(0f, 1f)
+        return hypot(cx - (ax + t * abx), cy - (ay + t * aby))
+    }
+    private fun findNearestFreeNeighbor(pos: GridPosition, grid: Map<GridPosition, Bubble>): GridPosition? {
+        val candidates = listOf(GridPosition(pos.row, pos.col - 1), GridPosition(pos.row, pos.col + 1), GridPosition(pos.row - 1, pos.col), GridPosition(pos.row + 1, pos.col), GridPosition(pos.row - 1, pos.col + if (pos.row % 2 != 0) 1 else -1), GridPosition(pos.row + 1, pos.col + if (pos.row % 2 != 0) 1 else -1))
         return candidates.firstOrNull { !grid.containsKey(it) && it.row >= 0 && it.col >= 0 }
     }
-
     private fun getBubbleCenter(pos: GridPosition): Pair<Float, Float> {
-        val m = metrics ?: return 0f to 0f
-
-        val xOffset = if (pos.row % 2 != 0) (m.bubbleDiameter / 2f) else 0f
-        val x = m.boardStartPadding + xOffset + (pos.col * m.horizontalSpacing)
-        val y = m.boardTopPadding + (pos.row * m.verticalSpacing)
+        val m = metrics ?: return 0f to 0f; val xOffset = if (pos.row % 2 != 0) (m.bubbleDiameter / 2f) else 0f
+        val x = m.boardStartPadding + xOffset + (pos.col * m.horizontalSpacing); val y = m.boardTopPadding + (pos.row * m.verticalSpacing)
         return x to y
     }
 }
+object Random { fun nextDouble(min: Double, max: Double): Double = min + (Math.random() * (max - min)) }
