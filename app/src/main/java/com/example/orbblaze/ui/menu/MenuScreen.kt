@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -26,11 +28,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.ui.components.VisualBubble
+import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.isActive
+import kotlin.math.hypot
 import kotlin.random.Random
 
-// ✅ MODIFICADO: Agregamos vx (horizontal) y vy (vertical) para física real
 data class PhysicsBubble(
     var x: Float,
     var y: Float,
@@ -44,8 +48,11 @@ data class PhysicsBubble(
 fun MenuScreen(
     onPlayClick: () -> Unit,
     onScoreClick: () -> Unit,
+    onAchievementsClick: () -> Unit, // Nuevo parámetro
     onSettingsClick: () -> Unit,
-    onExitClick: () -> Unit
+    onExitClick: () -> Unit,
+    soundManager: SoundManager, // Nuevo parámetro
+    onSecretClick: () -> Unit   // Nuevo parámetro
 ) {
     // --- ANIMACIONES TÍTULO ---
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
@@ -115,6 +122,22 @@ fun MenuScreen(
             .fillMaxSize()
             .background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
             .systemBarsPadding()
+            // ✅ AGREGADO: Detector de toques para el logro secreto
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    physicsBubbles.forEach { bubble ->
+                        val distance = hypot(offset.x - bubble.x, offset.y - bubble.y)
+                        if (distance <= bubble.radius * 1.5f) {
+                            soundManager.play(SoundType.POP)
+                            onSecretClick() // Desbloquear logro
+
+                            // Efecto visual: reiniciar burbuja
+                            bubble.y = screenHeightPx + bubble.radius
+                            bubble.vy = -(Random.nextFloat() * 20f + 10f)
+                        }
+                    }
+                }
+            }
     ) {
         // --- CAPA 1: BURBUJAS FÍSICAS (CANVAS) ---
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -167,7 +190,9 @@ fun MenuScreen(
 
             MenuButton(text = "JUGAR", onClick = onPlayClick)
             Spacer(modifier = Modifier.height(16.dp))
-            MenuButton(text = "MI PUNTUACIÓN", onClick = onScoreClick)
+            MenuButton(text = "PUNTUACIONES", onClick = onScoreClick)
+            Spacer(modifier = Modifier.height(16.dp))
+            MenuButton(text = "LOGROS", onClick = onAchievementsClick)
             Spacer(modifier = Modifier.height(16.dp))
             MenuButton(text = "CONFIGURACIÓN", onClick = onSettingsClick)
             Spacer(modifier = Modifier.height(16.dp))

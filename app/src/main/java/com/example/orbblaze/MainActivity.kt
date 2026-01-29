@@ -6,11 +6,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.orbblaze.ui.game.GameViewModel // Importante
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.menu.MenuScreen
 import com.example.orbblaze.ui.game.LevelScreen
 import com.example.orbblaze.ui.settings.SettingsScreen
 import com.example.orbblaze.ui.score.HighScoreScreen
+import com.example.orbblaze.ui.score.AchievementsScreen
 import com.example.orbblaze.ui.theme.OrbBlazeTheme
 
 class MainActivity : ComponentActivity() {
@@ -36,6 +39,9 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation(soundManager: SoundManager) {
     var currentScreen by remember { mutableStateOf("menu") }
 
+    // ✅ CREAMOS EL VIEWMODEL AQUÍ PARA COMPARTIRLO ENTRE PANTALLAS
+    val sharedViewModel: GameViewModel = viewModel()
+
     LaunchedEffect(currentScreen) {
         soundManager.refreshSettings()
     }
@@ -45,18 +51,29 @@ fun AppNavigation(soundManager: SoundManager) {
             MenuScreen(
                 onPlayClick = { currentScreen = "game" },
                 onScoreClick = { currentScreen = "score" },
+                onAchievementsClick = { currentScreen = "achievements" },
                 onSettingsClick = { currentScreen = "settings" },
-                onExitClick = { android.os.Process.killProcess(android.os.Process.myPid()) }
+                onExitClick = { android.os.Process.killProcess(android.os.Process.myPid()) },
+                soundManager = soundManager, // ✅ Sonido POP
+                onSecretClick = {
+                    // ✅ AQUÍ SE DESBLOQUEA EL LOGRO SECRETO
+                    sharedViewModel.unlockAchievement("secret_popper")
+                }
             )
         }
         "game" -> {
             LevelScreen(
-                soundManager = soundManager, // ✅ AHORA PASAMOS EL MANAGER
+                viewModel = sharedViewModel, // ✅ Usamos el compartido
+                soundManager = soundManager,
                 onMenuClick = { currentScreen = "menu" }
             )
         }
         "score" -> {
-            HighScoreScreen(
+            HighScoreScreen(onBackClick = { currentScreen = "menu" })
+        }
+        "achievements" -> {
+            AchievementsScreen(
+                viewModel = sharedViewModel, // ✅ Usamos el compartido
                 onBackClick = { currentScreen = "menu" }
             )
         }
