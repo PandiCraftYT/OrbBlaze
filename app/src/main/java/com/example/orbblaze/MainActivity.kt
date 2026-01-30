@@ -10,11 +10,9 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.orbblaze.ui.game.GameViewModel
-import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.*
 import com.example.orbblaze.ui.menu.MenuScreen
 import com.example.orbblaze.ui.menu.GameModesScreen
-import com.example.orbblaze.ui.game.LevelScreen
 import com.example.orbblaze.ui.settings.SettingsScreen
 import com.example.orbblaze.ui.score.HighScoreScreen
 import com.example.orbblaze.ui.score.AchievementsScreen
@@ -52,7 +50,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation(soundManager: SoundManager) {
     var currentScreen by remember { mutableStateOf("menu") }
-    val sharedViewModel: GameViewModel = viewModel()
+    
+    // ViewModels separados para cada modo
+    val classicVm: ClassicViewModel = viewModel()
+    val timeAttackVm: TimeAttackViewModel = viewModel()
+    val sharedViewModel: GameViewModel = viewModel() // Para logros globales
 
     LaunchedEffect(currentScreen) {
         soundManager.refreshSettings()
@@ -80,7 +82,15 @@ fun AppNavigation(soundManager: SoundManager) {
         }
         "game" -> {
             LevelScreen(
-                viewModel = sharedViewModel,
+                viewModel = classicVm,
+                soundManager = soundManager,
+                onMenuClick = { currentScreen = "menu" },
+                onShopClick = { currentScreen = "shop" }
+            )
+        }
+        "time_attack" -> { // ✅ CORREGIDO: Ahora ya no sale pantalla blanca
+            LevelScreen(
+                viewModel = timeAttackVm,
                 soundManager = soundManager,
                 onMenuClick = { currentScreen = "menu" },
                 onShopClick = { currentScreen = "shop" }
@@ -90,23 +100,13 @@ fun AppNavigation(soundManager: SoundManager) {
             ShopScreen(onBackClick = { currentScreen = "game" })
         }
         "score" -> {
-            HighScoreScreen(
-                soundManager = soundManager, // ✅ Se añadió el parámetro faltante
-                onBackClick = { currentScreen = "menu" }
-            )
+            HighScoreScreen(soundManager = soundManager, onBackClick = { currentScreen = "menu" })
         }
         "achievements" -> {
-            AchievementsScreen(
-                viewModel = sharedViewModel,
-                soundManager = soundManager, // ✅ Se añadió el parámetro faltante
-                onBackClick = { currentScreen = "menu" }
-            )
+            AchievementsScreen(viewModel = sharedViewModel, soundManager = soundManager, onBackClick = { currentScreen = "menu" })
         }
         "settings" -> {
-            SettingsScreen(
-                soundManager = soundManager,
-                onBackClick = { currentScreen = "menu" }
-            )
+            SettingsScreen(soundManager = soundManager, onBackClick = { currentScreen = "menu" })
         }
     }
 }

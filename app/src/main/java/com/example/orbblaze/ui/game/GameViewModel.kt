@@ -15,137 +15,116 @@ import com.example.orbblaze.domain.model.Achievement
 import com.example.orbblaze.domain.model.Bubble
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.domain.model.GridPosition
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.*
 
-data class Projectile(
-    val x: Float,
-    val y: Float,
-    val color: BubbleColor,
-    val velocityX: Float,
-    val velocityY: Float
-)
+// --- CLASES DE DATOS Y ENUMS ---
+data class Projectile(val x: Float, val y: Float, val color: BubbleColor, val velocityX: Float, val velocityY: Float)
+data class GameParticle(val id: Long, val x: Float, val y: Float, val vx: Float, val vy: Float, val color: BubbleColor, val size: Float, val life: Float)
+data class FloatingText(val id: Long, val x: Float, val y: Float, val text: String, val life: Float)
+data class BoardMetricsPx(val bubbleDiameter: Float, val horizontalSpacing: Float, val verticalSpacing: Float, val boardTopPadding: Float, val boardStartPadding: Float, val ceilingY: Float)
+enum class GameState { IDLE, PLAYING, WON, LOST }
+enum class GameMode { CLASSIC, TIME_ATTACK }
 
-data class GameParticle(
-    val id: Long,
-    val x: Float,
-    val y: Float,
-    val vx: Float,
-    val vy: Float,
-    val color: BubbleColor,
-    val size: Float,
-    val life: Float
-)
+open class GameViewModel(application: Application) : AndroidViewModel(application) {
 
-data class FloatingText(
-    val id: Long,
-    val x: Float,
-    val y: Float,
-    val text: String,
-    val life: Float
-)
-
-data class BoardMetricsPx(
-    val bubbleDiameter: Float,
-    val horizontalSpacing: Float,
-    val verticalSpacing: Float,
-    val boardTopPadding: Float,
-    val boardStartPadding: Float,
-    val ceilingY: Float
-)
-
-enum class GameState {
-    PLAYING, WON, LOST
-}
-
-class GameViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val engine = LevelEngine()
-    private val matchFinder = MatchFinder()
-    private val prefs = application.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
+    protected val engine = LevelEngine()
+    protected val matchFinder = MatchFinder()
+    protected val prefs = application.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
 
     var bubblesByPosition by mutableStateOf<Map<GridPosition, Bubble>>(emptyMap())
-        private set
+        protected set
 
-    var gameState by mutableStateOf(GameState.PLAYING)
-        private set
+    var gameState by mutableStateOf(GameState.IDLE)
+        protected set
+
+    var gameMode by mutableStateOf(GameMode.CLASSIC)
+        protected set
 
     var isPaused by mutableStateOf(false)
-        private set
+        protected set
 
     var shooterAngle by mutableStateOf(0f)
-        private set
+        protected set
 
     var score by mutableIntStateOf(0)
-        private set
+        protected set
 
     var highScore by mutableIntStateOf(0)
-        private set
+        protected set
 
     var coins by mutableIntStateOf(0)
-        private set
+        protected set
+
+    var timeLeft by mutableIntStateOf(60)
+        protected set
+    
+    protected var timerJob: Job? = null
 
     var shotsFiredCount by mutableIntStateOf(0)
-        private set
+        protected set
     
     var rowsDroppedCount by mutableIntStateOf(0)
-        private set
+        protected set
 
     var joyTick by mutableIntStateOf(0)
-        private set
+        protected set
 
-    private val dropThreshold = 6
-    private val columnsCount = 10
+    protected val dropThreshold = 6
+    protected val columnsCount = 10
 
     var soundEvent by mutableStateOf<SoundType?>(null)
-        private set
+        protected set
 
     var vibrationEvent by mutableStateOf<Boolean>(false)
-        private set
+        protected set
 
-    val achievements = mutableStateListOf(
-        Achievement("first_blood", "¡Primeros Pasos!", "Consigue tus primeros 100 puntos"),
-        Achievement("combo_master", "¡Combo Brutal!", "Explota 6 o más burbujas a la vez"),
-        Achievement("rainbow_power", "Poder Prismático", "Usa una burbuja Arcoíris con éxito"),
-        Achievement("bomb_squad", "¡Boom!", "Detona una bomba"),
-        Achievement("score_1000", "Leyenda", "Alcanza los 1000 puntos en una partida"),
-        Achievement("secret_popper", "¡Curioso!", "Explotaste una burbuja del menú principal", isHidden = true)
-    )
+    val achievements = mutableStateListOf<Achievement>()
 
     var activeAchievement by mutableStateOf<Achievement?>(null)
-        private set
+        protected set
 
     var nextBubbleColor by mutableStateOf(BubbleColor.entries.random())
-        private set
+        protected set
     var previewBubbleColor by mutableStateOf(BubbleColor.entries.random())
-        private set
+        protected set
 
-    val currentBubbleColor: BubbleColor
-        get() = nextBubbleColor
+    val currentBubbleColor: BubbleColor get() = nextBubbleColor
 
     var shotTick by mutableIntStateOf(0)
-        private set
+        protected set
     var activeProjectile by mutableStateOf<Projectile?>(null)
-        private set
+        protected set
 
     val particles = mutableStateListOf<GameParticle>()
     val floatingTexts = mutableStateListOf<FloatingText>()
 
-    private var metrics: BoardMetricsPx? = null
+    protected var metrics: BoardMetricsPx? = null
     private var particleIdCounter = 0L
     private var textIdCounter = 0L
 
-    private val bubbleRadius: Float
-        get() = (metrics?.bubbleDiameter ?: 44f) / 2f
+    protected val bubbleRadius: Float get() = (metrics?.bubbleDiameter ?: 44f) / 2f
 
     init {
         highScore = prefs.getInt("high_score", 0)
         coins = prefs.getInt("coins", 0)
+        setupAchievements()
         loadAchievements()
-        loadLevel()
         startParticleLoop()
+    }
+
+    private fun setupAchievements() {
+        achievements.addAll(listOf(
+            Achievement("first_blood", "¡Primeros Pasos!", "Consigue tus primeros 100 puntos"),
+            Achievement("combo_master", "¡Combo Brutal!", "Explota 6 o más burbujas a la vez"),
+            Achievement("rainbow_power", "Poder Prismático", "Usa una burbuja Arcoíris con éxito"),
+            Achievement("bomb_squad", "¡Boom!", "Detona una bomba"),
+            Achievement("score_1000", "Leyenda", "Alcanza los 1000 puntos en una partida"),
+            Achievement("secret_popper", "¡Curioso!", "Explotaste una burbuja del menú principal", isHidden = true)
+        ))
     }
 
     private fun loadAchievements() {
@@ -159,93 +138,32 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putInt("coins", coins).apply()
     }
 
-    fun spendCoins(amount: Int): Boolean {
-        return if (coins >= amount) {
-            coins -= amount
-            prefs.edit().putInt("coins", coins).apply()
-            true
-        } else false
+    open fun changeGameMode(mode: GameMode) {
+        this.gameMode = mode
     }
 
-    fun unlockAchievement(id: String) {
-        val achievement = achievements.find { it.id == id }
-        if (achievement != null && !achievement.isUnlocked) {
-            achievement.isUnlocked = true
-            prefs.edit().putBoolean("ach_${id}", true).apply()
-            addCoins(50)
-            viewModelScope.launch {
-                activeAchievement = achievement
-                soundEvent = SoundType.WIN
-                delay(4000)
-                activeAchievement = null
-            }
-        }
+    open fun startGame() {
+        gameState = GameState.PLAYING
     }
 
-    fun setBoardMetrics(metrics: BoardMetricsPx) {
-        this.metrics = metrics
-    }
-
-    private fun loadLevel() {
-        engine.setupInitialLevel(rows = 6, cols = columnsCount)
+    open fun loadLevel(initialRows: Int = 6) {
+        engine.setupInitialLevel(rows = initialRows, cols = columnsCount)
         bubblesByPosition = engine.gridState
         nextBubbleColor = generateNewBubbleColor()
         previewBubbleColor = generateNewBubbleColor()
         score = 0
-        gameState = GameState.PLAYING
+        gameState = GameState.IDLE
         isPaused = false
         shotsFiredCount = 0
         rowsDroppedCount = 0
+        timeLeft = 60
         particles.clear()
         floatingTexts.clear()
+        timerJob?.cancel()
     }
 
     fun restartGame() {
-        loadLevel()
-    }
-
-    fun togglePause() {
-        if (gameState == GameState.PLAYING) {
-            isPaused = !isPaused
-        }
-    }
-
-    fun setSfxVolume(volume: Float) {
-        prefs.edit().putFloat("sfx_volume", volume).apply()
-    }
-    fun getSfxVolume(): Float = prefs.getFloat("sfx_volume", 1.0f)
-
-    fun clearSoundEvent() { soundEvent = null }
-    fun clearVibrationEvent() { vibrationEvent = false }
-
-    fun updateAngle(touchX: Float, touchY: Float, screenWidth: Float, screenHeight: Float) {
-        if (gameState != GameState.PLAYING || isPaused) return
-        val centerX = screenWidth / 2f
-        val shooterY = screenHeight * 0.82f
-        val dx = touchX - centerX
-        val dy = shooterY - touchY
-        val angleInRadians = atan2(dx, dy)
-        shooterAngle = Math.toDegrees(angleInRadians.toDouble()).toFloat().coerceIn(-80f, 80f)
-    }
-
-    fun onShoot(screenWidth: Float, screenHeight: Float, shooterYPx: Float) {
-        if (gameState != GameState.PLAYING || isPaused) return
-        if (activeProjectile != null) return
-        shotTick++
-        soundEvent = SoundType.SHOOT
-        triggerVibration()
-        val angleRad = Math.toRadians(shooterAngle.toDouble())
-        val speed = 35f
-        activeProjectile = Projectile(
-            x = screenWidth / 2f,
-            y = shooterYPx,
-            color = nextBubbleColor,
-            velocityX = (sin(angleRad) * speed).toFloat(),
-            velocityY = (-cos(angleRad) * speed).toFloat()
-        )
-        nextBubbleColor = previewBubbleColor
-        previewBubbleColor = generateNewBubbleColor()
-        startPhysicsLoop(screenWidth)
+        loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6)
     }
 
     fun swapBubbles() {
@@ -254,17 +172,42 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             nextBubbleColor = previewBubbleColor
             previewBubbleColor = temp
             soundEvent = SoundType.SWAP
-            triggerVibration()
+            if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true
         }
     }
 
-    private fun triggerVibration() {
-        if (prefs.getBoolean("vibration_enabled", true)) {
-            vibrationEvent = true
-        }
+    fun setBoardMetrics(metrics: BoardMetricsPx) {
+        this.metrics = metrics
     }
 
-    private fun generateNewBubbleColor(): BubbleColor {
+    fun togglePause() { if (gameState == GameState.PLAYING) isPaused = !isPaused }
+    fun setSfxVolume(volume: Float) { prefs.edit().putFloat("sfx_volume", volume).apply() }
+    fun getSfxVolume(): Float = prefs.getFloat("sfx_volume", 1.0f)
+    fun clearSoundEvent() { soundEvent = null }
+    fun clearVibrationEvent() { vibrationEvent = false }
+
+    fun updateAngle(touchX: Float, touchY: Float, screenWidth: Float, screenHeight: Float) {
+        if (gameState != GameState.PLAYING || isPaused) return
+        val centerX = screenWidth / 2f
+        val dx = touchX - centerX
+        val dy = (screenHeight * 0.82f) - touchY
+        shooterAngle = Math.toDegrees(atan2(dx, dy).toDouble()).toFloat().coerceIn(-80f, 80f)
+    }
+
+    fun onShoot(screenWidth: Float, screenHeight: Float, shooterYPx: Float) {
+        if (gameState != GameState.PLAYING || isPaused || activeProjectile != null) return
+        shotTick++
+        soundEvent = SoundType.SHOOT
+        if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true
+        val angleRad = Math.toRadians(shooterAngle.toDouble())
+        val speed = 35f
+        activeProjectile = Projectile(screenWidth / 2f, shooterYPx, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat())
+        nextBubbleColor = previewBubbleColor
+        previewBubbleColor = generateNewBubbleColor()
+        startPhysicsLoop(screenWidth)
+    }
+
+    protected fun generateNewBubbleColor(): BubbleColor {
         val rand = Math.random()
         return when {
             rand < 0.01 -> BubbleColor.RAINBOW
@@ -273,10 +216,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun updateHighScore() {
-        if (score > highScore) {
-            highScore = score
-            prefs.edit().putInt("high_score", highScore).apply()
+    protected open fun updateHighScore() {
+        val key = if (gameMode == GameMode.TIME_ATTACK) "high_score_time" else "high_score"
+        val currentHigh = prefs.getInt(key, 0)
+        if (score > currentHigh) {
+            prefs.edit().putInt(key, score).apply()
+            if (gameMode == GameMode.CLASSIC) highScore = score
             addCoins(10)
         }
         if (score >= 100) unlockAchievement("first_blood")
@@ -289,13 +234,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (isPaused) { delay(100); continue }
                 val m = metrics ?: break
                 val p = activeProjectile ?: break
-                val prevX = p.x; val prevY = p.y
-                var nextX = p.x + p.velocityX; var nextY = p.y + p.velocityY; var nextVx = p.velocityX
-                if (nextX - bubbleRadius <= 0f || nextX + bubbleRadius >= screenWidth) {
-                    nextVx *= -1f; nextX = p.x + nextVx; nextY = p.y + p.velocityY
-                }
-                if (nextY - bubbleRadius <= m.ceilingY) { snapToGrid(nextX, nextY, p.color); break }
-                if (checkSweepCollision(prevX, prevY, nextX, nextY)) { snapToGrid(nextX, nextY, p.color); break }
+                val nextVx = if (p.x + p.velocityX - bubbleRadius <= 0f || p.x + p.velocityX + bubbleRadius >= screenWidth) p.velocityX * -1f else p.velocityX
+                val nextX = p.x + nextVx
+                val nextY = p.y + p.velocityY
+                if (nextY - bubbleRadius <= m.ceilingY || checkSweepCollision(p.x, p.y, nextX, nextY)) { snapToGrid(nextX, nextY, p.color); break }
                 activeProjectile = p.copy(x = nextX, y = nextY, velocityX = nextVx)
                 delay(16)
             }
@@ -305,54 +247,45 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun startParticleLoop() {
         viewModelScope.launch {
             while (isActive) {
-                if (isPaused) { delay(100); continue }
-                if (particles.isNotEmpty()) {
-                    val iterator = particles.iterator()
-                    while (iterator.hasNext()) {
-                        val p = iterator.next()
-                        val newX = p.x + p.vx; val newY = p.y + p.vy + 1.5f; val newLife = p.life - 0.04f
-                        if (newLife <= 0f) iterator.remove()
-                        else particles[particles.indexOf(p)] = p.copy(x = newX, y = newY, life = newLife)
-                    }
-                }
-                if (floatingTexts.isNotEmpty()) {
-                    val txtIterator = floatingTexts.iterator()
-                    while (txtIterator.hasNext()) {
-                        val t = txtIterator.next()
-                        val newY = t.y - 2.0f; val newLife = t.life - 0.02f
-                        if (newLife <= 0f) txtIterator.remove() else floatingTexts[floatingTexts.indexOf(t)] = t.copy(y = newY, life = newLife)
-                    }
+                if (!isPaused) {
+                    particles.removeAll { it.life <= 0f }
+                    for (i in particles.indices) { particles[i] = particles[i].copy(x = particles[i].x + particles[i].vx, y = particles[i].y + particles[i].vy + 1.5f, life = particles[i].life - 0.04f) }
+                    floatingTexts.removeAll { it.life <= 0f }
+                    for (i in floatingTexts.indices) { floatingTexts[i] = floatingTexts[i].copy(y = floatingTexts[i].y - 2.0f, life = floatingTexts[i].life - 0.02f) }
                 }
                 delay(16)
             }
         }
     }
 
-    private fun spawnExplosion(cx: Float, cy: Float, color: BubbleColor) {
-        repeat(12) {
-            val angle = Random.nextDouble(0.0, 2 * Math.PI)
-            val speed = Random.nextDouble(5.0, 15.0)
-            val size = Random.nextDouble(10.0, 25.0).toFloat()
-            particles.add(GameParticle(particleIdCounter++, cx, cy, (cos(angle) * speed).toFloat(), (sin(angle) * speed).toFloat(), color, size, 1.0f))
+    protected open fun startTimer() {
+        timerJob?.cancel()
+        timeLeft = 60
+        timerJob = viewModelScope.launch {
+            while (gameState == GameState.PLAYING) {
+                delay(1000)
+                if (!isPaused) {
+                    timeLeft--
+                    if (timeLeft <= 0) {
+                        if (gameMode == GameMode.TIME_ATTACK) {
+                            addRows(3)
+                            timeLeft = 60
+                        } else {
+                            gameState = GameState.LOST
+                            soundEvent = SoundType.LOSE
+                        }
+                    }
+                }
+            }
         }
     }
 
-    private fun spawnFloatingText(x: Float, y: Float, text: String) {
-        floatingTexts.add(FloatingText(id = textIdCounter++, x = x, y = y, text = text, life = 1.0f))
-    }
-
-    private fun dropCeiling() {
-        rowsDroppedCount++
+    protected fun addRows(count: Int) {
+        rowsDroppedCount += count
         val newGrid = mutableMapOf<GridPosition, Bubble>()
-        bubblesByPosition.forEach { (pos, bubble) -> newGrid[GridPosition(pos.row + 1, pos.col)] = bubble }
-        for (col in 0 until columnsCount) { 
-            newGrid[GridPosition(0, col)] = Bubble(color = generateNewBubbleColor()) 
-        }
-        bubblesByPosition = newGrid
-        soundEvent = SoundType.STICK
-        triggerVibration()
-        removeFloatingBubbles(newGrid)
-        metrics?.let { checkGameConditions(it) }
+        bubblesByPosition.forEach { (pos, bubble) -> newGrid[GridPosition(pos.row + count, pos.col)] = bubble }
+        for (r in 0 until count) { for (c in 0 until columnsCount) { newGrid[GridPosition(r, c)] = Bubble(color = generateNewBubbleColor()) } }
+        bubblesByPosition = newGrid; soundEvent = SoundType.STICK; removeFloatingBubbles(newGrid); metrics?.let { checkGameConditions(it) }
     }
 
     private fun snapToGrid(x: Float, y: Float, color: BubbleColor) {
@@ -361,156 +294,102 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val xOffsetEst = if ((estimatedRow + rowsDroppedCount) % 2 != 0) (m.bubbleDiameter / 2f) else 0f
         val estimatedCol = ((x - (m.boardStartPadding + xOffsetEst)) / m.horizontalSpacing).roundToInt().coerceAtLeast(0)
         val estimatedPos = GridPosition(estimatedRow, estimatedCol)
-        val candidates = getNeighborsAll(estimatedPos) + estimatedPos
-        val validEmptySpots = candidates.filter { pos -> 
-            pos.row >= 0 && pos.col >= 0 && pos.col < columnsCount && !bubblesByPosition.containsKey(pos) 
-        }
-        val finalPos = validEmptySpots.minByOrNull { pos ->
-            val (cx, cy) = getBubbleCenter(pos); val dx = x - cx; val dy = y - cy
-            dx * dx + dy * dy
-        } ?: estimatedPos
-
+        val finalPos = (getNeighborsAll(estimatedPos) + estimatedPos).filter { pos -> pos.row >= 0 && pos.col >= 0 && pos.col < columnsCount && !bubblesByPosition.containsKey(pos) }.minByOrNull { pos -> val (cx, cy) = getBubbleCenter(pos); (x-cx)*(x-cx) + (y-cy)*(y-cy) } ?: estimatedPos
         val newGrid = bubblesByPosition.toMutableMap()
-        when (color) {
-            BubbleColor.BOMB -> { unlockAchievement("bomb_squad"); explodeAt(finalPos, newGrid) }
-            BubbleColor.RAINBOW -> handleRainbowAt(finalPos, newGrid, x, y)
-            else -> {
-                newGrid[finalPos] = Bubble(color = color)
-                val matches = matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount)
-                if (matches.size >= 3) {
-                    joyTick++
-                    processMatches(matches, newGrid, x, y, color) 
-                } else {
-                    soundEvent = SoundType.STICK
-                }
-            }
+        if (color == BubbleColor.BOMB) { unlockAchievement("bomb_squad"); explodeAt(finalPos, newGrid) }
+        else if (color == BubbleColor.RAINBOW) handleRainbowAt(finalPos, newGrid, x, y)
+        else {
+            newGrid[finalPos] = Bubble(color = color)
+            val matches = matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount)
+            if (matches.size >= 3) { joyTick++; processMatches(matches, newGrid, x, y, color) } else soundEvent = SoundType.STICK
         }
-        bubblesByPosition = newGrid; activeProjectile = null
-        shotsFiredCount++
-        if (shotsFiredCount >= dropThreshold) { 
-            shotsFiredCount = 0
-            dropCeiling() 
-        } else {
-            checkGameConditions(m)
-        }
+        bubblesByPosition = newGrid; activeProjectile = null; onPostSnap()
     }
 
+    protected open fun onPostSnap() { }
+
     private fun processMatches(matches: Set<GridPosition>, grid: MutableMap<GridPosition, Bubble>, x: Float, y: Float, visualColor: BubbleColor) {
-        soundEvent = SoundType.POP; triggerVibration()
-        val count = matches.size
+        soundEvent = SoundType.POP; val count = matches.size
         if (count >= 6) unlockAchievement("combo_master")
-        val points = (count * 10) + ((count - 3) * 20)
-        score += points
-        if (count >= 5) addCoins(count / 2)
-        
-        spawnFloatingText(x, y, "+$points")
-        updateHighScore()
-        matches.forEach { pos ->
-            val bubbleColor = grid[pos]?.color ?: visualColor
-            grid.remove(pos)
-            val (bx, by) = getBubbleCenter(pos)
-            spawnExplosion(bx, by, bubbleColor)
-        }
+        val points = (count * 10) + ((count - 3) * 20); score += points; if (count >= 5) addCoins(count / 2)
+        spawnFloatingText(x, y, "+$points"); updateHighScore()
+        matches.forEach { pos -> val color = grid[pos]?.color ?: visualColor; grid.remove(pos); val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, color) }
         removeFloatingBubbles(grid)
     }
 
     private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float) {
-        val neighbors = getNeighbors(pos, grid)
-        val adjacentColors = neighbors.mapNotNull { grid[it]?.color }.distinct().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
-        if (adjacentColors.isEmpty()) {
-            grid[pos] = Bubble(color = generateNewBubbleColor()); soundEvent = SoundType.STICK; return
+        val adjacentColors = getNeighborsAll(pos).mapNotNull { grid[it]?.color }.distinct().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
+        if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = generateNewBubbleColor()); return }
+        val toPop = mutableSetOf<GridPosition>(); toPop.add(pos)
+        adjacentColors.forEach { c -> 
+            grid[pos] = Bubble(color = c)
+            toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount)) 
         }
-        val bubblesToPop = mutableSetOf<GridPosition>(); bubblesToPop.add(pos)
-        var comboTriggered = false
-        adjacentColors.forEach { neighborColor ->
-            grid[pos] = Bubble(color = neighborColor)
-            val matches = matchFinder.findMatches(pos, grid, rowsDroppedCount)
-            if (matches.size >= 3) { bubblesToPop.addAll(matches); comboTriggered = true }
-        }
-        if (comboTriggered) { 
-            joyTick++
-            unlockAchievement("rainbow_power"); processMatches(bubblesToPop, grid, fx, fy, BubbleColor.RAINBOW) 
-        } else { 
-            grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK 
-        }
+        if (toPop.size >= 3) { joyTick++; unlockAchievement("rainbow_power"); processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW) }
+        else { grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK }
     }
 
     private fun explodeAt(center: GridPosition, grid: MutableMap<GridPosition, Bubble>) {
-        soundEvent = SoundType.EXPLODE; triggerVibration()
-        val radius = getNeighborsAll(center).filter { grid.containsKey(it) } + center
-        var destroyedCount = 0
-        val (cx, cy) = getBubbleCenter(center) // ✅ Calculamos cx y cy antes de usarlos
-        radius.forEach { pos ->
-            val targetColor = grid[pos]?.color ?: BubbleColor.BOMB
-            if(grid.containsKey(pos)) {
-                val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, targetColor); grid.remove(pos); destroyedCount++
-            }
-        }
-        val points = destroyedCount * 50; score += points
-        spawnFloatingText(cx, cy, "+$points") // ✅ Corregido el uso de cx y cy
-        updateHighScore()
-        joyTick++
-        removeFloatingBubbles(grid)
+        soundEvent = SoundType.EXPLODE; val affected = getNeighborsAll(center).filter { grid.containsKey(it) } + center
+        val (cx, cy) = getBubbleCenter(center)
+        affected.forEach { pos -> grid[pos]?.let { spawnExplosion(getBubbleCenter(pos).first, getBubbleCenter(pos).second, it.color); grid.remove(pos) } }
+        val points = affected.size * 50
+        score += points; spawnFloatingText(cx, cy, "+$points"); updateHighScore(); joyTick++; removeFloatingBubbles(grid)
     }
 
     private fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         val visited = mutableSetOf<GridPosition>(); val queue = ArrayDeque<GridPosition>()
-        val ceilingBubbles = grid.keys.filter { it.row == 0 }
-        queue.addAll(ceilingBubbles); visited.addAll(ceilingBubbles)
-        while (queue.isNotEmpty()) {
-            val current = queue.removeFirst()
-            val neighbors = getNeighbors(current, grid)
-            for (neighbor in neighbors) { if (!visited.contains(neighbor)) { visited.add(neighbor); queue.add(neighbor) } }
-        }
-        val floating = grid.keys.filter { !visited.contains(it) }
-        if (floating.isNotEmpty()) {
-            var droppedPoints = 0
-            floating.forEach { pos ->
-                val bubble = grid[pos]; grid.remove(pos)
-                val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, bubble?.color ?: BubbleColor.BLUE); droppedPoints += 20
-                addCoins(1)
-            }
-            if (droppedPoints > 0) { score += droppedPoints; updateHighScore() }
-        }
+        val ceiling = grid.keys.filter { it.row == 0 }; queue.addAll(ceiling); visited.addAll(ceiling)
+        while (queue.isNotEmpty()) { val current = queue.removeFirst(); getNeighborsAll(current).filter { grid.containsKey(it) && it !in visited }.forEach { visited.add(it); queue.add(it) } }
+        grid.keys.filter { it !in visited }.forEach { pos -> val b = grid[pos]; grid.remove(pos); val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, b?.color ?: BubbleColor.BLUE); addCoins(1); score += 20 }
     }
 
-    private fun getNeighbors(pos: GridPosition, grid: Map<GridPosition, Bubble>): List<GridPosition> = getNeighborsAll(pos).filter { grid.containsKey(it) }
-    private fun getNeighborsAll(pos: GridPosition): List<GridPosition> {
-        val offsets = if ((pos.row + rowsDroppedCount) % 2 == 0) 
-            listOf(-1 to -1, -1 to 0, 0 to -1, 0 to 1, 1 to -1, 1 to 0) 
-        else 
-            listOf(-1 to 0, -1 to 1, 0 to -1, 0 to 1, 1 to 0, 1 to 1)
+    protected fun getNeighborsAll(pos: GridPosition): List<GridPosition> {
+        val offsets = if ((pos.row + rowsDroppedCount) % 2 == 0) listOf(-1 to -1, -1 to 0, 0 to -1, 0 to 1, 1 to -1, 1 to 0) else listOf(-1 to 0, -1 to 1, 0 to -1, 0 to 1, 1 to 0, 1 to 1)
         return offsets.map { GridPosition(pos.row + it.first, pos.col + it.second) }
     }
 
-    private fun checkGameConditions(m: BoardMetricsPx) {
-        if (bubblesByPosition.isEmpty()) { gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100); return }
+    protected fun checkGameConditions(m: BoardMetricsPx) {
+        if (bubblesByPosition.isEmpty()) { gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100) }
         val dangerY = m.boardTopPadding + (m.verticalSpacing * 12)
-        if (bubblesByPosition.keys.any { getBubbleCenter(it).second + bubbleRadius >= dangerY }) { 
-            gameState = GameState.LOST; soundEvent = SoundType.LOSE 
-        }
+        if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { gameState = GameState.LOST; soundEvent = SoundType.LOSE }
     }
-    
+
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
-        val m = metrics ?: return false; val collideDist = m.bubbleDiameter * 0.60f 
-        return bubblesByPosition.keys.any { pos -> 
-            val (cx, cy) = getBubbleCenter(pos); distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist
-        }
+        val m = metrics ?: return false; val collideDist = m.bubbleDiameter * 0.60f
+        return bubblesByPosition.keys.any { pos -> val (cx, cy) = getBubbleCenter(pos); distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist }
     }
-    
+
     private fun distancePointToSegment(cx: Float, cy: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
-        val abx = bx - ax; val aby = by - ay; val acx = cx - ax; val acy = cy - ay
-        val abLen2 = abx * abx + aby * aby; if (abLen2 == 0f) return hypot(cx - ax, cy - ay)
+        val abx = bx - ax; val aby = by - ay; val acx = cx - ax; val acy = cy - ay; val abLen2 = abx * abx + aby * aby
+        if (abLen2 == 0f) return hypot(cx - ax, cy - ay)
         var t = (acx * abx + acy * aby) / abLen2; t = t.coerceIn(0f, 1f)
         return hypot(cx - (ax + t * abx), cy - (ay + t * aby))
     }
 
-    private fun getBubbleCenter(pos: GridPosition): Pair<Float, Float> {
+    protected fun getBubbleCenter(pos: GridPosition): Pair<Float, Float> {
         val m = metrics ?: return 0f to 0f
         val xOffset = if ((pos.row + rowsDroppedCount) % 2 != 0) (m.bubbleDiameter / 2f) else 0f
-        val x = m.boardStartPadding + xOffset + (pos.col * m.horizontalSpacing)
-        val y = m.boardTopPadding + (pos.row * m.verticalSpacing)
-        return x to y
+        return (m.boardStartPadding + xOffset + (pos.col * m.horizontalSpacing)) to (m.boardTopPadding + (pos.row * m.verticalSpacing))
+    }
+
+    fun spawnExplosion(cx: Float, cy: Float, color: BubbleColor) {
+        repeat(12) {
+            val angle = (Math.random() * 2 * Math.PI)
+            val speed = 5.0 + (Math.random() * 10.0); val size = 10.0 + (Math.random() * 15.0)
+            particles.add(GameParticle(particleIdCounter++, cx, cy, (cos(angle) * speed).toFloat(), (sin(angle) * speed).toFloat(), color, size.toFloat(), 1.0f))
+        }
+    }
+
+    fun spawnFloatingText(x: Float, y: Float, text: String) {
+        floatingTexts.add(FloatingText(id = textIdCounter++, x = x, y = y, text = text, life = 1.0f))
+    }
+
+    fun unlockAchievement(id: String) {
+        val achievement = achievements.find { it.id == id }
+        if (achievement != null && !achievement.isUnlocked) {
+            achievement.isUnlocked = true; prefs.edit().putBoolean("ach_${id}", true).apply(); addCoins(50)
+            viewModelScope.launch { activeAchievement = achievement; soundEvent = SoundType.WIN; delay(4000); activeAchievement = null }
+        }
     }
 }
-object Random { fun nextDouble(min: Double, max: Double): Double = min + (Math.random() * (max - min)) }

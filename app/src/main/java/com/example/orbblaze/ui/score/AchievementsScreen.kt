@@ -225,7 +225,7 @@ fun AchievementsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
             }
         }
     }

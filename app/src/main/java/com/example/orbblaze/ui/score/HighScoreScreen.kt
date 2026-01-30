@@ -3,21 +3,24 @@ package com.example.orbblaze.ui.score
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -46,12 +49,15 @@ fun HighScoreScreen(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE) }
     
+    // Lista completa de modos y sus récords
     val records = remember {
         listOf(
             Triple("CLÁSICO", prefs.getInt("high_score", 0), Color(0xFFFFD700)),
             Triple("CONTRA TIEMPO", prefs.getInt("high_score_time", 0), Color(0xFF64FFDA)),
+            Triple("MODO AVENTURA", prefs.getInt("high_score_adventure", 0), Color(0xFF03DAC5)),
             Triple("MODO INVERSA", prefs.getInt("high_score_inverse", 0), Color(0xFFFF4D4D)),
-            Triple("MINIJUEGOS", prefs.getInt("high_score_mini", 0), Color(0xFFBB86FC))
+            Triple("PUZZLE DIARIO", prefs.getInt("high_score_daily", 0), Color(0xFFBB86FC)),
+            Triple("MINIJUEGOS", prefs.getInt("high_score_mini", 0), Color(0xFFFF8A65))
         )
     }
 
@@ -136,7 +142,6 @@ fun HighScoreScreen(
             ) {
                 Spacer(modifier = Modifier.height(40.dp))
                 
-                // ✅ TITULO CON ANIMACIÓN DE ESCALA (Sin estrella)
                 Text(
                     text = "RECORD PERSONAL",
                     style = TextStyle(
@@ -152,20 +157,22 @@ fun HighScoreScreen(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                Column(
+                // TABLA DE RÉCORDS CON SCROLL
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
                         .clip(RoundedCornerShape(32.dp))
                         .background(Color.Black.copy(alpha = 0.4f))
                         .border(2.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp)
                 ) {
-                    records.forEach { (modo, score, color) ->
-                        RecordRow(modo, score, color) {
+                    items(records) { (modo, score, color) ->
+                        RecordRowItem(modo, score, color) {
                             if (score == 0) {
                                 Toast.makeText(context, "Aún no tienes récord personal en este modo de juego", Toast.LENGTH_SHORT).show()
                             }
@@ -173,33 +180,36 @@ fun HighScoreScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
+                // BOTÓN VOLVER (ICONO HOME CIRCULAR)
                 Box(
                     modifier = Modifier
-                        .width(240.dp)
-                        .height(60.dp)
+                        .size(64.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Color.White)
+                        .background(Color(0xFF64FFDA).copy(alpha = 0.2f))
                         .border(2.dp, Color.White, RoundedCornerShape(50))
                         .clickable { onBackClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "VOLVER AL MENÚ", 
-                        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E), letterSpacing = 1.2.sp)
+                    Icon(
+                        imageVector = Icons.Default.Home, 
+                        contentDescription = null, 
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                Text(text = "v1.0 - OrbBlaze", color = Color.White.copy(alpha = 0.3f), fontSize = 12.sp)
             }
         }
     }
 }
 
 @Composable
-fun RecordRow(
+fun RecordRowItem(
     mode: String,
     score: Int,
     color: Color,
@@ -208,12 +218,12 @@ fun RecordRow(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(70.dp)
+            .height(65.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(Color.White.copy(alpha = 0.05f))
             .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
             .clickable { onClick() }
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
@@ -224,11 +234,11 @@ fun RecordRow(
             Column {
                 Text(
                     text = mode,
-                    style = TextStyle(color = color, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                    style = TextStyle(color = color, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                 )
                 Text(
                     text = "MEJOR PUNTAJE",
-                    style = TextStyle(color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    style = TextStyle(color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 )
             }
             
@@ -236,7 +246,7 @@ fun RecordRow(
                 text = if (score > 0) "$score" else "-",
                 style = TextStyle(
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
                     shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)
                 )

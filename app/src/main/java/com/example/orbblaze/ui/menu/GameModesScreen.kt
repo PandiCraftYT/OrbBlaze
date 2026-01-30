@@ -146,10 +146,16 @@ fun GameModesScreen(
                     contentPadding = PaddingValues(vertical = 10.dp)
                 ) {
                     item {
-                        ModeCardPremium(title = "MODO AVENTURA", icon = Icons.Default.Place, color = Color(0xFF64FFDA), onClick = { showLockedDialog = true })
+                        ModeCardPremium(
+                            title = "CONTRA TIEMPO", 
+                            icon = Icons.Default.Refresh, 
+                            color = Color(0xFF64FFDA), 
+                            isLocked = false, // ✅ AHORA DESBLOQUEADO
+                            onClick = { onModeSelect("time_attack") }
+                        )
                     }
                     item {
-                        ModeCardPremium(title = "CONTRA TIEMPO", icon = Icons.Default.Refresh, color = Color(0xFFFFD700), onClick = { showLockedDialog = true })
+                        ModeCardPremium(title = "MODO AVENTURA", icon = Icons.Default.Place, color = Color(0xFFFFD700), onClick = { showLockedDialog = true })
                     }
                     item {
                         ModeCardPremium(title = "MODO INVERSA", icon = Icons.Default.KeyboardArrowUp, color = Color(0xFFFF4D4D), onClick = { showLockedDialog = true })
@@ -178,6 +184,8 @@ fun GameModesScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(text = "v1.0 - OrbBlaze", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
             }
         }
 
@@ -214,6 +222,7 @@ fun ModeCardPremium(
     title: String,
     icon: ImageVector,
     color: Color,
+    isLocked: Boolean = true,
     onClick: () -> Unit
 ) {
     Box(
@@ -231,14 +240,16 @@ fun ModeCardPremium(
                 modifier = Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
+                Icon(imageVector = if (isLocked) Icons.Default.Lock else icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = title, style = TextStyle(color = Color(0xFF1A237E), fontSize = 18.sp, fontWeight = FontWeight.Black))
-                Text(text = "Próximamente...", style = TextStyle(color = Color.Black.copy(alpha = 0.4f), fontSize = 12.sp))
+                Text(text = if (isLocked) "Próximamente..." else "¡Jugar ahora!", style = TextStyle(color = if (isLocked) Color.Black.copy(alpha = 0.4f) else Color(0xFF64FFDA), fontSize = 12.sp, fontWeight = FontWeight.Bold))
             }
-            Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+            if (!isLocked) {
+                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF64FFDA), modifier = Modifier.size(24.dp))
+            }
         }
     }
 }

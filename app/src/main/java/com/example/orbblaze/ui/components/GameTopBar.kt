@@ -27,6 +27,7 @@ fun GameTopBar(
     score: Int,
     bestScore: Int,
     coins: Int,
+    timeLeft: Int? = null, // ✅ NUEVO: Opcional
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -42,69 +43,35 @@ fun GameTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // --- IZQUIERDA: MONEDAS ---
+        // MONEDAS
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Brush.radialGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))), contentAlignment = Alignment.Center) {
                 Text("C", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
             }
             Spacer(Modifier.width(8.dp))
-            Text(
-                text = "$coins",
-                style = TextStyle(color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            )
+            Text(text = "$coins", style = TextStyle(color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold))
         }
 
-        // --- CENTRO: SCORE ACTUAL ---
+        // CENTRO: MOSTRAR TIEMPO O SCORE
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "SCORE",
-                style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            )
-            Text(
-                text = "$score",
-                style = TextStyle(
-                    color = Color(0xFFFFD700),
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Black,
-                    shadow = Shadow(color = Color.Black, blurRadius = 4f)
-                )
-            )
+            if (timeLeft != null) {
+                Text("TIEMPO", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
+                Text(text = "$timeLeft s", style = TextStyle(color = if (timeLeft < 10) Color.Red else Color(0xFF64FFDA), fontSize = 24.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
+            } else {
+                Text("SCORE", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
+                Text(text = "$score", style = TextStyle(color = Color(0xFFFFD700), fontSize = 22.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
+            }
         }
 
-        // --- DERECHA: BEST SCORE + TUERCA ---
+        // DERECHA: BEST + TUERCA
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "MAX",
-                    style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                )
-                Text(
-                    text = "$bestScore",
-                    style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
-                )
+                Text("MAX", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold))
+                Text(text = "$bestScore", style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold))
             }
             Spacer(Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f))
-                    .border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape)
-                    .clickable { onSettingsClick() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
+            Box(modifier = Modifier.size(42.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)).border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape).clickable { onSettingsClick() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(22.dp))
             }
         }
     }
