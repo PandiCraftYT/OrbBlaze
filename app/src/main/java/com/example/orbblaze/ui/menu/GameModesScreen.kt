@@ -1,21 +1,17 @@
-package com.example.orbblaze.ui.score
+package com.example.orbblaze.ui.menu
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,30 +23,28 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.orbblaze.ui.game.GameViewModel
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
-import com.example.orbblaze.ui.menu.PhysicsBubble
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.isActive
 import kotlin.math.hypot
 import kotlin.random.Random
 
 @Composable
-fun AchievementsScreen(
-    viewModel: GameViewModel = viewModel(),
-    soundManager: SoundManager,
-    onBackClick: () -> Unit
+fun GameModesScreen(
+    onModeSelect: (String) -> Unit,
+    onBackClick: () -> Unit,
+    soundManager: SoundManager
 ) {
-    var revealedId by remember { mutableStateOf<String?>(null) }
-    val infiniteTransition = rememberInfiniteTransition(label = "ach_animations")
+    var showLockedDialog by remember { mutableStateOf(false) }
+    val infiniteTransition = rememberInfiniteTransition(label = "modes_animations")
     
     val titleScale by infiniteTransition.animateFloat(
         initialValue = 1f, targetValue = 1.05f,
@@ -58,12 +52,10 @@ fun AchievementsScreen(
         label = "title_scale"
     )
 
-    val displayList = viewModel.achievements.filter { !it.isHidden || it.isUnlocked }
-
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
+            .background(Brush.verticalGradient(listOf(BgTop, BgBottom)))
             .systemBarsPadding()
     ) {
         val screenWidthPx = constraints.maxWidth.toFloat()
@@ -72,7 +64,6 @@ fun AchievementsScreen(
         var frameTick by remember { mutableStateOf(0L) }
         val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
 
-        // Burbujas físicas de fondo para consistencia visual
         val physicsBubbles = remember(screenWidthPx, screenHeightPx) {
             List(15) {
                 PhysicsBubble(
@@ -107,7 +98,6 @@ fun AchievementsScreen(
             }
         }
 
-        // Capa de fondo interactiva
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -145,71 +135,49 @@ fun AchievementsScreen(
             }
 
             Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp), 
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "LOGROS", 
+                    text = "MODOS DE JUEGO",
                     style = TextStyle(
-                        fontSize = 42.sp, 
-                        fontWeight = FontWeight.Black, 
-                        color = Color.White, 
+                        fontSize = 42.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
                         letterSpacing = 2.sp,
-                        shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 8f)
+                        shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(4f, 4f), blurRadius = 10f)
                     ),
                     modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale }
                 )
-                
-                Spacer(modifier = Modifier.height(24.dp))
 
-                LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(), 
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(displayList) { achievement ->
-                        val isUnlocked = achievement.isUnlocked
-                        val showDescription = isUnlocked || revealedId == achievement.id
-                        // Tarjetas Blancas Opacas para logros desbloqueados
-                        val cardColor = if (isUnlocked) Color.White else Color.Black.copy(alpha = 0.4f)
-                        val borderColor = if (isUnlocked) Color(0xFFFFD700) else Color.White.copy(alpha = 0.2f)
-                        val titleColor = if (isUnlocked) Color(0xFF1A237E) else Color.Gray
-                        val descColor = if (isUnlocked) Color.Black.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.4f)
-                        val iconColor = if (isUnlocked) Color(0xFFFFD700) else Color.Gray
+                Spacer(modifier = Modifier.height(50.dp))
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(cardColor)
-                                .border(2.dp, borderColor, RoundedCornerShape(20.dp))
-                                .clickable { if (!isUnlocked) revealedId = if (revealedId == achievement.id) null else achievement.id }
-                                .padding(16.dp)
-                                .animateContentSize(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if(isUnlocked) Color(0xFF1A237E).copy(alpha=0.1f) else Color.Black.copy(alpha=0.2f)), 
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(imageVector = if (isUnlocked) Icons.Default.Star else Icons.Default.Lock, contentDescription = null, tint = iconColor, modifier = Modifier.size(28.dp))
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(text = achievement.title, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Black, color = titleColor))
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (showDescription) achievement.description else "Bloqueado 🔒 (Toca para ver pista)", 
-                                    style = TextStyle(fontSize = 13.sp, color = descColor, fontWeight = FontWeight.Medium)
-                                )
-                            }
-                        }
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ModeCardPremium(
+                        title = "CONTRA TIEMPO",
+                        description = "¡Explota burbujas antes de que acabe el tiempo!",
+                        icon = Icons.Default.Refresh,
+                        color = Color(0xFF64FFDA),
+                        onClick = { showLockedDialog = true }
+                    )
+                    ModeCardPremium(
+                        title = "MODO INVERSA",
+                        description = "Dispara desde arriba hacia abajo",
+                        icon = Icons.Default.KeyboardArrowUp,
+                        color = Color(0xFFFF4D4D),
+                        onClick = { showLockedDialog = true }
+                    )
+                    ModeCardPremium(
+                        title = "MINIJUEGOS",
+                        description = "Retos rápidos y divertidos",
+                        icon = Icons.Default.PlayArrow,
+                        color = Color(0xFFBB86FC),
+                        onClick = { showLockedDialog = true }
+                    )
                 }
-                
-                Spacer(modifier = Modifier.height(24.dp))
+
+                Spacer(modifier = Modifier.height(40.dp))
 
                 Box(
                     modifier = Modifier
@@ -221,16 +189,75 @@ fun AchievementsScreen(
                         .clickable { onBackClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "VOLVER", style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                    Text("VOLVER AL MENÚ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
+            }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    text = "v1.0 - OrbBlaze",
-                    color = Color.White.copy(alpha = 0.3f),
-                    fontSize = 12.sp
-                )
+            Text(
+                text = "v1.0 - OrbBlaze",
+                color = Color.White.copy(alpha = 0.4f),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+                fontSize = 12.sp
+            )
+        }
+
+        if (showLockedDialog) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable { showLockedDialog = false },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier.width(300.dp).padding(16.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    color = Color(0xFF1A237E),
+                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))
+                ) {
+                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Lock, null, tint = Color(0xFFFFD700), modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text("MODO BLOQUEADO", style = TextStyle(color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black))
+                        Spacer(Modifier.height(8.dp))
+                        Text("Este modo de juego próximamente estará disponible.", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Spacer(Modifier.height(24.dp))
+                        Button(onClick = { showLockedDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(50)) {
+                            Text("OK", color = Color(0xFF1A237E), fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ModeCardPremium(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(90.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White) // ✅ Blanco sólido y opaco
+            .border(width = 2.dp, color = color.copy(alpha = 0.6f), shape = RoundedCornerShape(24.dp))
+            .clickable { onClick() }
+            .padding(16.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = TextStyle(color = Color(0xFF1A237E), fontSize = 19.sp, fontWeight = FontWeight.Black))
+                Text(text = "Próximamente...", style = TextStyle(color = Color.Black.copy(alpha = 0.4f), fontSize = 13.sp))
             }
         }
     }

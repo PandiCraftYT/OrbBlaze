@@ -49,6 +49,7 @@ data class PhysicsBubble(
 @Composable
 fun MenuScreen(
     onPlayClick: () -> Unit,
+    onModesClick: () -> Unit, // ✅ NUEVO: Para la lista de modos
     onScoreClick: () -> Unit,
     onAchievementsClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -180,22 +181,24 @@ fun MenuScreen(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(60.dp))
+                Spacer(modifier = Modifier.height(50.dp))
 
-                // JUGAR y PUNTUACIONES uno arriba del otro (o podrías usar Row si prefieres)
+                // BOTONES PRINCIPALES
                 MenuButton(text = "JUGAR", onClick = onPlayClick)
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 MenuButton(text = "PUNTUACIONES", onClick = onScoreClick)
+                Spacer(modifier = Modifier.height(14.dp))
+                MenuButton(text = "MODOS DE JUEGO", onClick = onModesClick)
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 
-                // LOGROS EN GRANDE
+                // LOGROS (Botón Dorado)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
-                        .height(80.dp)
+                        .height(72.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xFFFFD700)) // Dorado
+                        .background(Color(0xFFFFD700))
                         .border(3.dp, Color.White, RoundedCornerShape(20.dp))
                         .clickable { onAchievementsClick() },
                     contentAlignment = Alignment.Center
@@ -203,7 +206,7 @@ fun MenuScreen(
                     Text(
                         text = "LOGROS",
                         style = TextStyle(
-                            fontSize = 28.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF1A237E),
                             letterSpacing = 2.sp
@@ -211,7 +214,7 @@ fun MenuScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
                 // BOTONES CIRCULARES (Configuración y Salir)
                 Row(
@@ -250,7 +253,7 @@ fun MenuButton(text: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .width(260.dp)
-            .height(56.dp)
+            .height(54.dp)
             .clip(RoundedCornerShape(50))
             .background(Color.White)
             .border(2.dp, Color.White, RoundedCornerShape(50))
@@ -260,10 +263,10 @@ fun MenuButton(text: String, onClick: () -> Unit) {
         Text(
             text = text, 
             style = TextStyle(
-                fontSize = 18.sp, 
+                fontSize = 17.sp, 
                 fontWeight = FontWeight.Bold, 
                 color = Color(0xFF1A237E), 
-                letterSpacing = 1.5.sp
+                letterSpacing = 1.2.sp
             )
         )
     }

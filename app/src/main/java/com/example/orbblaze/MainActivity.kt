@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.orbblaze.ui.game.GameViewModel
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.menu.MenuScreen
+import com.example.orbblaze.ui.menu.GameModesScreen
 import com.example.orbblaze.ui.game.LevelScreen
 import com.example.orbblaze.ui.settings.SettingsScreen
 import com.example.orbblaze.ui.score.HighScoreScreen
@@ -61,6 +62,7 @@ fun AppNavigation(soundManager: SoundManager) {
         "menu" -> {
             MenuScreen(
                 onPlayClick = { currentScreen = "game" },
+                onModesClick = { currentScreen = "modes" },
                 onScoreClick = { currentScreen = "score" },
                 onAchievementsClick = { currentScreen = "achievements" },
                 onSettingsClick = { currentScreen = "settings" },
@@ -69,23 +71,34 @@ fun AppNavigation(soundManager: SoundManager) {
                 onSecretClick = { sharedViewModel.unlockAchievement("secret_popper") }
             )
         }
+        "modes" -> {
+            GameModesScreen(
+                onModeSelect = { mode -> currentScreen = mode },
+                onBackClick = { currentScreen = "menu" },
+                soundManager = soundManager
+            )
+        }
         "game" -> {
             LevelScreen(
                 viewModel = sharedViewModel,
                 soundManager = soundManager,
                 onMenuClick = { currentScreen = "menu" },
-                onShopClick = { currentScreen = "shop" } // ✅ Redirección a tienda
+                onShopClick = { currentScreen = "shop" }
             )
         }
         "shop" -> {
-            ShopScreen(onBackClick = { currentScreen = "game" }) // ✅ Volver al juego
+            ShopScreen(onBackClick = { currentScreen = "game" })
         }
         "score" -> {
-            HighScoreScreen(onBackClick = { currentScreen = "menu" })
+            HighScoreScreen(
+                soundManager = soundManager, // ✅ Se añadió el parámetro faltante
+                onBackClick = { currentScreen = "menu" }
+            )
         }
         "achievements" -> {
             AchievementsScreen(
                 viewModel = sharedViewModel,
+                soundManager = soundManager, // ✅ Se añadió el parámetro faltante
                 onBackClick = { currentScreen = "menu" }
             )
         }
