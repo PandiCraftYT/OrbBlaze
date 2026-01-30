@@ -1,7 +1,9 @@
 package com.example.orbblaze.ui.score
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,15 +40,22 @@ import kotlin.random.Random
 
 @Composable
 fun HighScoreScreen(
-    soundManager: SoundManager, // ✅ Necesario para el sonido de explosión
+    soundManager: SoundManager,
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE) }
-    val highScore = prefs.getInt("high_score", 0)
-    val infiniteTransition = rememberInfiniteTransition(label = "score_animations")
+    
+    val records = remember {
+        listOf(
+            Triple("CLÁSICO", prefs.getInt("high_score", 0), Color(0xFFFFD700)),
+            Triple("CONTRA TIEMPO", prefs.getInt("high_score_time", 0), Color(0xFF64FFDA)),
+            Triple("MODO INVERSA", prefs.getInt("high_score_inverse", 0), Color(0xFFFF4D4D)),
+            Triple("MINIJUEGOS", prefs.getInt("high_score_mini", 0), Color(0xFFBB86FC))
+        )
+    }
 
-    // Animación de escala para el título
+    val infiniteTransition = rememberInfiniteTransition(label = "score_animations")
     val titleScale by infiniteTransition.animateFloat(
         initialValue = 1f, targetValue = 1.05f,
         animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
@@ -84,12 +93,9 @@ fun HighScoreScreen(
                 withFrameNanos { frameTime ->
                     frameTick = frameTime
                     physicsBubbles.forEach { bubble ->
-                        bubble.x += bubble.vx
-                        bubble.y += bubble.vy
-                        bubble.vy += gravity
+                        bubble.x += bubble.vx; bubble.y += bubble.vy; bubble.vy += gravity
                         if (bubble.y > screenHeightPx + bubble.radius * 2) {
-                            bubble.y = -bubble.radius
-                            bubble.x = Random.nextFloat() * screenWidthPx
+                            bubble.y = -bubble.radius; bubble.x = Random.nextFloat() * screenWidthPx
                             bubble.vy = Random.nextFloat() * 2f
                         }
                         if (bubble.x < -bubble.radius) bubble.x = screenWidthPx + bubble.radius
@@ -99,7 +105,6 @@ fun HighScoreScreen(
             }
         }
 
-        // Capa de fondo interactiva
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -108,9 +113,7 @@ fun HighScoreScreen(
                         physicsBubbles.forEach { bubble ->
                             val dist = hypot(offset.x - bubble.x, offset.y - bubble.y)
                             if (dist <= bubble.radius * 1.5f) {
-                                soundManager.play(SoundType.POP)
-                                bubble.vy = -20f
-                                bubble.vx = (Random.nextFloat() * 10f - 5f)
+                                soundManager.play(SoundType.POP); bubble.vy = -20f; bubble.vx = (Random.nextFloat() * 10f - 5f)
                             }
                         }
                     }
@@ -120,79 +123,124 @@ fun HighScoreScreen(
                 @Suppress("UNUSED_VARIABLE")
                 val t = frameTick 
                 physicsBubbles.forEach { bubble ->
-                    val center = Offset(bubble.x, bubble.y)
-                    val radius = bubble.radius
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(bubble.color.copy(alpha = 0.9f), bubble.color.copy(alpha = 0.4f)),
-                            center = center,
-                            radius = radius
-                        ),
-                        radius = radius,
-                        center = center
-                    )
+                    val center = Offset(bubble.x, bubble.y); val radius = bubble.radius
+                    drawCircle(brush = Brush.radialGradient(listOf(bubble.color.copy(alpha = 0.9f), bubble.color.copy(alpha = 0.4f)), center = center, radius = radius), radius = radius, center = center)
                     drawCircle(color = Color.White.copy(alpha = 0.3f), radius = radius * 0.3f, center = Offset(center.x - radius * 0.3f, center.y - radius * 0.3f))
                     drawCircle(color = Color.White.copy(alpha = 0.5f), radius = radius, center = center, style = Stroke(width = 2f))
                 }
             }
 
             Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Spacer(modifier = Modifier.height(40.dp))
+                
+                // ✅ TITULO CON ANIMACIÓN DE ESCALA (Sin estrella)
                 Text(
-                    text = "MEJOR PUNTUACIÓN",
+                    text = "RECORD PERSONAL",
                     style = TextStyle(
-                        fontSize = 32.sp,
+                        fontSize = 38.sp,
                         fontWeight = FontWeight.Black,
                         color = Color.White,
-                        shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)
+                        letterSpacing = 2.sp,
+                        shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 10f)
                     ),
-                    modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale }
+                    modifier = Modifier.graphicsLayer { 
+                        scaleX = titleScale
+                        scaleY = titleScale
+                    }
                 )
 
-                Spacer(modifier = Modifier.height(60.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-                Text(
-                    text = "$highScore",
-                    style = TextStyle(
-                        fontSize = 90.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFFFFD700),
-                        shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f),
-                        letterSpacing = 2.sp
-                    )
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .border(2.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    records.forEach { (modo, score, color) ->
+                        RecordRow(modo, score, color) {
+                            if (score == 0) {
+                                Toast.makeText(context, "Aún no tienes récord personal en este modo de juego", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
 
-                Text(
-                    text = "PUNTOS",
-                    style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.7f), letterSpacing = 4.sp)
-                )
-
-                Spacer(modifier = Modifier.height(80.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
                 Box(
                     modifier = Modifier
-                        .width(220.dp)
-                        .height(56.dp)
+                        .width(240.dp)
+                        .height(60.dp)
                         .clip(RoundedCornerShape(50))
+                        .background(Color.White)
                         .border(2.dp, Color.White, RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.1f))
                         .clickable { onBackClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "VOLVER", style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                    Text(
+                        text = "VOLVER AL MENÚ", 
+                        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E), letterSpacing = 1.2.sp)
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 
+            }
+        }
+    }
+}
+
+@Composable
+fun RecordRow(
+    mode: String,
+    score: Int,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(70.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 20.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
                 Text(
-                    text = "v1.0 - OrbBlaze",
-                    color = Color.White.copy(alpha = 0.3f),
-                    fontSize = 12.sp
+                    text = mode,
+                    style = TextStyle(color = color, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                )
+                Text(
+                    text = "MEJOR PUNTAJE",
+                    style = TextStyle(color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 )
             }
+            
+            Text(
+                text = if (score > 0) "$score" else "-",
+                style = TextStyle(
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Black,
+                    shadow = Shadow(color = Color.Black, offset = Offset(2f, 2f), blurRadius = 4f)
+                )
+            )
         }
     }
 }

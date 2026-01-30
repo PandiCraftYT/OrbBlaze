@@ -49,7 +49,7 @@ data class PhysicsBubble(
 @Composable
 fun MenuScreen(
     onPlayClick: () -> Unit,
-    onModesClick: () -> Unit, // ✅ NUEVO: Para la lista de modos
+    onModesClick: () -> Unit,
     onScoreClick: () -> Unit,
     onAchievementsClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -183,12 +183,12 @@ fun MenuScreen(
 
                 Spacer(modifier = Modifier.height(50.dp))
 
-                // BOTONES PRINCIPALES
+                // BOTONES PRINCIPALES REORGANIZADOS
                 MenuButton(text = "JUGAR", onClick = onPlayClick)
                 Spacer(modifier = Modifier.height(14.dp))
-                MenuButton(text = "PUNTUACIONES", onClick = onScoreClick)
-                Spacer(modifier = Modifier.height(14.dp))
                 MenuButton(text = "MODOS DE JUEGO", onClick = onModesClick)
+                Spacer(modifier = Modifier.height(14.dp))
+                MenuButton(text = "RECORD", onClick = onScoreClick) // ✅ Cambiado de Puntuaciones a RECORD
                 
                 Spacer(modifier = Modifier.height(20.dp))
                 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -61,7 +61,7 @@ fun GameModesScreen(
         val screenWidthPx = constraints.maxWidth.toFloat()
         val screenHeightPx = constraints.maxHeight.toFloat()
         val density = LocalDensity.current
-        var frameTick by remember { mutableStateOf(0L) }
+        var frameTick by remember { mutableLongStateOf(0L) }
         val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
 
         val physicsBubbles = remember(screenWidthPx, screenHeightPx) {
@@ -83,12 +83,9 @@ fun GameModesScreen(
                 withFrameNanos { frameTime ->
                     frameTick = frameTime
                     physicsBubbles.forEach { bubble ->
-                        bubble.x += bubble.vx
-                        bubble.y += bubble.vy
-                        bubble.vy += gravity
+                        bubble.x += bubble.vx; bubble.y += bubble.vy; bubble.vy += gravity
                         if (bubble.y > screenHeightPx + bubble.radius * 2) {
-                            bubble.y = -bubble.radius
-                            bubble.x = Random.nextFloat() * screenWidthPx
+                            bubble.y = -bubble.radius; bubble.x = Random.nextFloat() * screenWidthPx
                             bubble.vy = Random.nextFloat() * 2f
                         }
                         if (bubble.x < -bubble.radius) bubble.x = screenWidthPx + bubble.radius
@@ -107,8 +104,7 @@ fun GameModesScreen(
                             val dist = hypot(offset.x - bubble.x, offset.y - bubble.y)
                             if (dist <= bubble.radius * 1.5f) {
                                 soundManager.play(SoundType.POP)
-                                bubble.vy = -20f
-                                bubble.vx = (Random.nextFloat() * 10f - 5f)
+                                bubble.vy = -20f; bubble.vx = (Random.nextFloat() * 10f - 5f)
                             }
                         }
                     }
@@ -118,24 +114,15 @@ fun GameModesScreen(
                 @Suppress("UNUSED_VARIABLE")
                 val t = frameTick 
                 physicsBubbles.forEach { bubble ->
-                    val center = Offset(bubble.x, bubble.y)
-                    val radius = bubble.radius
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(bubble.color.copy(alpha = 0.9f), bubble.color.copy(alpha = 0.4f)),
-                            center = center,
-                            radius = radius
-                        ),
-                        radius = radius,
-                        center = center
-                    )
+                    val center = Offset(bubble.x, bubble.y); val radius = bubble.radius
+                    drawCircle(brush = Brush.radialGradient(listOf(bubble.color.copy(alpha = 0.9f), bubble.color.copy(alpha = 0.4f)), center = center, radius = radius), radius = radius, center = center)
                     drawCircle(color = Color.White.copy(alpha = 0.3f), radius = radius * 0.3f, center = Offset(center.x - radius * 0.3f, center.y - radius * 0.3f))
                     drawCircle(color = Color.White.copy(alpha = 0.5f), radius = radius, center = center, style = Stroke(width = 2f))
                 }
             }
 
             Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -151,33 +138,31 @@ fun GameModesScreen(
                     modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale }
                 )
 
-                Spacer(modifier = Modifier.height(50.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ModeCardPremium(
-                        title = "CONTRA TIEMPO",
-                        description = "¡Explota burbujas antes de que acabe el tiempo!",
-                        icon = Icons.Default.Refresh,
-                        color = Color(0xFF64FFDA),
-                        onClick = { showLockedDialog = true }
-                    )
-                    ModeCardPremium(
-                        title = "MODO INVERSA",
-                        description = "Dispara desde arriba hacia abajo",
-                        icon = Icons.Default.KeyboardArrowUp,
-                        color = Color(0xFFFF4D4D),
-                        onClick = { showLockedDialog = true }
-                    )
-                    ModeCardPremium(
-                        title = "MINIJUEGOS",
-                        description = "Retos rápidos y divertidos",
-                        icon = Icons.Default.PlayArrow,
-                        color = Color(0xFFBB86FC),
-                        onClick = { showLockedDialog = true }
-                    )
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    item {
+                        ModeCardPremium(title = "MODO AVENTURA", icon = Icons.Default.Place, color = Color(0xFF64FFDA), onClick = { showLockedDialog = true })
+                    }
+                    item {
+                        ModeCardPremium(title = "CONTRA TIEMPO", icon = Icons.Default.Refresh, color = Color(0xFFFFD700), onClick = { showLockedDialog = true })
+                    }
+                    item {
+                        ModeCardPremium(title = "MODO INVERSA", icon = Icons.Default.KeyboardArrowUp, color = Color(0xFFFF4D4D), onClick = { showLockedDialog = true })
+                    }
+                    item {
+                        ModeCardPremium(title = "PUZZLE DIARIO", icon = Icons.Default.DateRange, color = Color(0xFFBB86FC), onClick = { showLockedDialog = true })
+                    }
+                    item {
+                        ModeCardPremium(title = "MINIJUEGOS", icon = Icons.Default.PlayArrow, color = Color(0xFF03DAC5), onClick = { showLockedDialog = true })
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Box(
                     modifier = Modifier
@@ -191,14 +176,9 @@ fun GameModesScreen(
                 ) {
                     Text("VOLVER AL MENÚ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
-            }
 
-            Text(
-                text = "v1.0 - OrbBlaze",
-                color = Color.White.copy(alpha = 0.4f),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
-                fontSize = 12.sp
-            )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
 
         if (showLockedDialog) {
@@ -232,7 +212,6 @@ fun GameModesScreen(
 @Composable
 fun ModeCardPremium(
     title: String,
-    description: String,
     icon: ImageVector,
     color: Color,
     onClick: () -> Unit
@@ -240,9 +219,9 @@ fun ModeCardPremium(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(90.dp)
+            .height(85.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White) // ✅ Blanco sólido y opaco
+            .background(Color.White)
             .border(width = 2.dp, color = color.copy(alpha = 0.6f), shape = RoundedCornerShape(24.dp))
             .clickable { onClick() }
             .padding(16.dp)
@@ -252,13 +231,14 @@ fun ModeCardPremium(
                 modifier = Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
+                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = TextStyle(color = Color(0xFF1A237E), fontSize = 19.sp, fontWeight = FontWeight.Black))
-                Text(text = "Próximamente...", style = TextStyle(color = Color.Black.copy(alpha = 0.4f), fontSize = 13.sp))
+                Text(text = title, style = TextStyle(color = Color(0xFF1A237E), fontSize = 18.sp, fontWeight = FontWeight.Black))
+                Text(text = "Próximamente...", style = TextStyle(color = Color.Black.copy(alpha = 0.4f), fontSize = 12.sp))
             }
+            Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
         }
     }
 }

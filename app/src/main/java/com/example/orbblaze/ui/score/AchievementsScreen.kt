@@ -226,11 +226,6 @@ fun AchievementsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Text(
-                    text = "v1.0 - OrbBlaze",
-                    color = Color.White.copy(alpha = 0.3f),
-                    fontSize = 12.sp
-                )
             }
         }
     }
