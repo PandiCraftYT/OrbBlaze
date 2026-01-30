@@ -1,6 +1,7 @@
 package com.example.orbblaze.ui.game
 
 import android.annotation.SuppressLint
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -13,8 +14,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -30,6 +34,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
@@ -40,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.components.VisualBubble
 import com.example.orbblaze.ui.components.PandaShooter
+import com.example.orbblaze.ui.components.GameTopBar
 import com.example.orbblaze.ui.theme.*
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -50,12 +56,15 @@ import kotlin.math.sin
 fun LevelScreen(
     viewModel: GameViewModel = viewModel(),
     soundManager: SoundManager,
-    onMenuClick: () -> Unit = {}
+    onMenuClick: () -> Unit = {},
+    onShopClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val bubbles = viewModel.bubblesByPosition
     val activeProjectile = viewModel.activeProjectile
     val score = viewModel.score
     val highScore = viewModel.highScore
+    val coins = viewModel.coins
     val gameState = viewModel.gameState
     val particles = viewModel.particles
     val floatingTexts = viewModel.floatingTexts
@@ -98,7 +107,7 @@ fun LevelScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundBrush)
-            .systemBarsPadding()
+            .statusBarsPadding()
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -132,7 +141,7 @@ fun LevelScreen(
         val bubbleRadiusPx = bubbleDiameterPx / 2f
         val horizontalSpacingPx = bubbleDiameterPx
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
-        val boardTopPaddingPx = with(density) { 80.dp.toPx() }
+        val boardTopPaddingPx = with(density) { 100.dp.toPx() } // Aumentado para la nueva barra
         val ceilingYPx = boardTopPaddingPx + bubbleDiameterPx * 0.2f
         val centeredPadding = (screenWidth - (numCols * horizontalSpacingPx)) / 2f
 
@@ -199,28 +208,29 @@ fun LevelScreen(
             }
         }
 
-        PandaShooter(angle = viewModel.shooterAngle, currentBubbleColor = mapBubbleColor(currentBubbleColor), isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW, nextBubbleColor = mapBubbleColor(previewBubbleColor), isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, rainbowRotation = masterRainbowRotation, shotTick = viewModel.shotTick, modifier = Modifier.align(Alignment.BottomCenter).offset(y = (-10).dp))
+        PandaShooter(
+            angle = viewModel.shooterAngle, 
+            currentBubbleColor = mapBubbleColor(currentBubbleColor), 
+            isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW, 
+            nextBubbleColor = mapBubbleColor(previewBubbleColor), 
+            isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, 
+            shotTick = viewModel.shotTick, 
+            joyTick = viewModel.joyTick,
+            rainbowRotation = masterRainbowRotation,
+            onShopClick = { 
+                Toast.makeText(context, "Próximamente...", Toast.LENGTH_SHORT).show() 
+            },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
 
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp).align(Alignment.TopCenter), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.3f)).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(text = "SCORE: $score", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color(0xFFFFD700), shadow = Shadow(color = Color.Black, blurRadius = 4f)))
-                Text(text = "BEST: $highScore", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.6f)))
-            }
-            Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.15f)).border(2.dp, Color.White.copy(alpha = 0.4f), CircleShape).clickable { viewModel.togglePause() }, contentAlignment = Alignment.Center) {
-                Icon(imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Settings, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
-            }
-        }
-
-        AnimatedVisibility(visible = activeAchievement != null, enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(), exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(), modifier = Modifier.align(Alignment.TopCenter).padding(top = 100.dp)) {
-            activeAchievement?.let { achievement ->
-                Box(modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xFF212121).copy(alpha = 0.9f)).border(2.dp, Color(0xFFFFD700), RoundedCornerShape(20.dp)).padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(24.dp))
-                        Spacer(Modifier.width(12.dp)); Column { Text("¡LOGRO!", style = TextStyle(color = Color(0xFFFFD700), fontSize = 10.sp, fontWeight = FontWeight.Bold)); Text(achievement.title, style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)) }
-                    }
-                }
-            }
-        }
+        // ✅ NUEVA BARRA SUPERIOR INTEGRADA
+        GameTopBar(
+            score = score,
+            bestScore = highScore,
+            coins = coins,
+            onSettingsClick = { viewModel.togglePause() },
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
 
         if (isPaused && gameState == GameState.PLAYING) {
             OverlayMenu(
@@ -240,7 +250,16 @@ fun LevelScreen(
                 onRestart = { viewModel.restartGame() }, 
                 onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }, 
                 score = score, 
-                isWin = gameState == GameState.WON
+                isWin = gameState == GameState.WON,
+                onRedeemCoins = {
+                    if (score >= 100) {
+                        val coinsEarned = score / 100
+                        viewModel.addCoins(coinsEarned)
+                        Toast.makeText(context, "¡Has canjeado $coinsEarned monedas!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Necesitas al menos 100 puntos", Toast.LENGTH_SHORT).show()
+                    }
+                }
             )
         }
     }
@@ -256,7 +275,8 @@ fun OverlayMenu(
     isWin: Boolean = false, 
     showVolume: Boolean = false, 
     volume: Float = 0f, 
-    onVolumeChange: (Float) -> Unit = {}
+    onVolumeChange: (Float) -> Unit = {},
+    onRedeemCoins: (() -> Unit)? = null
 ) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable(enabled = false) {}, 
@@ -265,86 +285,49 @@ fun OverlayMenu(
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             val titleColor = if (isWin) Color(0xFFFFD700) else if (title == "PAUSA") Color.White else Color(0xFFFF4D4D)
             
-            Text(
-                text = title, 
-                style = TextStyle(
-                    fontSize = 56.sp, 
-                    fontWeight = FontWeight.Black, 
-                    color = titleColor, 
-                    letterSpacing = 2.sp,
-                    shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f)
-                )
-            )
+            Text(text = title, style = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Black, color = titleColor, letterSpacing = 2.sp, shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f)))
             
             if (score != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "PUNTUACIÓN FINAL: $score", 
-                    style = TextStyle(fontSize = 20.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.ExtraBold)
-                )
+                Text(text = "PUNTUACIÓN FINAL: $score", style = TextStyle(fontSize = 20.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.ExtraBold))
+                
+                onRedeemCoins?.let {
+                    Spacer(Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFFFD700).copy(alpha = 0.2f))
+                            .border(1.dp, Color(0xFFFFD700), RoundedCornerShape(12.dp))
+                            .clickable { it() }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text("CANJEAR PUNTOS POR MONEDAS", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
-            Spacer(Modifier.height(50.dp))
+            Spacer(Modifier.height(40.dp))
 
-            // BOTÓN CONTINUAR (SI ESTÁ EN PAUSA)
             onContinue?.let {
-                Box(
-                    modifier = Modifier
-                        .width(260.dp)
-                        .height(64.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF64FFDA))
-                        .clickable { it() },
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.width(260.dp).height(64.dp).clip(RoundedCornerShape(50)).background(Color(0xFF64FFDA)).clickable { it() }, contentAlignment = Alignment.Center) {
                     Text("CONTINUAR", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E)))
                 }
                 Spacer(Modifier.height(24.dp))
             }
 
-            // AJUSTE DE VOLUMEN (SOLO EN PAUSA)
             if (showVolume) {
                 Text("VOLUMEN EFECTOS", style = TextStyle(color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp))
                 Spacer(Modifier.height(8.dp))
-                Slider(
-                    value = volume, 
-                    onValueChange = onVolumeChange, 
-                    colors = SliderDefaults.colors(thumbColor = Color(0xFFFFD700), activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.2f)), 
-                    modifier = Modifier.width(240.dp)
-                )
+                Slider(value = volume, onValueChange = onVolumeChange, colors = SliderDefaults.colors(thumbColor = Color(0xFFFFD700), activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.2f)), modifier = Modifier.width(240.dp))
                 Spacer(Modifier.height(40.dp))
             }
 
-            // BOTONES INFERIORES (REINICIAR Y SALIR)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                // REINICIAR
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.1f))
-                        .border(2.dp, Color.White, CircleShape)
-                        .clickable { onRestart() },
-                    contentAlignment = Alignment.Center
-                ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(2.dp, Color.White, CircleShape).clickable { onRestart() }, contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
                 }
-                
                 Spacer(Modifier.width(40.dp))
-
-                // SALIR
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(Color.Red.copy(alpha = 0.2f))
-                        .border(2.dp, Color.White, CircleShape)
-                        .clickable { onExit() },
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color.Red.copy(alpha = 0.2f)).border(2.dp, Color.White, CircleShape).clickable { onExit() }, contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Home, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
                 }
             }
