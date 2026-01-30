@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -35,11 +34,12 @@ import kotlinx.coroutines.isActive
 import kotlin.math.hypot
 import kotlin.random.Random
 
+// Clase de datos para las burbujas físicas del fondo
 data class PhysicsBubble(
     var x: Float,
     var y: Float,
-    var vx: Float, // Velocidad horizontal (deriva)
-    var vy: Float, // Velocidad vertical (impulso/gravedad)
+    var vx: Float,
+    var vy: Float,
     val radius: Float,
     val color: Color
 )
@@ -48,176 +48,207 @@ data class PhysicsBubble(
 fun MenuScreen(
     onPlayClick: () -> Unit,
     onScoreClick: () -> Unit,
-    onAchievementsClick: () -> Unit, // Nuevo parámetro
+    onAchievementsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onExitClick: () -> Unit,
-    soundManager: SoundManager, // Nuevo parámetro
-    onSecretClick: () -> Unit   // Nuevo parámetro
+    soundManager: SoundManager,
+    onSecretClick: () -> Unit
 ) {
-    // --- ANIMACIONES TÍTULO ---
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
+    
+    // Animación de escala para el título
     val titleScale by infiniteTransition.animateFloat(
-        initialValue = 1f, targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        initialValue = 1f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
         label = "title_scale"
     )
 
-    // --- LÓGICA DE FÍSICA (FUENTE) ---
-    val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
-
-    val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
-
-    // Creamos burbujas iniciales
-    val physicsBubbles = remember {
-        List(18) { // 18 burbujas para no saturar
-            PhysicsBubble(
-                x = Random.nextFloat() * screenWidthPx,
-                // Inicializamos en posiciones aleatorias para que no se vea vacío al inicio
-                y = Random.nextFloat() * screenHeightPx,
-                vx = Random.nextFloat() * 2f - 1f, // Deriva lateral suave (-1 a 1)
-                vy = Random.nextFloat() * -15f - 5f, // Velocidad hacia arriba inicial variada
-                radius = with(density) { Random.nextInt(12, 22).dp.toPx() },
-                color = bubbleColors.random()
-            )
-        }
-    }
-
-    // Bucle de física (Gravedad y Rebote)
-    LaunchedEffect(Unit) {
-        val gravity = 0.4f // Fuerza de gravedad
-
-        while (isActive) {
-            withFrameNanos { _ ->
-                physicsBubbles.forEach { bubble ->
-                    // 1. Aplicar velocidad a posición
-                    bubble.x += bubble.vx
-                    bubble.y += bubble.vy
-
-                    // 2. Aplicar gravedad a la velocidad vertical
-                    bubble.vy += gravity
-
-                    // 3. REINICIO (Cuando cae por debajo de la pantalla)
-                    if (bubble.y > screenHeightPx + bubble.radius * 2) {
-                        // La lanzamos de nuevo desde ABAJO
-                        bubble.y = screenHeightPx + bubble.radius
-                        bubble.x = Random.nextFloat() * screenWidthPx
-                        // ¡IMPULSO HACIA ARRIBA! (Negativo es arriba)
-                        bubble.vy = -(Random.nextFloat() * 15f + 15f) // Entre -15 y -30 de fuerza
-                        bubble.vx = Random.nextFloat() * 4f - 2f // Un poco más de deriva lateral al salir
-                    }
-
-                    // Rebote lateral simple (opcional, para que no se vayan de lado)
-                    if (bubble.x < -bubble.radius) bubble.x = screenWidthPx + bubble.radius
-                    if (bubble.x > screenWidthPx + bubble.radius) bubble.x = -bubble.radius
-                }
-            }
-        }
-    }
-
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
             .systemBarsPadding()
-            // ✅ AGREGADO: Detector de toques para el logro secreto
-            .pointerInput(Unit) {
-                detectTapGestures { offset ->
-                    physicsBubbles.forEach { bubble ->
-                        val distance = hypot(offset.x - bubble.x, offset.y - bubble.y)
-                        if (distance <= bubble.radius * 1.5f) {
-                            soundManager.play(SoundType.POP)
-                            onSecretClick() // Desbloquear logro
+    ) {
+        val screenWidthPx = constraints.maxWidth.toFloat()
+        val screenHeightPx = constraints.maxHeight.toFloat()
+        val density = LocalDensity.current
+        
+        // Estado para forzar recomposición en cada frame de animación
+        var frameTick by remember { mutableStateOf(0L) }
 
-                            // Efecto visual: reiniciar burbuja
-                            bubble.y = screenHeightPx + bubble.radius
-                            bubble.vy = -(Random.nextFloat() * 20f + 10f)
+        val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
+
+        // Inicializar burbujas físicas
+        val physicsBubbles = remember(screenWidthPx, screenHeightPx) {
+            List(15) {
+                PhysicsBubble(
+                    x = Random.nextFloat() * screenWidthPx,
+                    y = Random.nextFloat() * screenHeightPx,
+                    vx = Random.nextFloat() * 2f - 1f,
+                    vy = Random.nextFloat() * -10f - 5f,
+                    radius = with(density) { Random.nextInt(15, 30).dp.toPx() },
+                    color = bubbleColors.random()
+                )
+            }
+        }
+
+        // Bucle de física
+        LaunchedEffect(screenWidthPx, screenHeightPx) {
+            val gravity = 0.25f
+            while (isActive) {
+                withFrameNanos { frameTime ->
+                    frameTick = frameTime // Actualizamos el tick para redibujar el Canvas
+                    physicsBubbles.forEach { bubble ->
+                        bubble.x += bubble.vx
+                        bubble.y += bubble.vy
+                        bubble.vy += gravity
+
+                        // Rebotar o reaparecer
+                        if (bubble.y > screenHeightPx + bubble.radius * 2) {
+                            bubble.y = -bubble.radius
+                            bubble.x = Random.nextFloat() * screenWidthPx
+                            bubble.vy = Random.nextFloat() * 2f
                         }
+                        if (bubble.x < -bubble.radius) bubble.x = screenWidthPx + bubble.radius
+                        if (bubble.x > screenWidthPx + bubble.radius) bubble.x = -bubble.radius
                     }
                 }
             }
-    ) {
-        // --- CAPA 1: BURBUJAS FÍSICAS (CANVAS) ---
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            physicsBubbles.forEach { bubble ->
-                val center = Offset(bubble.x, bubble.y)
-                val radius = bubble.radius
-
-                // DIBUJO ESTILO GEMA
-                val goldDark = Color(0xFFB8860B)
-                val goldLight = Color(0xFFFFD700)
-                val gemBase = bubble.color
-                val gemDark = bubble.color.copy(red = bubble.color.red * 0.5f, green = bubble.color.green * 0.5f, blue = bubble.color.blue * 0.5f)
-                val gemHighlight = Color.White.copy(alpha = 0.8f)
-
-                drawCircle(
-                    brush = Brush.sweepGradient(listOf(goldDark, goldLight, goldDark, goldLight, goldDark), center = center),
-                    radius = radius + 2f, center = center, style = Stroke(width = 3f)
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(listOf(gemBase, gemDark), center = center.copy(y = center.y - radius * 0.2f), radius = radius * 0.9f),
-                    radius = radius * 0.85f, center = center
-                )
-                drawOval(color = gemHighlight, topLeft = Offset(center.x - radius * 0.5f, center.y - radius * 0.7f), size = Size(radius * 0.6f, radius * 0.4f))
-            }
         }
 
-        // --- CAPA 2: DECORACIÓN ESTÁTICA FLOTANTE (Fondo lejano) ---
-        val floatOffset1 by infiniteTransition.animateFloat(
-            initialValue = 0f, targetValue = 20f,
-            animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing), RepeatMode.Reverse),
-            label = "f1"
-        )
-
-        VisualBubble(color = BubbleBlue, modifier = Modifier.align(Alignment.TopStart).offset(x = (-20).dp, y = 100.dp).graphicsLayer { translationY = floatOffset1 })
-        VisualBubble(color = BubbleRed, modifier = Modifier.align(Alignment.TopEnd).offset(x = 20.dp, y = 150.dp).graphicsLayer { translationY = -floatOffset1 })
-
-        // --- CAPA 3: UI DEL MENÚ ---
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        // Capa de Interacción y Dibujo
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(screenWidthPx, screenHeightPx) {
+                    detectTapGestures { offset ->
+                        physicsBubbles.forEach { bubble ->
+                            val dist = hypot(offset.x - bubble.x, offset.y - bubble.y)
+                            if (dist <= bubble.radius * 1.5f) {
+                                soundManager.play(SoundType.POP)
+                                onSecretClick()
+                                // Impulso hacia arriba al tocar
+                                bubble.vy = -20f
+                                bubble.vx = (Random.nextFloat() * 10f - 5f)
+                            }
+                        }
+                    }
+                }
         ) {
+            // Dibujamos las burbujas en el Canvas
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                // El uso de frameTick aquí suscribe al Canvas a los cambios de cada frame
+                @Suppress("UNUSED_VARIABLE")
+                val t = frameTick 
+                
+                physicsBubbles.forEach { bubble ->
+                    val center = Offset(bubble.x, bubble.y)
+                    val radius = bubble.radius
+
+                    // Efecto visual de burbuja (Estilo gema/esfera)
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(bubble.color.copy(alpha = 0.9f), bubble.color.copy(alpha = 0.4f)),
+                            center = center,
+                            radius = radius
+                        ),
+                        radius = radius,
+                        center = center
+                    )
+                    // Brillo superior
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.3f),
+                        radius = radius * 0.3f,
+                        center = Offset(center.x - radius * 0.3f, center.y - radius * 0.3f)
+                    )
+                    // Borde fino
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.5f),
+                        radius = radius,
+                        center = center,
+                        style = Stroke(width = 2f)
+                    )
+                }
+            }
+
+            // Contenido Principal (Título y Botones)
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "ORBBLAZE",
+                    style = TextStyle(
+                        fontSize = 58.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 4.sp,
+                        shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(4f, 4f), blurRadius = 10f)
+                    ),
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = titleScale
+                        scaleY = titleScale
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(60.dp))
+
+                MenuButton(text = "JUGAR", onClick = onPlayClick)
+                Spacer(modifier = Modifier.height(16.dp))
+                MenuButton(text = "PUNTUACIONES", onClick = onScoreClick)
+                Spacer(modifier = Modifier.height(16.dp))
+                MenuButton(text = "LOGROS", onClick = onAchievementsClick)
+                Spacer(modifier = Modifier.height(16.dp))
+                MenuButton(text = "CONFIGURACIÓN", onClick = onSettingsClick)
+                Spacer(modifier = Modifier.height(16.dp))
+                MenuButton(text = "SALIR", onClick = onExitClick, isSecondary = true)
+            }
+
             Text(
-                text = "ORBBLAZE",
-                style = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 4.sp, shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 8f)),
-                modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale }
+                text = "v1.0 - OrbBlaze",
+                color = Color.White.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp),
+                fontSize = 12.sp
             )
-
-            Spacer(modifier = Modifier.height(60.dp))
-
-            MenuButton(text = "JUGAR", onClick = onPlayClick)
-            Spacer(modifier = Modifier.height(16.dp))
-            MenuButton(text = "PUNTUACIONES", onClick = onScoreClick)
-            Spacer(modifier = Modifier.height(16.dp))
-            MenuButton(text = "LOGROS", onClick = onAchievementsClick)
-            Spacer(modifier = Modifier.height(16.dp))
-            MenuButton(text = "CONFIGURACIÓN", onClick = onSettingsClick)
-            Spacer(modifier = Modifier.height(16.dp))
-            MenuButton(text = "SALIR", onClick = onExitClick, isSecondary = true)
         }
-
-        Text(text = "v1.0", color = Color.White.copy(alpha = 0.3f), modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
     }
 }
 
 @Composable
-fun MenuButton(text: String, onClick: () -> Unit, isSecondary: Boolean = false) {
+fun MenuButton(
+    text: String, 
+    onClick: () -> Unit, 
+    isSecondary: Boolean = false
+) {
     val backgroundColor = if (isSecondary) Color.Transparent else Color.White
     val contentColor = if (isSecondary) Color.White else Color(0xFF1A237E)
     val borderColor = Color.White
 
     Box(
         modifier = Modifier
-            .width(260.dp).height(55.dp)
+            .width(260.dp)
+            .height(56.dp)
             .clip(RoundedCornerShape(50))
             .background(backgroundColor)
             .border(2.dp, borderColor, RoundedCornerShape(50))
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text(text = text, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = contentColor, letterSpacing = 1.5.sp))
+        Text(
+            text = text, 
+            style = TextStyle(
+                fontSize = 18.sp, 
+                fontWeight = FontWeight.Bold, 
+                color = contentColor, 
+                letterSpacing = 1.5.sp
+            )
+        )
     }
 }
