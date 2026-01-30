@@ -89,6 +89,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     var rowsDroppedCount by mutableStateOf(0)
         private set
 
+    var joyTick by mutableStateOf(0)
+        private set
+
     private val DROP_THRESHOLD = 6
     private val COLUMNS_COUNT = 10
 
@@ -193,7 +196,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun getSfxVolume(): Float = prefs.getFloat("sfx_volume", 1.0f)
 
-    // ✅ FUNCIONES FALTANTES AÑADIDAS
     fun clearSoundEvent() { soundEvent = null }
     fun clearVibrationEvent() { vibrationEvent = false }
 
@@ -339,11 +341,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val xOffsetEst = if ((estimatedRow + rowsDroppedCount) % 2 != 0) (m.bubbleDiameter / 2f) else 0f
         val estimatedCol = ((x - (m.boardStartPadding + xOffsetEst)) / m.horizontalSpacing).roundToInt().coerceAtLeast(0)
         val estimatedPos = GridPosition(estimatedRow, estimatedCol)
-        
         val candidates = getNeighborsAll(estimatedPos) + estimatedPos
-        val validEmptySpots = candidates.filter { pos -> pos.row >= 0 && pos.col >= 0 && pos.col < COLUMNS_COUNT && !bubblesByPosition.containsKey(pos) }
+        val validEmptySpots = candidates.filter { pos -> 
+            pos.row >= 0 && pos.col >= 0 && pos.col < COLUMNS_COUNT && !bubblesByPosition.containsKey(pos) 
+        }
         val finalPos = validEmptySpots.minByOrNull { pos ->
-            val (cx, cy) = getBubbleCenter(pos); val dx = x - cx; val dy = y - cy
+            val (cx, cy) = getBubbleCenter(pos)
+            val dx = x - cx
+            val dy = y - cy
             dx * dx + dy * dy
         } ?: estimatedPos
 
@@ -353,8 +358,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             BubbleColor.RAINBOW -> handleRainbowAt(finalPos, newGrid, x, y)
             else -> {
                 newGrid[finalPos] = Bubble(color = color)
-                val matches = matchFinder.findMatches(finalPos, newGrid)
-                if (matches.size >= 3) processMatches(matches, newGrid, x, y, color) else soundEvent = SoundType.STICK
+                val matches = matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount)
+                if (matches.size >= 3) {
+                    joyTick++
+                    processMatches(matches, newGrid, x, y, color) 
+                } else {
+                    soundEvent = SoundType.STICK
+                }
             }
         }
         bubblesByPosition = newGrid; activeProjectile = null
@@ -394,11 +404,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         var comboTriggered = false
         adjacentColors.forEach { neighborColor ->
             grid[pos] = Bubble(color = neighborColor)
-            val matches = matchFinder.findMatches(pos, grid)
+            val matches = matchFinder.findMatches(pos, grid, rowsDroppedCount)
             if (matches.size >= 3) { bubblesToPop.addAll(matches); comboTriggered = true }
         }
-        if (comboTriggered) { unlockAchievement("rainbow_power"); processMatches(bubblesToPop, grid, fx, fy, BubbleColor.RAINBOW) }
-        else { grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK }
+        if (comboTriggered) { 
+            joyTick++
+            unlockAchievement("rainbow_power"); processMatches(bubblesToPop, grid, fx, fy, BubbleColor.RAINBOW) 
+        } else { 
+            grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK 
+        }
     }
 
     private fun explodeAt(center: GridPosition, grid: MutableMap<GridPosition, Bubble>) {
@@ -413,7 +427,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         val points = destroyedCount * 50; score += points
         val (cx, cy) = getBubbleCenter(center); spawnFloatingText(cx, cy, "+$points")
-        updateHighScore(); removeFloatingBubbles(grid)
+        updateHighScore()
+        joyTick++
+        removeFloatingBubbles(grid)
     }
 
     private fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
@@ -432,7 +448,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val bubble = grid[pos]; grid.remove(pos)
                 val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, bubble?.color ?: BubbleColor.BLUE); droppedPoints += 20
             }
-            if (droppedPoints > 0) { score += droppedPoints; updateHighScore() }
+            if (droppedPoints > 0) { 
+                score += droppedPoints
+                updateHighScore() 
+            }
         }
     }
 
@@ -455,9 +474,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
-        val m = metrics ?: return false; val collideDist = m.bubbleDiameter * 0.70f
+        val m = metrics ?: return false
+        // ✅ AJUSTADO A 0.50f PARA MÁXIMA PERMISIVIDAD
+        val collideDist = m.bubbleDiameter * 0.60f
         return bubblesByPosition.keys.any { pos -> 
-            val (cx, cy) = getBubbleCenter(pos); distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist 
+            val (cx, cy) = getBubbleCenter(pos)
+            distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist
         }
     }
     
