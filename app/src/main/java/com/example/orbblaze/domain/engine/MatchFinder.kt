@@ -6,7 +6,8 @@ import com.example.orbblaze.domain.model.Bubble
 class MatchFinder {
     fun findMatches(
         startPos: GridPosition,
-        grid: Map<GridPosition, Bubble>
+        grid: Map<GridPosition, Bubble>,
+        rowOffset: Int = 0 // ✅ Ahora recibe el desplazamiento global
     ): Set<GridPosition> {
         val targetColor = grid[startPos]?.color ?: return emptySet()
         val connected = mutableSetOf<GridPosition>()
@@ -18,8 +19,7 @@ class MatchFinder {
 
             if (grid[current]?.color == targetColor) {
                 connected.add(current)
-                // Obtenemos vecinos de la grilla hexagonal
-                getNeighbors(current).forEach { neighbor ->
+                getNeighbors(current, rowOffset).forEach { neighbor ->
                     if (grid.containsKey(neighbor)) queue.add(neighbor)
                 }
             }
@@ -27,11 +27,11 @@ class MatchFinder {
         return if (connected.size >= 3) connected else emptySet()
     }
 
-    private fun getNeighbors(pos: GridPosition): List<GridPosition> {
+    fun getNeighbors(pos: GridPosition, rowOffset: Int): List<GridPosition> {
         val r = pos.row
         val c = pos.col
-        // Las reglas de vecinos cambian si la fila es par o impar (Hexagonal)
-        return if (r % 2 == 0) {
+        // ✅ La lógica hexagonal debe considerar el desplazamiento total (fila + offset)
+        return if ((r + rowOffset) % 2 == 0) {
             listOf(
                 GridPosition(r, c-1), GridPosition(r, c+1),
                 GridPosition(r-1, c-1), GridPosition(r-1, c),
