@@ -2,12 +2,16 @@ package com.example.orbblaze.ui.score
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -17,7 +21,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.orbblaze.ui.menu.MenuButton
 import com.example.orbblaze.ui.theme.BgBottom
 import com.example.orbblaze.ui.theme.BgTop
 
@@ -52,7 +55,6 @@ fun HighScoreScreen(
 
             Spacer(modifier = Modifier.height(60.dp))
 
-            // Círculo o diseño destacado para el puntaje
             Text(
                 text = "$highScore",
                 style = TextStyle(
@@ -70,7 +72,25 @@ fun HighScoreScreen(
 
             Spacer(modifier = Modifier.height(80.dp))
 
-            MenuButton(text = "VOLVER", onClick = onBackClick, isSecondary = true)
+            // Botón VOLVER adaptado (Copia del estilo de MenuScreen)
+            Box(
+                modifier = Modifier
+                    .width(200.dp)
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(50))
+                    .border(2.dp, Color.White, RoundedCornerShape(50))
+                    .clickable { onBackClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "VOLVER", 
+                    style = TextStyle(
+                        fontSize = 16.sp, 
+                        fontWeight = FontWeight.Bold, 
+                        color = Color.White
+                    )
+                )
+            }
         }
     }
 }
