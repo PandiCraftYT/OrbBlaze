@@ -3,12 +3,12 @@ package com.example.orbblaze.ui.game
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.PlaybackParams
 import android.media.SoundPool
+import android.os.Build
 import com.example.orbblaze.R
 
-enum class SoundType {
-    SHOOT, POP, EXPLODE, SWAP, WIN, LOSE, STICK
-}
+
 
 class SoundManager(val context: Context) {
     private val soundPool: SoundPool
@@ -60,6 +60,20 @@ class SoundManager(val context: Context) {
         }
     }
 
+    fun setMusicSpeed(speed: Float) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                mediaPlayer?.let {
+                    if (it.isPlaying) {
+                        it.playbackParams = PlaybackParams().apply { this.speed = speed }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun setMusicVol(vol: Float) {
         musicVolume = vol
         if (!isMusicMuted) {
@@ -84,6 +98,7 @@ class SoundManager(val context: Context) {
         musicVolume = prefs.getFloat("music_volume", 0.5f)
         isMusicMuted = prefs.getBoolean("music_muted", false)
         updateMusicVolume()
+        setMusicSpeed(1.0f)
     }
 
     fun play(type: SoundType) {
@@ -121,7 +136,6 @@ class SoundManager(val context: Context) {
         }
     }
 
-    // ✅ CORRECCIÓN CLAVE: Aseguramos que todo se detenga y limpie
     fun release() {
         try {
             if (mediaPlayer?.isPlaying == true) {

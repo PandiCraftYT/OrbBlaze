@@ -1,5 +1,6 @@
 package com.example.orbblaze
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
             OrbBlazeTheme {
                 val context = LocalContext.current
                 val globalSoundManager = remember { SoundManager(context) }
+                val adsManager = remember { AdsManager(context) } // ✅ AdsManager instanciado
                 val lifecycleOwner = LocalLifecycleOwner.current
 
                 DisposableEffect(lifecycleOwner) {
@@ -41,20 +43,21 @@ class MainActivity : ComponentActivity() {
                     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
 
-                AppNavigation(globalSoundManager)
+                AppNavigation(globalSoundManager, adsManager)
             }
         }
     }
 }
 
 @Composable
-fun AppNavigation(soundManager: SoundManager) {
+fun AppNavigation(soundManager: SoundManager, adsManager: AdsManager) {
     var currentScreen by remember { mutableStateOf("menu") }
+    val context = LocalContext.current
+    val activity = context as? Activity
     
-    // ViewModels separados para cada modo
     val classicVm: ClassicViewModel = viewModel()
     val timeAttackVm: TimeAttackViewModel = viewModel()
-    val sharedViewModel: GameViewModel = viewModel() // Para logros globales
+    val sharedViewModel: GameViewModel = viewModel()
 
     LaunchedEffect(currentScreen) {
         soundManager.refreshSettings()
@@ -85,15 +88,21 @@ fun AppNavigation(soundManager: SoundManager) {
                 viewModel = classicVm,
                 soundManager = soundManager,
                 onMenuClick = { currentScreen = "menu" },
-                onShopClick = { currentScreen = "shop" }
+                onShopClick = { currentScreen = "shop" },
+                onShowAd = { onReward -> 
+                    activity?.let { adsManager.showRewardedAd(it, onReward) }
+                }
             )
         }
-        "time_attack" -> { // ✅ CORREGIDO: Ahora ya no sale pantalla blanca
+        "time_attack" -> {
             LevelScreen(
                 viewModel = timeAttackVm,
                 soundManager = soundManager,
                 onMenuClick = { currentScreen = "menu" },
-                onShopClick = { currentScreen = "shop" }
+                onShopClick = { currentScreen = "shop" },
+                onShowAd = { onReward -> 
+                    activity?.let { adsManager.showRewardedAd(it, onReward) }
+                }
             )
         }
         "shop" -> {

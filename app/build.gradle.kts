@@ -6,9 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.orbblaze"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.orbblaze"
@@ -53,6 +51,10 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.compose.ui.geometry)
+    
+    // ✅ Google Mobile Ads SDK
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

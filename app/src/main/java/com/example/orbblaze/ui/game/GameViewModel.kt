@@ -22,12 +22,15 @@ import kotlinx.coroutines.launch
 import kotlin.math.*
 
 // --- CLASES DE DATOS Y ENUMS ---
-data class Projectile(val x: Float, val y: Float, val color: BubbleColor, val velocityX: Float, val velocityY: Float)
+data class Projectile(val x: Float, val y: Float, val color: BubbleColor, val velocityX: Float, val velocityY: Float, val isFireball: Boolean = false)
 data class GameParticle(val id: Long, val x: Float, val y: Float, val vx: Float, val vy: Float, val color: BubbleColor, val size: Float, val life: Float)
 data class FloatingText(val id: Long, val x: Float, val y: Float, val text: String, val life: Float)
 data class BoardMetricsPx(val bubbleDiameter: Float, val horizontalSpacing: Float, val verticalSpacing: Float, val boardTopPadding: Float, val boardStartPadding: Float, val ceilingY: Float)
+
 enum class GameState { IDLE, PLAYING, WON, LOST }
 enum class GameMode { CLASSIC, TIME_ATTACK }
+// Asumo que SoundType está definido en otro lugar o se necesita aquí para que compile el soundEvent
+enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP }
 
 open class GameViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -61,17 +64,20 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     var timeLeft by mutableIntStateOf(60)
         protected set
-    
+
     protected var timerJob: Job? = null
 
     var shotsFiredCount by mutableIntStateOf(0)
         protected set
-    
+
     var rowsDroppedCount by mutableIntStateOf(0)
         protected set
 
     var joyTick by mutableIntStateOf(0)
         protected set
+
+    var currentRewardDay by mutableIntStateOf(1)
+        private set
 
     protected val dropThreshold = 6
     protected val columnsCount = 10
@@ -90,6 +96,10 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var nextBubbleColor by mutableStateOf(BubbleColor.entries.random())
         protected set
     var previewBubbleColor by mutableStateOf(BubbleColor.entries.random())
+        protected set
+
+    // Nuevo estado para la Bola de Fuego
+    var isFireballQueued by mutableStateOf(false)
         protected set
 
     val currentBubbleColor: BubbleColor get() = nextBubbleColor
@@ -111,75 +121,75 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         highScore = prefs.getInt("high_score", 0)
         coins = prefs.getInt("coins", 0)
+        currentRewardDay = prefs.getInt("current_reward_day", 1)
+        checkRewardDayReset()
         setupAchievements()
         loadAchievements()
         startParticleLoop()
     }
 
-    private fun setupAchievements() {
-        achievements.addAll(listOf(
-            Achievement("first_blood", "¡Primeros Pasos!", "Consigue tus primeros 100 puntos"),
-            Achievement("combo_master", "¡Combo Brutal!", "Explota 6 o más burbujas a la vez"),
-            Achievement("rainbow_power", "Poder Prismático", "Usa una burbuja Arcoíris con éxito"),
-            Achievement("bomb_squad", "¡Boom!", "Detona una bomba"),
-            Achievement("score_1000", "Leyenda", "Alcanza los 1000 puntos en una partida"),
-            Achievement("secret_popper", "¡Curioso!", "Explotaste una burbuja del menú principal", isHidden = true)
-        ))
-    }
-
-    private fun loadAchievements() {
-        achievements.forEach { achievement ->
-            achievement.isUnlocked = prefs.getBoolean("ach_${achievement.id}", false)
+    private fun checkRewardDayReset() {
+        val lastClaim = prefs.getLong("last_reward_claim", 0L)
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastClaim > 48 * 60 * 60 * 1000L && lastClaim != 0L) {
+            currentRewardDay = 1; prefs.edit().putInt("current_reward_day", 1).apply()
         }
     }
 
+    fun canClaimReward(): Boolean {
+        val lastClaim = prefs.getLong("last_reward_claim", 0L)
+        return (System.currentTimeMillis() - lastClaim) >= 24 * 60 * 60 * 1000L
+    }
+
+    fun claimDailyReward() {
+        if (canClaimReward()) {
+            val rewards = listOf(50, 100, 150, 200, 300, 500, 1000)
+            addCoins(rewards[(currentRewardDay - 1) % 7])
+            prefs.edit().putLong("last_reward_claim", System.currentTimeMillis()).apply()
+            currentRewardDay = if (currentRewardDay >= 7) 1 else currentRewardDay + 1
+            prefs.edit().putInt("current_reward_day", currentRewardDay).apply()
+        }
+    }
+
+    // CORRECCIÓN: Se cambió de 'private fun' a 'fun' para que sea accesible desde LevelScreen
     fun addCoins(amount: Int) {
         coins += amount
         prefs.edit().putInt("coins", coins).apply()
     }
 
-    open fun changeGameMode(mode: GameMode) {
-        this.gameMode = mode
+    fun spendCoins(amount: Int): Boolean {
+        if (coins >= amount) {
+            coins -= amount; prefs.edit().putInt("coins", coins).apply(); return true
+        }
+        return false
     }
 
-    open fun startGame() {
-        gameState = GameState.PLAYING
+    // CORRECCIÓN: Ahora retorna Boolean para satisfacer el condicional en LevelScreen
+    fun buyFireball(): Boolean {
+        // Costo ejemplo: 150 monedas.
+        if (!isFireballQueued && spendCoins(150)) {
+            isFireballQueued = true
+            soundEvent = SoundType.SWAP // Feedback sonoro
+            return true
+        }
+        return false
     }
+
+    open fun changeGameMode(mode: GameMode) { this.gameMode = mode }
+    open fun startGame() { gameState = GameState.PLAYING; startTimer() }
 
     open fun loadLevel(initialRows: Int = 6) {
         engine.setupInitialLevel(rows = initialRows, cols = columnsCount)
-        bubblesByPosition = engine.gridState
-        nextBubbleColor = generateNewBubbleColor()
-        previewBubbleColor = generateNewBubbleColor()
-        score = 0
-        gameState = GameState.IDLE
-        isPaused = false
-        shotsFiredCount = 0
-        rowsDroppedCount = 0
-        timeLeft = 60
-        particles.clear()
-        floatingTexts.clear()
-        timerJob?.cancel()
+        bubblesByPosition = engine.gridState; nextBubbleColor = generateNewBubbleColor()
+        previewBubbleColor = generateNewBubbleColor(); score = 0; gameState = GameState.IDLE
+        isPaused = false; shotsFiredCount = 0; rowsDroppedCount = 0; timeLeft = 60
+        isFireballQueued = false // Resetear powerup al cargar nivel
+        particles.clear(); floatingTexts.clear(); timerJob?.cancel()
     }
 
-    fun restartGame() {
-        loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6)
-    }
-
-    fun swapBubbles() {
-        if (activeProjectile == null && gameState == GameState.PLAYING && !isPaused) {
-            val temp = nextBubbleColor
-            nextBubbleColor = previewBubbleColor
-            previewBubbleColor = temp
-            soundEvent = SoundType.SWAP
-            if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true
-        }
-    }
-
-    fun setBoardMetrics(metrics: BoardMetricsPx) {
-        this.metrics = metrics
-    }
-
+    fun restartGame() { loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6) }
+    fun swapBubbles() { if (activeProjectile == null && gameState == GameState.PLAYING && !isPaused) { val temp = nextBubbleColor; nextBubbleColor = previewBubbleColor; previewBubbleColor = temp; soundEvent = SoundType.SWAP; if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true } }
+    fun setBoardMetrics(metrics: BoardMetricsPx) { this.metrics = metrics }
     fun togglePause() { if (gameState == GameState.PLAYING) isPaused = !isPaused }
     fun setSfxVolume(volume: Float) { prefs.edit().putFloat("sfx_volume", volume).apply() }
     fun getSfxVolume(): Float = prefs.getFloat("sfx_volume", 1.0f)
@@ -189,21 +199,33 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateAngle(touchX: Float, touchY: Float, screenWidth: Float, screenHeight: Float) {
         if (gameState != GameState.PLAYING || isPaused) return
         val centerX = screenWidth / 2f
-        val dx = touchX - centerX
-        val dy = (screenHeight * 0.82f) - touchY
+        val dx = touchX - centerX; val dy = (screenHeight * 0.82f) - touchY
         shooterAngle = Math.toDegrees(atan2(dx, dy).toDouble()).toFloat().coerceIn(-80f, 80f)
     }
 
-    fun onShoot(screenWidth: Float, screenHeight: Float, shooterYPx: Float) {
+    open fun onShoot(screenWidth: Float, screenHeight: Float, shooterYPx: Float) {
         if (gameState != GameState.PLAYING || isPaused || activeProjectile != null) return
         shotTick++
         soundEvent = SoundType.SHOOT
         if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true
         val angleRad = Math.toRadians(shooterAngle.toDouble())
         val speed = 35f
-        activeProjectile = Projectile(screenWidth / 2f, shooterYPx, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat())
-        nextBubbleColor = previewBubbleColor
-        previewBubbleColor = generateNewBubbleColor()
+
+        // CORRECCIÓN: Usar isFireballQueued para definir el tipo de proyectil
+        val isFire = isFireballQueued
+        activeProjectile = Projectile(
+            screenWidth / 2f,
+            shooterYPx,
+            nextBubbleColor,
+            (sin(angleRad) * speed).toFloat(),
+            (-cos(angleRad) * speed).toFloat(),
+            isFireball = isFire
+        )
+
+        // Consumir el power-up si se usó
+        if (isFire) isFireballQueued = false
+
+        nextBubbleColor = previewBubbleColor; previewBubbleColor = generateNewBubbleColor()
         startPhysicsLoop(screenWidth)
     }
 
@@ -219,16 +241,12 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     protected open fun updateHighScore() {
         val key = if (gameMode == GameMode.TIME_ATTACK) "high_score_time" else "high_score"
         val currentHigh = prefs.getInt(key, 0)
-        if (score > currentHigh) {
-            prefs.edit().putInt(key, score).apply()
-            if (gameMode == GameMode.CLASSIC) highScore = score
-            addCoins(10)
-        }
+        if (score > currentHigh) { prefs.edit().putInt(key, score).apply(); if (gameMode == GameMode.CLASSIC) highScore = score; addCoins(10) }
         if (score >= 100) unlockAchievement("first_blood")
         if (score >= 1000) unlockAchievement("score_1000")
     }
 
-    private fun startPhysicsLoop(screenWidth: Float) {
+    protected fun startPhysicsLoop(screenWidth: Float) {
         viewModelScope.launch {
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
@@ -237,11 +255,29 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                 val nextVx = if (p.x + p.velocityX - bubbleRadius <= 0f || p.x + p.velocityX + bubbleRadius >= screenWidth) p.velocityX * -1f else p.velocityX
                 val nextX = p.x + nextVx
                 val nextY = p.y + p.velocityY
-                if (nextY - bubbleRadius <= m.ceilingY || checkSweepCollision(p.x, p.y, nextX, nextY)) { snapToGrid(nextX, nextY, p.color); break }
+
+                if (p.isFireball) {
+                    checkFireballDestruction(nextX, nextY)
+                    if (nextY < 0) { activeProjectile = null; break }
+                } else {
+                    if (nextY - bubbleRadius <= m.ceilingY || checkSweepCollision(p.x, p.y, nextX, nextY)) { snapToGrid(nextX, nextY, p.color); break }
+                }
                 activeProjectile = p.copy(x = nextX, y = nextY, velocityX = nextVx)
                 delay(16)
             }
         }
+    }
+
+    private fun checkFireballDestruction(x: Float, y: Float) {
+        val newGrid = bubblesByPosition.toMutableMap()
+        var destroyed = false
+        newGrid.forEach { (pos, _) ->
+            val (bx, by) = getBubbleCenter(pos)
+            if (hypot(x - bx, y - by) < bubbleRadius * 1.5f) {
+                newGrid.remove(pos); val (cx, cy) = getBubbleCenter(pos); spawnExplosion(cx, cy, BubbleColor.entries.random()); score += 10; destroyed = true
+            }
+        }
+        if (destroyed) { bubblesByPosition = newGrid; soundEvent = SoundType.POP; removeFloatingBubbles(newGrid) }
     }
 
     private fun startParticleLoop() {
@@ -267,13 +303,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                 if (!isPaused) {
                     timeLeft--
                     if (timeLeft <= 0) {
-                        if (gameMode == GameMode.TIME_ATTACK) {
-                            addRows(3)
-                            timeLeft = 60
-                        } else {
-                            gameState = GameState.LOST
-                            soundEvent = SoundType.LOSE
-                        }
+                        if (gameMode == GameMode.TIME_ATTACK) { addRows(3); timeLeft = 60 }
+                        else { gameState = GameState.LOST; soundEvent = SoundType.LOSE }
                     }
                 }
             }
@@ -300,8 +331,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         else if (color == BubbleColor.RAINBOW) handleRainbowAt(finalPos, newGrid, x, y)
         else {
             newGrid[finalPos] = Bubble(color = color)
-            val matches = matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount)
-            if (matches.size >= 3) { joyTick++; processMatches(matches, newGrid, x, y, color) } else soundEvent = SoundType.STICK
+            if (matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount).size >= 3) { joyTick++; processMatches(matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount), newGrid, x, y, color) } else soundEvent = SoundType.STICK
         }
         bubblesByPosition = newGrid; activeProjectile = null; onPostSnap()
     }
@@ -321,10 +351,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         val adjacentColors = getNeighborsAll(pos).mapNotNull { grid[it]?.color }.distinct().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
         if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = generateNewBubbleColor()); return }
         val toPop = mutableSetOf<GridPosition>(); toPop.add(pos)
-        adjacentColors.forEach { c -> 
-            grid[pos] = Bubble(color = c)
-            toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount)) 
-        }
+        adjacentColors.forEach { c -> grid[pos] = Bubble(color = c); toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount)) }
         if (toPop.size >= 3) { joyTick++; unlockAchievement("rainbow_power"); processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW) }
         else { grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK }
     }
@@ -337,7 +364,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         score += points; spawnFloatingText(cx, cy, "+$points"); updateHighScore(); joyTick++; removeFloatingBubbles(grid)
     }
 
-    private fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
+    protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         val visited = mutableSetOf<GridPosition>(); val queue = ArrayDeque<GridPosition>()
         val ceiling = grid.keys.filter { it.row == 0 }; queue.addAll(ceiling); visited.addAll(ceiling)
         while (queue.isNotEmpty()) { val current = queue.removeFirst(); getNeighborsAll(current).filter { grid.containsKey(it) && it !in visited }.forEach { visited.add(it); queue.add(it) } }
@@ -392,4 +419,24 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             viewModelScope.launch { activeAchievement = achievement; soundEvent = SoundType.WIN; delay(4000); activeAchievement = null }
         }
     }
+
+    private fun setupAchievements() {
+        achievements.addAll(listOf(
+            Achievement("first_blood", "¡Primeros Pasos!", "Consigue tus primeros 100 puntos"),
+            Achievement("combo_master", "¡Combo Brutal!", "Explota 6 o más burbujas a la vez"),
+            Achievement("rainbow_power", "Poder Prismático", "Usa una burbuja Arcoíris con éxito"),
+            Achievement("bomb_squad", "¡Boom!", "Detona una bomba"),
+            Achievement("score_1000", "Leyenda", "Alcanza los 1000 puntos en una partida"),
+            Achievement("secret_popper", "¡Curioso!", "Explotaste una burbuja del menú principal", isHidden = true)
+        ))
+    }
+
+    private fun loadAchievements() {
+        achievements.forEach { achievement ->
+            if (prefs.getBoolean("ach_${achievement.id}", false)) {
+                achievement.isUnlocked = true
+            }
+        }
+    }
 }
+object Random { fun nextDouble(min: Double, max: Double): Double = min + (Math.random() * (max - min)) }
