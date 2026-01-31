@@ -29,7 +29,6 @@ data class BoardMetricsPx(val bubbleDiameter: Float, val horizontalSpacing: Floa
 
 enum class GameState { IDLE, PLAYING, WON, LOST }
 enum class GameMode { CLASSIC, TIME_ATTACK }
-// Asumo que SoundType está definido en otro lugar o se necesita aquí para que compile el soundEvent
 enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP }
 
 open class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -62,7 +61,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var coins by mutableIntStateOf(0)
         protected set
 
-    var timeLeft by mutableIntStateOf(60)
+    var timeLeft by mutableIntStateOf(90)
         protected set
 
     protected var timerJob: Job? = null
@@ -79,7 +78,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var currentRewardDay by mutableIntStateOf(1)
         private set
 
-    protected val dropThreshold = 6
+    protected val dropThreshold = 8
     protected val columnsCount = 10
 
     var soundEvent by mutableStateOf<SoundType?>(null)
@@ -93,12 +92,12 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var activeAchievement by mutableStateOf<Achievement?>(null)
         protected set
 
-    var nextBubbleColor by mutableStateOf(BubbleColor.entries.random())
+    // Usamos el generador de proyectiles para el cañón
+    var nextBubbleColor by mutableStateOf(generateProjectileColor())
         protected set
-    var previewBubbleColor by mutableStateOf(BubbleColor.entries.random())
+    var previewBubbleColor by mutableStateOf(generateProjectileColor())
         protected set
 
-    // Nuevo estado para la Bola de Fuego
     var isFireballQueued by mutableStateOf(false)
         protected set
 
@@ -151,7 +150,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // CORRECCIÓN: Se cambió de 'private fun' a 'fun' para que sea accesible desde LevelScreen
     fun addCoins(amount: Int) {
         coins += amount
         prefs.edit().putInt("coins", coins).apply()
@@ -164,12 +162,10 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         return false
     }
 
-    // CORRECCIÓN: Ahora retorna Boolean para satisfacer el condicional en LevelScreen
     fun buyFireball(): Boolean {
-        // Costo ejemplo: 150 monedas.
-        if (!isFireballQueued && spendCoins(150)) {
+        if (!isFireballQueued && spendCoins(1)) {
             isFireballQueued = true
-            soundEvent = SoundType.SWAP // Feedback sonoro
+            soundEvent = SoundType.SWAP
             return true
         }
         return false
@@ -180,10 +176,20 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     open fun loadLevel(initialRows: Int = 6) {
         engine.setupInitialLevel(rows = initialRows, cols = columnsCount)
-        bubblesByPosition = engine.gridState; nextBubbleColor = generateNewBubbleColor()
-        previewBubbleColor = generateNewBubbleColor(); score = 0; gameState = GameState.IDLE
-        isPaused = false; shotsFiredCount = 0; rowsDroppedCount = 0; timeLeft = 60
-        isFireballQueued = false // Resetear powerup al cargar nivel
+        // REGENERACIÓN DE TABLERO: Nos aseguramos de limpiar especiales si hubieran quedado
+        val cleanGrid = engine.gridState.toMutableMap()
+        cleanGrid.forEach { (pos, bubble) ->
+            if (bubble.color == BubbleColor.RAINBOW || bubble.color == BubbleColor.BOMB) {
+                cleanGrid[pos] = bubble.copy(color = generateBoardBubbleColor())
+            }
+        }
+        bubblesByPosition = cleanGrid
+
+        nextBubbleColor = generateProjectileColor()
+        previewBubbleColor = generateProjectileColor()
+        score = 0; gameState = GameState.IDLE
+        isPaused = false; shotsFiredCount = 0; rowsDroppedCount = 0; timeLeft = 90
+        isFireballQueued = false
         particles.clear(); floatingTexts.clear(); timerJob?.cancel()
     }
 
@@ -203,37 +209,43 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         shooterAngle = Math.toDegrees(atan2(dx, dy).toDouble()).toFloat().coerceIn(-80f, 80f)
     }
 
-    open fun onShoot(screenWidth: Float, screenHeight: Float, shooterYPx: Float) {
+    open fun onShoot(spawnX: Float, spawnY: Float) {
         if (gameState != GameState.PLAYING || isPaused || activeProjectile != null) return
         shotTick++
         soundEvent = SoundType.SHOOT
         if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true
         val angleRad = Math.toRadians(shooterAngle.toDouble())
-        val speed = 35f
+        val speed = 40f
 
-        // CORRECCIÓN: Usar isFireballQueued para definir el tipo de proyectil
         val isFire = isFireballQueued
         activeProjectile = Projectile(
-            screenWidth / 2f,
-            shooterYPx,
-            nextBubbleColor,
-            (sin(angleRad) * speed).toFloat(),
-            (-cos(angleRad) * speed).toFloat(),
+            x = spawnX,
+            y = spawnY,
+            color = nextBubbleColor,
+            velocityX = (sin(angleRad) * speed).toFloat(),
+            velocityY = (-cos(angleRad) * speed).toFloat(),
             isFireball = isFire
         )
 
-        // Consumir el power-up si se usó
         if (isFire) isFireballQueued = false
 
-        nextBubbleColor = previewBubbleColor; previewBubbleColor = generateNewBubbleColor()
-        startPhysicsLoop(screenWidth)
+        nextBubbleColor = previewBubbleColor; previewBubbleColor = generateProjectileColor()
+        startPhysicsLoop(metrics?.horizontalSpacing?.times(columnsCount) ?: 1080f)
     }
 
-    protected fun generateNewBubbleColor(): BubbleColor {
+    // --- LÓGICA DE COLORES SEPARADA ---
+
+    // Solo colores básicos para el tablero (NO Rainbow, NO Bombas)
+    protected fun generateBoardBubbleColor(): BubbleColor {
+        return BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
+    }
+
+    // Colores especiales permitidos solo en el cañón
+    protected fun generateProjectileColor(): BubbleColor {
         val rand = Math.random()
         return when {
-            rand < 0.01 -> BubbleColor.RAINBOW
-            rand < 0.04 -> BubbleColor.BOMB
+            rand < 0.025 -> BubbleColor.RAINBOW
+            rand < 0.08 -> BubbleColor.BOMB
             else -> BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
         }
     }
@@ -246,38 +258,108 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         if (score >= 1000) unlockAchievement("score_1000")
     }
 
+    // --- FÍSICAS DE ALTA PRECISIÓN (SUB-STEPPING) ---
     protected fun startPhysicsLoop(screenWidth: Float) {
         viewModelScope.launch {
+            // Pasos de física por frame visual. Más alto = más precisión, menos "túneling"
+            val physicsSteps = 10
+
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
                 val m = metrics ?: break
-                val p = activeProjectile ?: break
-                val nextVx = if (p.x + p.velocityX - bubbleRadius <= 0f || p.x + p.velocityX + bubbleRadius >= screenWidth) p.velocityX * -1f else p.velocityX
-                val nextX = p.x + nextVx
-                val nextY = p.y + p.velocityY
 
-                if (p.isFireball) {
-                    checkFireballDestruction(nextX, nextY)
-                    if (nextY < 0) { activeProjectile = null; break }
-                } else {
-                    if (nextY - bubbleRadius <= m.ceilingY || checkSweepCollision(p.x, p.y, nextX, nextY)) { snapToGrid(nextX, nextY, p.color); break }
+                var currentP = activeProjectile ?: break
+                var collisionDetected = false
+
+                // Sub-stepping loop
+                repeat(physicsSteps) {
+                    if (collisionDetected) return@repeat
+
+                    val stepVx = currentP.velocityX / physicsSteps.toFloat()
+                    val stepVy = currentP.velocityY / physicsSteps.toFloat()
+
+                    var nextX = currentP.x + stepVx
+                    var nextY = currentP.y + stepVy
+                    var nextVx = currentP.velocityX
+
+                    // 1. Rebote en paredes con corrección de posición exacta
+                    if (nextX - bubbleRadius <= 0f) {
+                        nextX = bubbleRadius // Clamp exacto
+                        nextVx = abs(currentP.velocityX) // Forzar velocidad positiva
+                    } else if (nextX + bubbleRadius >= screenWidth) {
+                        nextX = screenWidth - bubbleRadius // Clamp exacto
+                        nextVx = -abs(currentP.velocityX) // Forzar velocidad negativa
+                    }
+
+                    // 2. Comprobar colisiones
+                    if (currentP.isFireball) {
+                        // Lógica METEORITO:
+                        // Destruimos lo que toquemos, pero NO nos detenemos.
+                        checkFireballDestruction(nextX, nextY)
+
+                        // Solo "muere" cuando sale completamente de la pantalla por arriba
+                        if (nextY < -bubbleRadius * 2) {
+                            activeProjectile = null
+                            // Rompemos el loop manual porque activeProjectile ya es null
+                            return@repeat
+                        }
+                    } else {
+                        // Colisión Techo
+                        if (nextY - bubbleRadius <= m.ceilingY) {
+                            snapToGrid(nextX, nextY, currentP.color)
+                            collisionDetected = true
+                        }
+                        // Colisión Burbujas (Raycast circular simplificado)
+                        else if (checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
+                            snapToGrid(nextX, nextY, currentP.color)
+                            collisionDetected = true
+                        }
+                    }
+
+                    if (!collisionDetected && activeProjectile != null) {
+                        currentP = currentP.copy(x = nextX, y = nextY, velocityX = nextVx)
+                    }
                 }
-                activeProjectile = p.copy(x = nextX, y = nextY, velocityX = nextVx)
-                delay(16)
+
+                if (!collisionDetected && activeProjectile != null) {
+                    activeProjectile = currentP
+                }
+                // Nota: Si activeProjectile se volvió null dentro del loop (Fireball salió), el while terminará solo.
+
+                delay(16) // ~60 FPS visuales
             }
         }
     }
 
     private fun checkFireballDestruction(x: Float, y: Float) {
         val newGrid = bubblesByPosition.toMutableMap()
-        var destroyed = false
+        val toRemove = mutableListOf<GridPosition>() // Lista temporal para borrar después
+        var hitAny = false
+
+        // 1. Detectar impactos
         newGrid.forEach { (pos, _) ->
             val (bx, by) = getBubbleCenter(pos)
-            if (hypot(x - bx, y - by) < bubbleRadius * 1.5f) {
-                newGrid.remove(pos); val (cx, cy) = getBubbleCenter(pos); spawnExplosion(cx, cy, BubbleColor.entries.random()); score += 10; destroyed = true
+            // Radio un poco más grande para asegurar que limpie bien el camino
+            if (hypot(x - bx, y - by) < bubbleRadius * 1.8f) {
+                toRemove.add(pos)
             }
         }
-        if (destroyed) { bubblesByPosition = newGrid; soundEvent = SoundType.POP; removeFloatingBubbles(newGrid) }
+
+        // 2. Ejecutar destrucción
+        if (toRemove.isNotEmpty()) {
+            hitAny = true
+            soundEvent = SoundType.POP // Sonido de destrucción
+            score += (toRemove.size * 10)
+
+            toRemove.forEach { pos ->
+                newGrid.remove(pos)
+                val (cx, cy) = getBubbleCenter(pos)
+                spawnExplosion(cx, cy, BubbleColor.entries.random())
+            }
+
+            bubblesByPosition = newGrid
+            removeFloatingBubbles(newGrid)
+        }
     }
 
     private fun startParticleLoop() {
@@ -296,15 +378,14 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected open fun startTimer() {
         timerJob?.cancel()
-        timeLeft = 60
+        timeLeft = 90
         timerJob = viewModelScope.launch {
             while (gameState == GameState.PLAYING) {
                 delay(1000)
-                if (!isPaused) {
+                if (!isPaused && gameMode == GameMode.TIME_ATTACK) {
                     timeLeft--
                     if (timeLeft <= 0) {
-                        if (gameMode == GameMode.TIME_ATTACK) { addRows(3); timeLeft = 60 }
-                        else { gameState = GameState.LOST; soundEvent = SoundType.LOSE }
+                        addRows(3); timeLeft = 90
                     }
                 }
             }
@@ -315,17 +396,28 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         rowsDroppedCount += count
         val newGrid = mutableMapOf<GridPosition, Bubble>()
         bubblesByPosition.forEach { (pos, bubble) -> newGrid[GridPosition(pos.row + count, pos.col)] = bubble }
-        for (r in 0 until count) { for (c in 0 until columnsCount) { newGrid[GridPosition(r, c)] = Bubble(color = generateNewBubbleColor()) } }
+        // NUEVAS FILAS: Usamos generateBoardBubbleColor para evitar Rainbows/Bombas en el techo
+        for (r in 0 until count) { for (c in 0 until columnsCount) { newGrid[GridPosition(r, c)] = Bubble(color = generateBoardBubbleColor()) } }
         bubblesByPosition = newGrid; soundEvent = SoundType.STICK; removeFloatingBubbles(newGrid); metrics?.let { checkGameConditions(it) }
     }
 
     private fun snapToGrid(x: Float, y: Float, color: BubbleColor) {
         val m = metrics ?: return
+
+        // --- SNAP CLÁSICO (Sin magnetismo, cálculo directo de distancia) ---
         val estimatedRow = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt().coerceAtLeast(0)
         val xOffsetEst = if ((estimatedRow + rowsDroppedCount) % 2 != 0) (m.bubbleDiameter / 2f) else 0f
         val estimatedCol = ((x - (m.boardStartPadding + xOffsetEst)) / m.horizontalSpacing).roundToInt().coerceAtLeast(0)
         val estimatedPos = GridPosition(estimatedRow, estimatedCol)
-        val finalPos = (getNeighborsAll(estimatedPos) + estimatedPos).filter { pos -> pos.row >= 0 && pos.col >= 0 && pos.col < columnsCount && !bubblesByPosition.containsKey(pos) }.minByOrNull { pos -> val (cx, cy) = getBubbleCenter(pos); (x-cx)*(x-cx) + (y-cy)*(y-cy) } ?: estimatedPos
+
+        // Buscar el hueco libre más cercano entre los vecinos y el estimado
+        val finalPos = (getNeighborsAll(estimatedPos) + estimatedPos)
+            .filter { pos -> pos.row >= 0 && pos.col >= 0 && pos.col < columnsCount && !bubblesByPosition.containsKey(pos) }
+            .minByOrNull { pos ->
+                val (cx, cy) = getBubbleCenter(pos)
+                (x - cx)*(x - cx) + (y - cy)*(y - cy)
+            } ?: estimatedPos
+
         val newGrid = bubblesByPosition.toMutableMap()
         if (color == BubbleColor.BOMB) { unlockAchievement("bomb_squad"); explodeAt(finalPos, newGrid) }
         else if (color == BubbleColor.RAINBOW) handleRainbowAt(finalPos, newGrid, x, y)
@@ -349,11 +441,22 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float) {
         val adjacentColors = getNeighborsAll(pos).mapNotNull { grid[it]?.color }.distinct().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
-        if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = generateNewBubbleColor()); return }
+        if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = generateBoardBubbleColor()); return } // Usar color normal si falla
+
         val toPop = mutableSetOf<GridPosition>(); toPop.add(pos)
-        adjacentColors.forEach { c -> grid[pos] = Bubble(color = c); toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount)) }
-        if (toPop.size >= 3) { joyTick++; unlockAchievement("rainbow_power"); processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW) }
-        else { grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK }
+        adjacentColors.forEach { c ->
+            grid[pos] = Bubble(color = c);
+            toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount))
+        }
+
+        if (toPop.size >= 2) {
+            joyTick++
+            unlockAchievement("rainbow_power")
+            processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW)
+        }
+        else {
+            grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK
+        }
     }
 
     private fun explodeAt(center: GridPosition, grid: MutableMap<GridPosition, Bubble>) {
@@ -383,7 +486,9 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
-        val m = metrics ?: return false; val collideDist = m.bubbleDiameter * 0.60f
+        val m = metrics ?: return false;
+        // Hitbox un poco más pequeña que el diámetro visual para permitir roces finos (más satisfactorio)
+        val collideDist = m.bubbleDiameter * 0.75f
         return bubblesByPosition.keys.any { pos -> val (cx, cy) = getBubbleCenter(pos); distancePointToSegment(cx, cy, x1, y1, x2, y2) <= collideDist }
     }
 

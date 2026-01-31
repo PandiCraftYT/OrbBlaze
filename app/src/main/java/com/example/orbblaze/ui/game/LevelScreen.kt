@@ -35,12 +35,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.components.*
 import com.example.orbblaze.ui.theme.*
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.sin
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
@@ -73,12 +71,12 @@ fun LevelScreen(
     val vibrationEvent = viewModel.vibrationEvent
     val isPaused = viewModel.isPaused
 
-    var showQuickShop by remember { mutableStateOf(false) } 
+    var showQuickShop by remember { mutableStateOf(false) }
     var hasRedeemedCoins by remember { mutableStateOf(false) }
     var volumeSlider by remember { mutableFloatStateOf(viewModel.getSfxVolume()) }
     var isAiming by remember { mutableStateOf(false) }
 
-    // --- ANIMACIONES DE TENSIÓN ---
+    // --- ANIMACIONES ---
     val isEmergency = (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10) || bubbles.keys.any { it.row >= 10 }
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
     val dangerAlpha by infiniteTransition.animateFloat(initialValue = 0.2f, targetValue = 0.8f, animationSpec = infiniteRepeatable(tween(if(isEmergency) 300 else 1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger")
@@ -91,16 +89,20 @@ fun LevelScreen(
         } else soundManager.setMusicSpeed(1.0f)
     }
 
-    LaunchedEffect(gameState) { 
+    LaunchedEffect(gameState) {
         if (gameState == GameState.IDLE) hasRedeemedCoins = false
-        if (gameState == GameState.PLAYING) soundManager.startMusic() 
-        else if (gameState != GameState.IDLE) soundManager.pauseMusic() 
+        if (gameState == GameState.PLAYING) soundManager.startMusic()
+        else if (gameState != GameState.IDLE) soundManager.pauseMusic()
     }
 
     LaunchedEffect(soundEvent) { soundEvent?.let { soundManager.play(it); viewModel.clearSoundEvent() } }
     LaunchedEffect(vibrationEvent) { if (vibrationEvent) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.clearVibrationEvent() } }
 
-    val shooterHeightDp = 142.dp
+    // --- CORRECCIÓN GEOMÉTRICA EXACTA (BASADA EN PANDASHOOTER) ---
+    // 95dp: Distancia desde el eje hasta la boca gris (calculado por ratio visual)
+    val barrelLengthPx = with(density) { 95.dp.toPx() }
+    // 160dp: Altura exacta del eje de rotación del PandaShooter
+    val pivotHeightPx = with(density) { 160.dp.toPx() }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
@@ -111,18 +113,41 @@ fun LevelScreen(
                     val centerX = size.width / 2; val pandaTopY = size.height - 220.dp.toPx()
                     val isPandaClick = startPos.x >= (centerX - 120.dp.toPx()) && startPos.x <= (centerX + 120.dp.toPx()) && startPos.y >= pandaTopY
 
-                    if (isPandaClick) { do { val event = awaitPointerEvent() } while (event.changes.any { it.pressed }); viewModel.swapBubbles() }
-                    else {
-                        isAiming = true; viewModel.updateAngle(startPos.x, startPos.y, size.width.toFloat(), size.height.toFloat())
-                        do { val event = awaitPointerEvent(); val change = event.changes.find { it.id == down.id }; if (change != null && change.pressed) viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat()) } while (event.changes.any { it.pressed })
-                        isAiming = false; viewModel.onShoot(size.width.toFloat(), size.height.toFloat(), size.height - with(density) { shooterHeightDp.toPx() })
+                    if (isPandaClick) {
+                        do { val event = awaitPointerEvent() } while (event.changes.any { it.pressed })
+                        viewModel.swapBubbles()
+                    } else {
+                        // MODO APUNTADO
+                        isAiming = true
+                        viewModel.updateAngle(startPos.x, startPos.y, size.width.toFloat(), size.height.toFloat())
+
+                        do {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.find { it.id == down.id }
+                            if (change != null && change.pressed) {
+                                viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat())
+                            }
+                        } while (event.changes.any { it.pressed })
+
+                        isAiming = false
+
+                        // CÁLCULO DE LA PUNTA DEL CAÑÓN (TRIGONOMETRÍA)
+                        val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
+                        val pivotX = size.width / 2f
+                        val pivotY = size.height - pivotHeightPx
+
+                        // Coordenada exacta de salida
+                        val tipX = pivotX + (sin(angleRad) * barrelLengthPx).toFloat()
+                        val tipY = pivotY - (cos(angleRad) * barrelLengthPx).toFloat()
+
+                        viewModel.onShoot(tipX, tipY)
                     }
                 }
             }
     ) {
         val screenWidth = constraints.maxWidth.toFloat()
         val bubbleDiameterPx = screenWidth / 10.5f
-        val boardTopPaddingPx = with(density) { 110.dp.toPx() } 
+        val boardTopPaddingPx = with(density) { 110.dp.toPx() }
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
         val centeredPadding = (screenWidth - (10 * bubbleDiameterPx)) / 2f
 
@@ -130,23 +155,42 @@ fun LevelScreen(
 
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha * 0.15f), size = size)
+
+            // DIBUJAR LÍNEA DE APUNTADO DESDE LA BOCA
             if (isAiming) {
                 val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
-                var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
-                var remaining = size.height * 0.7f; var current = Offset(size.width/2, size.height - with(density) { shooterHeightDp.toPx() })
+                var dirX = sin(angleRad).toFloat()
+                var dirY = -cos(angleRad).toFloat()
+
+                val pivotX = size.width / 2f
+                val pivotY = size.height - pivotHeightPx
+                val tipX = pivotX + (sin(angleRad) * barrelLengthPx).toFloat()
+                val tipY = pivotY - (cos(angleRad) * barrelLengthPx).toFloat()
+
+                var remaining = size.height * 0.9f
+                var current = Offset(tipX, tipY)
+
                 while (remaining > 0f) {
-                    val tToWall = when { dirX > 0f -> (size.width - bubbleDiameterPx/2 - current.x) / dirX; dirX < 0f -> (bubbleDiameterPx/2 - current.x) / dirX; else -> Float.POSITIVE_INFINITY }
+                    val tToWall = when {
+                        dirX > 0f -> (size.width - bubbleDiameterPx/2 - current.x) / dirX
+                        dirX < 0f -> (bubbleDiameterPx/2 - current.x) / dirX
+                        else -> Float.POSITIVE_INFINITY
+                    }
+
                     if (tToWall.isInfinite() || tToWall.isNaN() || tToWall >= remaining) {
-                        drawLine(Color.White.copy(0.4f), current, Offset(current.x + dirX * remaining, current.y + dirY * remaining), strokeWidth = 6f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 25f), 0f), cap = StrokeCap.Round)
+                        drawLine(Color.White.copy(0.5f), current, Offset(current.x + dirX * remaining, current.y + dirY * remaining), strokeWidth = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f), cap = StrokeCap.Round)
                         break
                     }
                     val hit = Offset(current.x + dirX * tToWall, current.y + dirY * tToWall)
-                    drawLine(Color.White.copy(0.4f), current, hit, strokeWidth = 6f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 25f), 0f), cap = StrokeCap.Round)
+                    drawLine(Color.White.copy(0.5f), current, hit, strokeWidth = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f), cap = StrokeCap.Round)
                     remaining -= tToWall; dirX *= -1f; current = hit
                 }
             }
+
             drawLine(color = Color.Red.copy(alpha = dangerAlpha), start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * 12), end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * 12), strokeWidth = 8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f)))
+
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
+
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint().apply { textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = android.graphics.Color.WHITE }
                 floatingTexts.forEach { ft -> paint.alpha = (ft.life * 255).toInt().coerceIn(0, 255); canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paint) }
@@ -160,11 +204,21 @@ fun LevelScreen(
                 VisualBubble(color = mapBubbleColor(bubble.color), isRainbow = bubble.color == BubbleColor.RAINBOW, rainbowRotation = masterRainbowRotation, modifier = Modifier.offset(x = with(density) { xPosPx.toDp() }, y = with(density) { yPosPx.toDp() }).size(with(density) { bubbleDiameterPx.toDp() }))
             }
             activeProjectile?.let { p ->
-                VisualBubble(color = if(p.isFireball) Color(0xFFFF4500) else mapBubbleColor(p.color), isRainbow = p.color == BubbleColor.RAINBOW && !p.isFireball, rainbowRotation = masterRainbowRotation, modifier = Modifier.offset(x = with(density) { p.x.toDp() } - with(density) { (bubbleDiameterPx/2).toDp() }, y = with(density) { p.y.toDp() } - with(density) { (bubbleDiameterPx/2).toDp() }).size(with(density) { (bubbleDiameterPx * (if(p.isFireball) 1.2f else 1f)).toDp() }))
+                VisualBubble(
+                    color = if(p.isFireball) Color(0xFFFF4500) else mapBubbleColor(p.color),
+                    isRainbow = p.color == BubbleColor.RAINBOW && !p.isFireball,
+                    rainbowRotation = masterRainbowRotation,
+                    modifier = Modifier
+                        .offset(
+                            x = with(density) { p.x.toDp() } - with(density) { (bubbleDiameterPx/2).toDp() },
+                            y = with(density) { p.y.toDp() } - with(density) { (bubbleDiameterPx/2).toDp() }
+                        )
+                        .size(with(density) { (bubbleDiameterPx * (if(p.isFireball) 1.2f else 1f)).toDp() })
+                )
             }
         }
 
-        PandaShooter(angle = viewModel.shooterAngle, currentBubbleColor = if((viewModel as? ClassicViewModel)?.isFireballQueued == true) Color(0xFFFF4500) else mapBubbleColor(currentBubbleColor), isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW, nextBubbleColor = mapBubbleColor(previewBubbleColor), isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, shotTick = viewModel.shotTick, joyTick = viewModel.joyTick, rainbowRotation = masterRainbowRotation, onShopClick = { showQuickShop = true }, modifier = Modifier.align(Alignment.BottomCenter))
+        PandaShooter(angle = viewModel.shooterAngle, currentBubbleColor = if(viewModel.isFireballQueued) Color(0xFFFF4500) else mapBubbleColor(currentBubbleColor), isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW, nextBubbleColor = mapBubbleColor(previewBubbleColor), isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, shotTick = viewModel.shotTick, joyTick = viewModel.joyTick, rainbowRotation = masterRainbowRotation, onShopClick = { showQuickShop = true }, modifier = Modifier.align(Alignment.BottomCenter))
 
         Box(modifier = Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Color.White.copy(alpha = 0.15f)).align(Alignment.TopCenter).graphicsLayer { if(isEmergency) { translationX = shakeOffset; translationY = shakeOffset } })
         GameTopBar(score = score, bestScore = highScore, coins = coins, timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, onSettingsClick = { viewModel.togglePause() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding())
@@ -175,17 +229,13 @@ fun LevelScreen(
                     Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("OBJETOS TÁCTICOS", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
                         Spacer(Modifier.height(16.dp))
-                        if (viewModel is ClassicViewModel) {
-                            ItemRow("BOLA DE FUEGO", "Atraviesa todo", 150, "🔥") {
-                                if (viewModel.buyFireball()) {
-                                    showQuickShop = false
-                                    Toast.makeText(context, "¡Bola de Fuego lista!", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Monedas insuficientes", Toast.LENGTH_SHORT).show()
-                                }
+                        ItemRow("BOLA DE FUEGO", "Atraviesa todo", 150, "🔥") {
+                            if (viewModel.buyFireball()) {
+                                showQuickShop = false
+                                Toast.makeText(context, "¡Bola de Fuego lista!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Monedas insuficientes", Toast.LENGTH_SHORT).show()
                             }
-                        } else {
-                            Text("No hay objetos disponibles para este modo.", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
                         Spacer(Modifier.height(20.dp))
                         TextButton(onClick = { showQuickShop = false }) { Text("CERRAR", color = Color(0xFF64FFDA), fontWeight = FontWeight.Bold) }
@@ -211,14 +261,14 @@ fun LevelScreen(
         if (isPaused && gameState == GameState.PLAYING) OverlayMenu(title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }, showVolume = true, volume = volumeSlider, onVolumeChange = { volumeSlider = it; viewModel.setSfxVolume(it); soundManager.refreshSettings() })
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
-                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", 
-                onContinue = null, 
-                onRestart = { viewModel.restartGame() }, 
-                onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }, 
-                score = score, 
-                isWin = gameState == GameState.WON, 
+                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER",
+                onContinue = null,
+                onRestart = { viewModel.restartGame() },
+                onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() },
+                score = score,
+                isWin = gameState == GameState.WON,
                 onRedeemCoins = if(!hasRedeemedCoins) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null,
-                onShowAd = { 
+                onShowAd = {
                     onShowAd { _ ->
                         viewModel.addCoins(50)
                         Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show()
@@ -246,15 +296,15 @@ fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> U
 
 @Composable
 fun OverlayMenu(
-    title: String, 
-    onContinue: (() -> Unit)? = null, 
-    onRestart: () -> Unit, 
-    onExit: () -> Unit, 
-    score: Int? = null, 
-    isWin: Boolean = false, 
-    showVolume: Boolean = false, 
-    volume: Float = 0f, 
-    onVolumeChange: (Float) -> Unit = {}, 
+    title: String,
+    onContinue: (() -> Unit)? = null,
+    onRestart: () -> Unit,
+    onExit: () -> Unit,
+    score: Int? = null,
+    isWin: Boolean = false,
+    showVolume: Boolean = false,
+    volume: Float = 0f,
+    onVolumeChange: (Float) -> Unit = {},
     onRedeemCoins: (() -> Unit)? = null,
     onShowAd: (() -> Unit)? = null
 ) {
@@ -262,7 +312,7 @@ fun OverlayMenu(
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             val titleColor = if (isWin) Color(0xFFFFD700) else if (title == "PAUSA") Color.White else Color(0xFFFF4D4D)
             Text(text = title, style = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Black, color = titleColor, letterSpacing = 2.sp, shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f)))
-            
+
             if (score != null) {
                 Spacer(Modifier.height(8.dp)); Text(text = "PUNTUACIÓN FINAL: $score", style = TextStyle(fontSize = 20.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.ExtraBold))
                 onRedeemCoins?.let { action ->
