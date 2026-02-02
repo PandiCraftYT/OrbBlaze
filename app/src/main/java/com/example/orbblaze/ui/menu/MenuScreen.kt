@@ -37,15 +37,6 @@ import kotlinx.coroutines.isActive
 import kotlin.math.hypot
 import kotlin.random.Random
 
-data class PhysicsBubble(
-    var x: Float,
-    var y: Float,
-    var vx: Float,
-    var vy: Float,
-    val radius: Float,
-    val color: Color
-)
-
 @Composable
 fun MenuScreen(
     onPlayClick: () -> Unit,
@@ -183,12 +174,12 @@ fun MenuScreen(
 
                 Spacer(modifier = Modifier.height(50.dp))
 
-                // BOTONES PRINCIPALES REORGANIZADOS
+                // BOTONES PRINCIPALES
                 MenuButton(text = "JUGAR", onClick = onPlayClick)
                 Spacer(modifier = Modifier.height(14.dp))
                 MenuButton(text = "MODOS DE JUEGO", onClick = onModesClick)
                 Spacer(modifier = Modifier.height(14.dp))
-                MenuButton(text = "RECORD", onClick = onScoreClick) // ✅ Cambiado de Puntuaciones a RECORD
+                MenuButton(text = "RECORD", onClick = onScoreClick)
                 
                 Spacer(modifier = Modifier.height(20.dp))
                 

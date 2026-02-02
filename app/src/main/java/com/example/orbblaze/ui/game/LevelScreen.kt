@@ -78,11 +78,25 @@ fun LevelScreen(
     var volumeSlider by remember { mutableFloatStateOf(viewModel.getSfxVolume()) }
     var isAiming by remember { mutableStateOf(false) }
 
-    // --- OPTIMIZACIÓN DE RENDIMIENTO: Transiciones infinitas ---
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
-    val dangerAlpha by infiniteTransition.animateFloat(initialValue = 0.2f, targetValue = 0.8f, animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger")
-    val masterRainbowRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "rotation")
-    val shakeOffset by infiniteTransition.animateFloat(initialValue = -2f, targetValue = 2f, animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake")
+    val dangerAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f, 
+        targetValue = 0.8f, 
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), 
+        label = "danger"
+    )
+    val masterRainbowRotation by infiniteTransition.animateFloat(
+        initialValue = 0f, 
+        targetValue = 360f, 
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), 
+        label = "rotation"
+    )
+    val shakeOffset by infiniteTransition.animateFloat(
+        initialValue = -2f, 
+        targetValue = 2f, 
+        animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), 
+        label = "shake"
+    )
 
     val isEmergency = (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10) || bubbles.keys.any { it.row >= 10 }
 
@@ -123,7 +137,7 @@ fun LevelScreen(
                             val event = awaitPointerEvent()
                             val change = event.changes.find { it.id == down.id }
                             if (change != null && change.pressed) {
-                                viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), screenHeight = size.height.toFloat())
+                                viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat())
                             }
                         } while (event.changes.any { it.pressed })
                         isAiming = false
@@ -151,7 +165,7 @@ fun LevelScreen(
         }
 
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
-            if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha * 0.15f), size = size)
+            if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha), size = size)
 
             if (isAiming) {
                 val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
@@ -185,7 +199,6 @@ fun LevelScreen(
             }
         }
 
-        // --- OPTIMIZACIÓN: RENDER DE BURBUJAS ---
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             bubbles.forEach { (pos, bubble) ->
                 val (x, y) = viewModel.getBubbleCenter(pos)
@@ -196,7 +209,6 @@ fun LevelScreen(
                     modifier = Modifier
                         .size(with(density) { bubbleDiameterPx.toDp() })
                         .graphicsLayer {
-                            // Usamos graphicsLayer para mover la burbuja sin disparar recomposición
                             translationX = x - (bubbleDiameterPx / 2)
                             translationY = y - (bubbleDiameterPx / 2)
                         }
@@ -284,7 +296,6 @@ fun LevelScreen(
     }
 }
 
-// --- COMPONENTES AUXILIARES ---
 @Composable
 fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.1f)).clickable { onBuy() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

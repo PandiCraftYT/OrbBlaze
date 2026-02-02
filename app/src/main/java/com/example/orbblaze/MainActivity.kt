@@ -60,9 +60,9 @@ fun AppNavigation(soundManager: SoundManager, adsManager: AdsManager) {
     
     val classicVm: ClassicViewModel = viewModel()
     val timeAttackVm: TimeAttackViewModel = viewModel()
+    val adventureVm: AdventureViewModel = viewModel()
     val sharedViewModel: GameViewModel = viewModel()
 
-    // Sincronizar sonidos al cambiar de pantalla
     LaunchedEffect(navController.currentBackStackEntry) {
         soundManager.refreshSettings()
     }
@@ -78,6 +78,26 @@ fun AppNavigation(soundManager: SoundManager, adsManager: AdsManager) {
                 onExitClick = { activity?.finish() },
                 soundManager = soundManager,
                 onSecretClick = { sharedViewModel.unlockAchievement("secret_popper") }
+            )
+        }
+        composable("adventure_map") {
+            AdventureMapScreen(
+                onLevelSelect = { levelId ->
+                    adventureVm.loadAdventureLevel(levelId)
+                    navController.navigate("adventure_game")
+                },
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable("adventure_game") {
+            LevelScreen(
+                viewModel = adventureVm,
+                soundManager = soundManager,
+                onMenuClick = { navController.navigate("menu") { popUpTo("menu") { inclusive = true } } },
+                onShopClick = { navController.navigate("shop") },
+                onShowAd = { onReward -> 
+                    activity?.let { adsManager.showRewardedAd(it, onReward) }
+                }
             )
         }
         composable("modes") {

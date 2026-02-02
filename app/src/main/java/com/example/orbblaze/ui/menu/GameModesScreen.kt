@@ -150,12 +150,18 @@ fun GameModesScreen(
                             title = "CONTRA TIEMPO", 
                             icon = Icons.Default.Refresh, 
                             color = Color(0xFF64FFDA), 
-                            isLocked = false, // ✅ AHORA DESBLOQUEADO
+                            isLocked = false,
                             onClick = { onModeSelect("time_attack") }
                         )
                     }
                     item {
-                        ModeCardPremium(title = "MODO AVENTURA", icon = Icons.Default.Place, color = Color(0xFFFFD700), onClick = { showLockedDialog = true })
+                        ModeCardPremium(
+                            title = "MODO AVENTURA", 
+                            icon = Icons.Default.Place, 
+                            color = Color(0xFFFFD700), 
+                            isLocked = false,
+                            onClick = { onModeSelect("adventure_map") }
+                        )
                     }
                     item {
                         ModeCardPremium(title = "MODO INVERSA", icon = Icons.Default.KeyboardArrowUp, color = Color(0xFFFF4D4D), onClick = { showLockedDialog = true })
