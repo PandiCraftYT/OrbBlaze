@@ -7,7 +7,7 @@ class MatchFinder {
     fun findMatches(
         startPos: GridPosition,
         grid: Map<GridPosition, Bubble>,
-        rowOffset: Int = 0 // ✅ Ahora recibe el desplazamiento global
+        rowOffset: Int = 0
     ): Set<GridPosition> {
         val targetColor = grid[startPos]?.color ?: return emptySet()
         val connected = mutableSetOf<GridPosition>()
@@ -19,30 +19,12 @@ class MatchFinder {
 
             if (grid[current]?.color == targetColor) {
                 connected.add(current)
-                getNeighbors(current, rowOffset).forEach { neighbor ->
+                // Usamos el helper centralizado
+                HexGridHelper.getNeighbors(current, rowOffset).forEach { neighbor ->
                     if (grid.containsKey(neighbor)) queue.add(neighbor)
                 }
             }
         }
         return if (connected.size >= 3) connected else emptySet()
-    }
-
-    fun getNeighbors(pos: GridPosition, rowOffset: Int): List<GridPosition> {
-        val r = pos.row
-        val c = pos.col
-        // ✅ La lógica hexagonal debe considerar el desplazamiento total (fila + offset)
-        return if ((r + rowOffset) % 2 == 0) {
-            listOf(
-                GridPosition(r, c-1), GridPosition(r, c+1),
-                GridPosition(r-1, c-1), GridPosition(r-1, c),
-                GridPosition(r+1, c-1), GridPosition(r+1, c)
-            )
-        } else {
-            listOf(
-                GridPosition(r, c-1), GridPosition(r, c+1),
-                GridPosition(r-1, c), GridPosition(r-1, c+1),
-                GridPosition(r+1, c), GridPosition(r+1, c+1)
-            )
-        }
     }
 }

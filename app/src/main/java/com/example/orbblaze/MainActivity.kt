@@ -11,6 +11,9 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.orbblaze.ui.game.*
 import com.example.orbblaze.ui.menu.MenuScreen
 import com.example.orbblaze.ui.menu.GameModesScreen
@@ -28,7 +31,7 @@ class MainActivity : ComponentActivity() {
             OrbBlazeTheme {
                 val context = LocalContext.current
                 val globalSoundManager = remember { SoundManager(context) }
-                val adsManager = remember { AdsManager(context) } // ✅ AdsManager instanciado
+                val adsManager = remember { AdsManager(context) }
                 val lifecycleOwner = LocalLifecycleOwner.current
 
                 DisposableEffect(lifecycleOwner) {
@@ -51,7 +54,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppNavigation(soundManager: SoundManager, adsManager: AdsManager) {
-    var currentScreen by remember { mutableStateOf("menu") }
+    val navController = rememberNavController()
     val context = LocalContext.current
     val activity = context as? Activity
     
@@ -59,63 +62,64 @@ fun AppNavigation(soundManager: SoundManager, adsManager: AdsManager) {
     val timeAttackVm: TimeAttackViewModel = viewModel()
     val sharedViewModel: GameViewModel = viewModel()
 
-    LaunchedEffect(currentScreen) {
+    // Sincronizar sonidos al cambiar de pantalla
+    LaunchedEffect(navController.currentBackStackEntry) {
         soundManager.refreshSettings()
     }
 
-    when (currentScreen) {
-        "menu" -> {
+    NavHost(navController = navController, startDestination = "menu") {
+        composable("menu") {
             MenuScreen(
-                onPlayClick = { currentScreen = "game" },
-                onModesClick = { currentScreen = "modes" },
-                onScoreClick = { currentScreen = "score" },
-                onAchievementsClick = { currentScreen = "achievements" },
-                onSettingsClick = { currentScreen = "settings" },
-                onExitClick = { android.os.Process.killProcess(android.os.Process.myPid()) },
+                onPlayClick = { navController.navigate("game") },
+                onModesClick = { navController.navigate("modes") },
+                onScoreClick = { navController.navigate("score") },
+                onAchievementsClick = { navController.navigate("achievements") },
+                onSettingsClick = { navController.navigate("settings") },
+                onExitClick = { activity?.finish() },
                 soundManager = soundManager,
                 onSecretClick = { sharedViewModel.unlockAchievement("secret_popper") }
             )
         }
-        "modes" -> {
+        composable("modes") {
             GameModesScreen(
-                onModeSelect = { mode -> currentScreen = mode },
-                onBackClick = { currentScreen = "menu" },
+                onModeSelect = { mode -> navController.navigate(mode) },
+                onBackClick = { navController.popBackStack() },
                 soundManager = soundManager
             )
         }
-        "game" -> {
+        composable("game") {
             LevelScreen(
                 viewModel = classicVm,
                 soundManager = soundManager,
-                onMenuClick = { currentScreen = "menu" },
-                onShopClick = { currentScreen = "shop" },
+                onMenuClick = { navController.navigate("menu") { popUpTo("menu") { inclusive = true } } },
+                onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward -> 
                     activity?.let { adsManager.showRewardedAd(it, onReward) }
                 }
             )
         }
-        "time_attack" -> {
+        composable("time_attack") {
             LevelScreen(
                 viewModel = timeAttackVm,
                 soundManager = soundManager,
-                onMenuClick = { currentScreen = "menu" },
-                onShopClick = { currentScreen = "shop" },
+                onMenuClick = { navController.navigate("menu") { popUpTo("menu") { inclusive = true } } },
+                onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward -> 
                     activity?.let { adsManager.showRewardedAd(it, onReward) }
                 }
             )
         }
-        "shop" -> {
-            ShopScreen(onBackClick = { currentScreen = "game" })
+        composable("shop") {
+            ShopScreen(onBackClick = { navController.popBackStack() })
         }
-        "score" -> {
-            HighScoreScreen(soundManager = soundManager, onBackClick = { currentScreen = "menu" })
+        composable("score") {
+            HighScoreScreen(soundManager = soundManager, onBackClick = { navController.popBackStack() })
         }
-        "achievements" -> {
-            AchievementsScreen(viewModel = sharedViewModel, soundManager = soundManager, onBackClick = { currentScreen = "menu" })
+        composable("achievements") {
+            AchievementsScreen(viewModel = sharedViewModel, soundManager = soundManager, onBackClick = { navController.popBackStack() })
         }
-        "settings" -> {
-            SettingsScreen(soundManager = soundManager, onBackClick = { currentScreen = "menu" })
+        composable("settings") {
+            SettingsScreen(soundManager = soundManager, onBackClick = { navController.popBackStack() })
         }
     }
 }

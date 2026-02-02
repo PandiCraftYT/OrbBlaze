@@ -11,6 +11,7 @@ composeBom = "2024.09.00"
 coreKtxVersion = "1.17.0"
 uiGraphics = "1.10.1"
 uiGeometry = "1.10.1"
+navigationCompose = "2.8.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,9 +31,9 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtxVersion" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "uiGraphics" }
 androidx-compose-ui-geometry = { group = "androidx.compose.ui", name = "ui-geometry", version.ref = "uiGeometry" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
-

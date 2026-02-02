@@ -34,8 +34,11 @@ android {
     buildFeatures {
         compose = true
     }
-    kotlinOptions {
-        jvmTarget = "11"
+    // Migración a compilerOptions como sugiere el aviso de deprecación de AGP 9.0
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        }
     }
 }
 
@@ -52,6 +55,9 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.compose.ui.geometry)
     
+    // ✅ Navigation Compose
+    implementation(libs.androidx.navigation.compose)
+
     // ✅ Google Mobile Ads SDK
     implementation("com.google.android.gms:play-services-ads:23.6.0")
 
