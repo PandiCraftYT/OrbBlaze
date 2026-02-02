@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.components.*
 import com.example.orbblaze.ui.theme.*
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -70,6 +71,7 @@ fun LevelScreen(
     val soundEvent = viewModel.soundEvent
     val vibrationEvent = viewModel.vibrationEvent
     val isPaused = viewModel.isPaused
+    val isFireballQueued = viewModel.isFireballQueued
 
     var showQuickShop by remember { mutableStateOf(false) }
     var hasRedeemedCoins by remember { mutableStateOf(false) }
@@ -98,10 +100,8 @@ fun LevelScreen(
     LaunchedEffect(soundEvent) { soundEvent?.let { soundManager.play(it); viewModel.clearSoundEvent() } }
     LaunchedEffect(vibrationEvent) { if (vibrationEvent) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.clearVibrationEvent() } }
 
-    // --- CORRECCIÓN GEOMÉTRICA EXACTA (BASADA EN PANDASHOOTER) ---
-    // 95dp: Distancia desde el eje hasta la boca gris (calculado por ratio visual)
+    // GEOMETRÍA DEL CAÑÓN (NO TOCADA)
     val barrelLengthPx = with(density) { 95.dp.toPx() }
-    // 160dp: Altura exacta del eje de rotación del PandaShooter
     val pivotHeightPx = with(density) { 160.dp.toPx() }
 
     BoxWithConstraints(
@@ -117,10 +117,8 @@ fun LevelScreen(
                         do { val event = awaitPointerEvent() } while (event.changes.any { it.pressed })
                         viewModel.swapBubbles()
                     } else {
-                        // MODO APUNTADO
                         isAiming = true
                         viewModel.updateAngle(startPos.x, startPos.y, size.width.toFloat(), size.height.toFloat())
-
                         do {
                             val event = awaitPointerEvent()
                             val change = event.changes.find { it.id == down.id }
@@ -128,15 +126,11 @@ fun LevelScreen(
                                 viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat())
                             }
                         } while (event.changes.any { it.pressed })
-
                         isAiming = false
 
-                        // CÁLCULO DE LA PUNTA DEL CAÑÓN (TRIGONOMETRÍA)
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                         val pivotX = size.width / 2f
                         val pivotY = size.height - pivotHeightPx
-
-                        // Coordenada exacta de salida
                         val tipX = pivotX + (sin(angleRad) * barrelLengthPx).toFloat()
                         val tipY = pivotY - (cos(angleRad) * barrelLengthPx).toFloat()
 
@@ -156,11 +150,9 @@ fun LevelScreen(
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha * 0.15f), size = size)
 
-            // DIBUJAR LÍNEA DE APUNTADO DESDE LA BOCA
             if (isAiming) {
                 val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
-                var dirX = sin(angleRad).toFloat()
-                var dirY = -cos(angleRad).toFloat()
+                var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
 
                 val pivotX = size.width / 2f
                 val pivotY = size.height - pivotHeightPx
@@ -176,7 +168,6 @@ fun LevelScreen(
                         dirX < 0f -> (bubbleDiameterPx/2 - current.x) / dirX
                         else -> Float.POSITIVE_INFINITY
                     }
-
                     if (tToWall.isInfinite() || tToWall.isNaN() || tToWall >= remaining) {
                         drawLine(Color.White.copy(0.5f), current, Offset(current.x + dirX * remaining, current.y + dirY * remaining), strokeWidth = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f), cap = StrokeCap.Round)
                         break
@@ -188,9 +179,7 @@ fun LevelScreen(
             }
 
             drawLine(color = Color.Red.copy(alpha = dangerAlpha), start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * 12), end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * 12), strokeWidth = 8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f)))
-
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
-
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint().apply { textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = android.graphics.Color.WHITE }
                 floatingTexts.forEach { ft -> paint.alpha = (ft.life * 255).toInt().coerceIn(0, 255); canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paint) }
@@ -203,22 +192,56 @@ fun LevelScreen(
                 val yPosPx = boardTopPaddingPx + (pos.row * verticalSpacingPx)
                 VisualBubble(color = mapBubbleColor(bubble.color), isRainbow = bubble.color == BubbleColor.RAINBOW, rainbowRotation = masterRainbowRotation, modifier = Modifier.offset(x = with(density) { xPosPx.toDp() }, y = with(density) { yPosPx.toDp() }).size(with(density) { bubbleDiameterPx.toDp() }))
             }
+
+            // --- RENDERIZADO DEL PROYECTIL (SOLO CUANDO SE DISPARA) ---
             activeProjectile?.let { p ->
-                VisualBubble(
-                    color = if(p.isFireball) Color(0xFFFF4500) else mapBubbleColor(p.color),
-                    isRainbow = p.color == BubbleColor.RAINBOW && !p.isFireball,
-                    rainbowRotation = masterRainbowRotation,
-                    modifier = Modifier
-                        .offset(
-                            x = with(density) { p.x.toDp() } - with(density) { (bubbleDiameterPx/2).toDp() },
-                            y = with(density) { p.y.toDp() } - with(density) { (bubbleDiameterPx/2).toDp() }
-                        )
-                        .size(with(density) { (bubbleDiameterPx * (if(p.isFireball) 1.2f else 1f)).toDp() })
-                )
+                // AJUSTE: Si es fireball, la hacemos un 30% más pequeña visualmente para "no romper todo de una"
+                val scaleFactor = if(p.isFireball) 0.7f else 1f
+                val sizeDp = with(density) { (bubbleDiameterPx * scaleFactor).toDp() }
+
+                val offsetX = with(density) { p.x.toDp() } - (sizeDp / 2)
+                val offsetY = with(density) { p.y.toDp() } - (sizeDp / 2)
+
+                if (p.isFireball) {
+                    val angle = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f
+
+                    FireballRenderer(
+                        modifier = Modifier
+                            .offset(x = offsetX, y = offsetY)
+                            .size(sizeDp)
+                            .graphicsLayer { rotationZ = angle }
+                    )
+                } else {
+                    VisualBubble(
+                        color = mapBubbleColor(p.color),
+                        isRainbow = p.color == BubbleColor.RAINBOW,
+                        rainbowRotation = masterRainbowRotation,
+                        modifier = Modifier
+                            .offset(x = offsetX, y = offsetY)
+                            .size(sizeDp)
+                    )
+                }
             }
         }
 
-        PandaShooter(angle = viewModel.shooterAngle, currentBubbleColor = if(viewModel.isFireballQueued) Color(0xFFFF4500) else mapBubbleColor(currentBubbleColor), isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW, nextBubbleColor = mapBubbleColor(previewBubbleColor), isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, shotTick = viewModel.shotTick, joyTick = viewModel.joyTick, rainbowRotation = masterRainbowRotation, onShopClick = { showQuickShop = true }, modifier = Modifier.align(Alignment.BottomCenter))
+        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+            PandaShooter(
+                angle = viewModel.shooterAngle,
+                // CUANDO COMPRAS LA BOLA: Se muestra como una burbuja roja/naranja ESTÁNDAR en el cañón.
+                // Así se cumple "Que no se vea el diseño... que sea igual que todas las burbujas".
+                currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor),
+                isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW && !isFireballQueued,
+                nextBubbleColor = mapBubbleColor(previewBubbleColor),
+                isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW,
+                shotTick = viewModel.shotTick,
+                joyTick = viewModel.joyTick,
+                rainbowRotation = masterRainbowRotation,
+                onShopClick = { showQuickShop = true }
+            )
+
+            // ELIMINADA: La superposición de FireballRenderer.
+            // Ahora la bola de fuego "diseñada" solo aparece al dispararse (arriba en activeProjectile).
+        }
 
         Box(modifier = Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Color.White.copy(alpha = 0.15f)).align(Alignment.TopCenter).graphicsLayer { if(isEmergency) { translationX = shakeOffset; translationY = shakeOffset } })
         GameTopBar(score = score, bestScore = highScore, coins = coins, timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, onSettingsClick = { viewModel.togglePause() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding())
@@ -276,6 +299,63 @@ fun LevelScreen(
                 }
             )
         }
+    }
+}
+
+// --- DISEÑO MEJORADO Y REALISTA DEL METEORITO ---
+@Composable
+fun FireballRenderer(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "fire_realism")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.9f, targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(tween(100, easing = LinearEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
+
+    Canvas(modifier = modifier) {
+        val r = size.minDimension / 2
+        val cx = size.width / 2
+        val cy = size.height / 2
+
+        // COLA LARGA Y ESTILIZADA (Hacia +Y, la rotación la controla desde fuera)
+        val tailPath = Path().apply {
+            moveTo(cx - r * 0.5f, cy)
+            // Curva para simular movimiento fluido
+            quadraticBezierTo(cx, cy + r * 6f, cx + r * 0.5f, cy)
+            close()
+        }
+
+        // Degradado de la cola: Amarillo -> Naranja -> Transparente
+        drawPath(
+            path = tailPath,
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0xFFFFEB3B), Color(0xFFFF5722), Color.Transparent),
+                startY = cy,
+                endY = cy + r * 5f
+            )
+        )
+
+        // HALO EXTERIOR PULSANTE
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFFFF5722).copy(alpha = 0.6f), Color.Transparent),
+                center = center,
+                radius = r * 1.5f * pulse
+            )
+        )
+
+        // NÚCLEO ARDIENTE (BLANCO -> AMARILLO -> NARANJA)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colorStops = arrayOf(
+                    0.0f to Color.White,
+                    0.4f to Color(0xFFFFEB3B),
+                    1.0f to Color(0xFFFF5722)
+                ),
+                center = center,
+                radius = r * 0.9f
+            )
+        )
     }
 }
 
