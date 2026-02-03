@@ -106,7 +106,8 @@ fun AppNavigation(
                     adventureVm.loadAdventureLevel(levelId)
                     navController.navigate("adventure_game")
                 },
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                settingsManager = settingsManager
             )
         }
         composable("adventure_game") {
