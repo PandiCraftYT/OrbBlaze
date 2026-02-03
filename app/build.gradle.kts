@@ -61,6 +61,9 @@ dependencies {
     // ✅ Google Mobile Ads SDK
     implementation("com.google.android.gms:play-services-ads:23.6.0")
 
+    // ✅ DataStore
+    implementation(libs.androidx.datastore.preferences)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

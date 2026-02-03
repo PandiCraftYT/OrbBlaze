@@ -14,6 +14,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.*
 import com.example.orbblaze.ui.menu.MenuScreen
 import com.example.orbblaze.ui.menu.GameModesScreen
@@ -30,8 +31,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             OrbBlazeTheme {
                 val context = LocalContext.current
-                val globalSoundManager = remember { SoundManager(context) }
+                
+                // Inicializar managers
+                val settingsManager = remember { SettingsManager(context) }
+                val globalSoundManager = remember { SoundManager(context, settingsManager) }
                 val adsManager = remember { AdsManager(context) }
+                
                 val lifecycleOwner = LocalLifecycleOwner.current
 
                 DisposableEffect(lifecycleOwner) {
@@ -39,21 +44,28 @@ class MainActivity : ComponentActivity() {
                         when (event) {
                             Lifecycle.Event.ON_RESUME -> globalSoundManager.startMusic()
                             Lifecycle.Event.ON_PAUSE -> globalSoundManager.pauseMusic()
+                            Lifecycle.Event.ON_DESTROY -> globalSoundManager.release()
                             else -> {}
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                    onDispose { 
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
                 }
 
-                AppNavigation(globalSoundManager, adsManager)
+                AppNavigation(globalSoundManager, adsManager, settingsManager)
             }
         }
     }
 }
 
 @Composable
-fun AppNavigation(soundManager: SoundManager, adsManager: AdsManager) {
+fun AppNavigation(
+    soundManager: SoundManager, 
+    adsManager: AdsManager, 
+    settingsManager: SettingsManager
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val activity = context as? Activity
@@ -133,13 +145,25 @@ fun AppNavigation(soundManager: SoundManager, adsManager: AdsManager) {
             ShopScreen(onBackClick = { navController.popBackStack() })
         }
         composable("score") {
-            HighScoreScreen(soundManager = soundManager, onBackClick = { navController.popBackStack() })
+            HighScoreScreen(
+                soundManager = soundManager, 
+                settingsManager = settingsManager,
+                onBackClick = { navController.popBackStack() }
+            )
         }
         composable("achievements") {
-            AchievementsScreen(viewModel = sharedViewModel, soundManager = soundManager, onBackClick = { navController.popBackStack() })
+            AchievementsScreen(
+                viewModel = sharedViewModel, 
+                soundManager = soundManager, 
+                onBackClick = { navController.popBackStack() }
+            )
         }
         composable("settings") {
-            SettingsScreen(soundManager = soundManager, onBackClick = { navController.popBackStack() })
+            SettingsScreen(
+                soundManager = soundManager, 
+                settingsManager = settingsManager,
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }

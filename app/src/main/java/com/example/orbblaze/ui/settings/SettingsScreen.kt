@@ -1,6 +1,5 @@
 package com.example.orbblaze.ui.settings
 
-import android.content.Context
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -25,27 +24,28 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.PhysicsBubble
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.random.Random
 
 @Composable
 fun SettingsScreen(
     soundManager: SoundManager,
+    settingsManager: SettingsManager,
     onBackClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE) }
+    val scope = rememberCoroutineScope()
     val infiniteTransition = rememberInfiniteTransition(label = "settings_animations")
     var showAboutDialog by remember { mutableStateOf(false) }
 
@@ -55,10 +55,11 @@ fun SettingsScreen(
         label = "title_scale"
     )
 
-    var sfxVolume by remember { mutableFloatStateOf(prefs.getFloat("sfx_volume", 1.0f)) }
-    var musicVolume by remember { mutableFloatStateOf(prefs.getFloat("music_volume", 0.5f)) }
-    var isVibrationEnabled by remember { mutableStateOf(prefs.getBoolean("vibration_enabled", true)) }
-    var isMusicMuted by remember { mutableStateOf(soundManager.isMusicMuted()) }
+    // Observamos los flujos de DataStore de forma reactiva
+    val sfxVolume by settingsManager.sfxVolumeFlow.collectAsState(initial = 1.0f)
+    val musicVolume by settingsManager.musicVolumeFlow.collectAsState(initial = 0.5f)
+    val isVibrationEnabled by settingsManager.vibrationEnabledFlow.collectAsState(initial = true)
+    val isMusicMuted by settingsManager.musicMutedFlow.collectAsState(initial = false)
 
     BoxWithConstraints(
         modifier = Modifier
@@ -150,13 +151,33 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(text = "EFECTOS DE SONIDO", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color(0xFFFFD700), letterSpacing = 1.sp))
-                    Slider(value = sfxVolume, onValueChange = { sfxVolume = it; prefs.edit().putFloat("sfx_volume", it).apply(); soundManager.setSfxVol(it) }, colors = SliderDefaults.colors(thumbColor = Color(0xFFFFD700), activeTrackColor = Color.White))
+                    Slider(
+                        value = sfxVolume, 
+                        onValueChange = { 
+                            scope.launch { settingsManager.setSfxVolume(it) }
+                            soundManager.setSfxVol(it) 
+                        }, 
+                        colors = SliderDefaults.colors(thumbColor = Color(0xFFFFD700), activeTrackColor = Color.White)
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(text = "MÚSICA DE FONDO", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color(0xFF64FFDA), letterSpacing = 1.sp))
-                    Slider(value = musicVolume, onValueChange = { musicVolume = it; prefs.edit().putFloat("music_volume", it).apply(); soundManager.setMusicVol(it) }, enabled = !isMusicMuted, colors = SliderDefaults.colors(thumbColor = Color(0xFF64FFDA), activeTrackColor = Color.White))
+                    Slider(
+                        value = musicVolume, 
+                        onValueChange = { 
+                            scope.launch { settingsManager.setMusicVolume(it) }
+                            soundManager.setMusicVol(it) 
+                        }, 
+                        enabled = !isMusicMuted, 
+                        colors = SliderDefaults.colors(thumbColor = Color(0xFF64FFDA), activeTrackColor = Color.White)
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-                    SettingsRow("SILENCIAR MÚSICA", isMusicMuted) { isMusicMuted = it; soundManager.setMusicMute(it) }
-                    SettingsRow("VIBRACIÓN", isVibrationEnabled) { isVibrationEnabled = it; prefs.edit().putBoolean("vibration_enabled", it).apply() }
+                    SettingsRow("SILENCIAR MÚSICA", isMusicMuted) { 
+                        scope.launch { settingsManager.setMusicMuted(it) }
+                        soundManager.setMusicMute(it) 
+                    }
+                    SettingsRow("VIBRACIÓN", isVibrationEnabled) { 
+                        scope.launch { settingsManager.setVibrationEnabled(it) }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(50.dp))

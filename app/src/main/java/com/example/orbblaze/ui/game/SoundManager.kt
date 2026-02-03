@@ -7,20 +7,23 @@ import android.media.PlaybackParams
 import android.media.SoundPool
 import android.os.Build
 import com.example.orbblaze.R
+import com.example.orbblaze.data.SettingsManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
-
-
-class SoundManager(val context: Context) {
+class SoundManager(val context: Context, private val settingsManager: SettingsManager) {
     private val soundPool: SoundPool
     private val soundMap = mutableMapOf<SoundType, Int>()
-
-    // Música de fondo
     private var mediaPlayer: MediaPlayer? = null
+    
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private val prefs = context.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
-    private var sfxVolume: Float = prefs.getFloat("sfx_volume", 1.0f)
-    private var musicVolume: Float = prefs.getFloat("music_volume", 0.5f)
-    private var isMusicMuted: Boolean = prefs.getBoolean("music_muted", false)
+    private var sfxVolume: Float = 1.0f
+    private var musicVolume: Float = 0.5f
+    private var isMusicMuted: Boolean = false
 
     init {
         val audioAttributes = AudioAttributes.Builder()
@@ -33,6 +36,12 @@ class SoundManager(val context: Context) {
             .setAudioAttributes(audioAttributes)
             .build()
 
+        loadSounds()
+        initMusic()
+        observeSettings()
+    }
+
+    private fun loadSounds() {
         try {
             soundMap[SoundType.SHOOT] = soundPool.load(context, R.raw.sfx_shoot, 1)
             soundMap[SoundType.POP] = soundPool.load(context, R.raw.sfx_pop, 1)
@@ -44,8 +53,24 @@ class SoundManager(val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
 
-        initMusic()
+    private fun observeSettings() {
+        scope.launch {
+            settingsManager.sfxVolumeFlow.collectLatest { sfxVolume = it }
+        }
+        scope.launch {
+            settingsManager.musicVolumeFlow.collectLatest { 
+                musicVolume = it
+                updateMusicVolume()
+            }
+        }
+        scope.launch {
+            settingsManager.musicMutedFlow.collectLatest { 
+                isMusicMuted = it
+                updateMusicVolume()
+            }
+        }
     }
 
     private fun initMusic() {
@@ -74,30 +99,23 @@ class SoundManager(val context: Context) {
         }
     }
 
+    // Estos métodos ahora llaman a settingsManager (asíncrono)
     fun setMusicVol(vol: Float) {
-        musicVolume = vol
-        if (!isMusicMuted) {
-            updateMusicVolume()
-        }
+        scope.launch { settingsManager.setMusicVolume(vol) }
     }
 
     fun setSfxVol(vol: Float) {
-        sfxVolume = vol
+        scope.launch { settingsManager.setSfxVolume(vol) }
     }
 
     fun setMusicMute(muted: Boolean) {
-        isMusicMuted = muted
-        prefs.edit().putBoolean("music_muted", muted).apply()
-        updateMusicVolume()
+        scope.launch { settingsManager.setMusicMuted(muted) }
     }
 
     fun isMusicMuted(): Boolean = isMusicMuted
 
     fun refreshSettings() {
-        sfxVolume = prefs.getFloat("sfx_volume", 1.0f)
-        musicVolume = prefs.getFloat("music_volume", 0.5f)
-        isMusicMuted = prefs.getBoolean("music_muted", false)
-        updateMusicVolume()
+        // Con DataStore y flows, el refresh es automático, pero reseteamos velocidad
         setMusicSpeed(1.0f)
     }
 

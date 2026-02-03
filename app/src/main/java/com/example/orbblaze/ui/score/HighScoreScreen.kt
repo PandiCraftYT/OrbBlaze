@@ -1,6 +1,5 @@
 package com.example.orbblaze.ui.score
 
-import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -14,7 +13,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,6 +31,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.PhysicsBubble
@@ -44,20 +43,24 @@ import kotlin.random.Random
 @Composable
 fun HighScoreScreen(
     soundManager: SoundManager,
+    settingsManager: SettingsManager,
     onBackClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE) }
+    
+    // Obtenemos los récords reactivamente desde DataStore
+    val highScore by settingsManager.highScoreFlow.collectAsState(initial = 0)
+    val highScoreTime by settingsManager.highScoreTimeFlow.collectAsState(initial = 0)
     
     // Lista completa de modos y sus récords
-    val records = remember {
+    val records = remember(highScore, highScoreTime) {
         listOf(
-            Triple("CLÁSICO", prefs.getInt("high_score", 0), Color(0xFFFFD700)),
-            Triple("CONTRA TIEMPO", prefs.getInt("high_score_time", 0), Color(0xFF64FFDA)),
-            Triple("MODO AVENTURA", prefs.getInt("high_score_adventure", 0), Color(0xFF03DAC5)),
-            Triple("MODO INVERSA", prefs.getInt("high_score_inverse", 0), Color(0xFFFF4D4D)),
-            Triple("PUZZLE DIARIO", prefs.getInt("high_score_daily", 0), Color(0xFFBB86FC)),
-            Triple("MINIJUEGOS", prefs.getInt("high_score_mini", 0), Color(0xFFFF8A65))
+            Triple("CLÁSICO", highScore, Color(0xFFFFD700)),
+            Triple("CONTRA TIEMPO", highScoreTime, Color(0xFF64FFDA)),
+            Triple("MODO AVENTURA", 0, Color(0xFF03DAC5)),
+            Triple("MODO INVERSA", 0, Color(0xFFFF4D4D)),
+            Triple("PUZZLE DIARIO", 0, Color(0xFFBB86FC)),
+            Triple("MINIJUEGOS", 0, Color(0xFFFF8A65))
         )
     }
 
