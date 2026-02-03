@@ -58,7 +58,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var coins by mutableIntStateOf(0)
         protected set
 
-    var timeLeft by mutableIntStateOf(90)
+    var timeLeft by mutableIntStateOf(60) // ✅ Cambiado de 90 a 60
         protected set
 
     protected var timerJob: Job? = null
@@ -210,7 +210,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         }
         bubblesByPosition = cleanGrid
         nextBubbleColor = generateProjectileColor(); previewBubbleColor = generateProjectileColor()
-        score = 0; gameState = GameState.IDLE; isPaused = false; shotsFiredCount = 0; rowsDroppedCount = 0; timeLeft = 90
+        score = 0; gameState = GameState.IDLE; isPaused = false; shotsFiredCount = 0; rowsDroppedCount = 0; timeLeft = 60 // ✅ Cambiado de 90 a 60
         isFireballQueued = false; particles.clear(); floatingTexts.clear(); timerJob?.cancel()
     }
 
@@ -343,7 +343,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             while (gameState == GameState.PLAYING) {
                 delay(1000)
                 if (!isPaused && gameMode == GameMode.TIME_ATTACK) {
-                    timeLeft--; if (timeLeft <= 0) { addRows(3); timeLeft = 90 }
+                    timeLeft--; if (timeLeft <= 0) { addRows(3); timeLeft = 60 } // ✅ Cambiado de 90 a 60
                 }
             }
         }
