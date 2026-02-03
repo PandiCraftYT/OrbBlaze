@@ -21,6 +21,7 @@ class SettingsManager(private val context: Context) {
         val COINS = intPreferencesKey("coins")
         val CURRENT_REWARD_DAY = intPreferencesKey("current_reward_day")
         val LAST_REWARD_CLAIM = longPreferencesKey("last_reward_claim")
+        val ADVENTURE_PROGRESS = intPreferencesKey("adventure_progress")
     }
 
     // SFX Volume
@@ -57,6 +58,12 @@ class SettingsManager(private val context: Context) {
     val highScoreTimeFlow: Flow<Int> = context.dataStore.data.map { it[HIGH_SCORE_TIME] ?: 0 }
     suspend fun setHighScoreTime(score: Int) {
         context.dataStore.edit { it[HIGH_SCORE_TIME] = score }
+    }
+
+    // Adventure Progress
+    val adventureProgressFlow: Flow<Int> = context.dataStore.data.map { it[ADVENTURE_PROGRESS] ?: 0 }
+    suspend fun setAdventureProgress(level: Int) {
+        context.dataStore.edit { it[ADVENTURE_PROGRESS] = level }
     }
 
     // Coins

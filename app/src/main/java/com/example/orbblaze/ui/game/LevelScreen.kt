@@ -34,6 +34,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.BoardMetricsPx
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.components.*
@@ -75,7 +76,12 @@ fun LevelScreen(
 
     var showQuickShop by remember { mutableStateOf(false) }
     var hasRedeemedCoins by remember { mutableStateOf(false) }
-    var volumeSlider by remember { mutableFloatStateOf(viewModel.getSfxVolume()) }
+    
+    // Obtenemos el volumen de los ajustes directamente para el slider de pausa
+    // Nota: Como es una pantalla de juego, el volumen se suele ajustar en settings,
+    // pero mantenemos el slider si es necesario.
+    var volumeSlider by remember { mutableFloatStateOf(1.0f) }
+    
     var isAiming by remember { mutableStateOf(false) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
@@ -256,8 +262,8 @@ fun LevelScreen(
                         Text("OBJETOS TÁCTICOS", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
                         Spacer(Modifier.height(16.dp))
                         ItemRow("BOLA DE FUEGO", "Atraviesa todo", 150, "🔥") {
-                            if (viewModel.buyFireball()) { showQuickShop = false; Toast.makeText(context, "¡Bola de Fuego lista!", Toast.LENGTH_SHORT).show() }
-                            else { Toast.makeText(context, "Monedas insuficientes", Toast.LENGTH_SHORT).show() }
+                            viewModel.buyFireball()
+                            showQuickShop = false
                         }
                         Spacer(Modifier.height(20.dp))
                         TextButton(onClick = { showQuickShop = false }) { Text("CERRAR", color = Color(0xFF64FFDA), fontWeight = FontWeight.Bold) }

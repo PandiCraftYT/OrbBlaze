@@ -4,7 +4,10 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.domain.model.*
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class AdventureViewModel(application: Application) : GameViewModel(application) {
     
@@ -68,9 +71,11 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     }
 
     private fun saveProgress() {
-        val completedLevels = prefs.getInt("adventure_progress", 0)
-        if (currentLevelId > completedLevels) {
-            prefs.edit().putInt("adventure_progress", currentLevelId).apply()
+        viewModelScope.launch {
+            val completedLevels = settingsManager.adventureProgressFlow.first()
+            if (currentLevelId > completedLevels) {
+                settingsManager.setAdventureProgress(currentLevelId)
+            }
         }
     }
 }

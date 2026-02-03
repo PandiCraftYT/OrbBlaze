@@ -75,6 +75,14 @@ fun AppNavigation(
     val adventureVm: AdventureViewModel = viewModel()
     val sharedViewModel: GameViewModel = viewModel()
 
+    // Inicializamos los ViewModels con el manager de ajustes
+    LaunchedEffect(settingsManager) {
+        classicVm.initManager(settingsManager)
+        timeAttackVm.initManager(settingsManager)
+        adventureVm.initManager(settingsManager)
+        sharedViewModel.initManager(settingsManager)
+    }
+
     LaunchedEffect(navController.currentBackStackEntry) {
         soundManager.refreshSettings()
     }

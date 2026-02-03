@@ -14,8 +14,6 @@ class TimeAttackViewModel(application: Application) : GameViewModel(application)
 
     init {
         changeGameMode(GameMode.TIME_ATTACK)
-        // ✅ Cargamos el récord específico de este modo
-        highScore = prefs.getInt("high_score_time", 0)
         loadLevel(3)
     }
 

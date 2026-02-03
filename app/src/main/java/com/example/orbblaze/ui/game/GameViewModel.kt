@@ -1,7 +1,6 @@
 package com.example.orbblaze.ui.game
 
 import android.app.Application
-import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -9,12 +8,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.engine.HexGridHelper
 import com.example.orbblaze.domain.engine.LevelEngine
 import com.example.orbblaze.domain.engine.MatchFinder
 import com.example.orbblaze.domain.model.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.*
@@ -27,7 +29,10 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected val engine = LevelEngine()
     protected val matchFinder = MatchFinder()
-    protected val prefs = application.getSharedPreferences("orbblaze_prefs", Context.MODE_PRIVATE)
+    
+    // El SettingsManager se inicializará desde afuera para evitar fugas
+    private var _settingsManager: SettingsManager? = null
+    protected val settingsManager: SettingsManager get() = _settingsManager!!
 
     var bubblesByPosition by mutableStateOf<Map<GridPosition, Bubble>>(emptyMap())
         protected set
@@ -108,44 +113,88 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected val bubbleRadius: Float get() = (metrics?.bubbleDiameter ?: 44f) / 2f
 
-    init {
-        highScore = prefs.getInt("high_score", 0)
-        coins = prefs.getInt("coins", 0)
-        currentRewardDay = prefs.getInt("current_reward_day", 1)
-        checkRewardDayReset()
+    fun initManager(manager: SettingsManager) {
+        if (_settingsManager != null) return
+        _settingsManager = manager
         setupAchievements()
-        loadAchievements()
+        observeData()
         startParticleLoop()
     }
 
-    private fun checkRewardDayReset() {
-        val lastClaim = prefs.getLong("last_reward_claim", 0L)
+    private fun observeData() {
+        viewModelScope.launch {
+            settingsManager.highScoreFlow.collectLatest { if (gameMode == GameMode.CLASSIC) highScore = it }
+        }
+        viewModelScope.launch {
+            settingsManager.coinsFlow.collectLatest { coins = it }
+        }
+        viewModelScope.launch {
+            settingsManager.currentRewardDayFlow.collectLatest { currentRewardDay = it }
+        }
+        viewModelScope.launch {
+            achievements.forEach { achievement ->
+                launch {
+                    settingsManager.isAchievementUnlocked(achievement.id).collectLatest { unlocked ->
+                        achievement.isUnlocked = unlocked
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            checkRewardDayReset()
+        }
+    }
+
+    private suspend fun checkRewardDayReset() {
+        val lastClaim = settingsManager.lastRewardClaimFlow.first()
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastClaim > 48 * 60 * 60 * 1000L && lastClaim != 0L) {
-            currentRewardDay = 1; prefs.edit().putInt("current_reward_day", 1).apply()
+            settingsManager.setCurrentRewardDay(1)
         }
     }
 
-    fun canClaimReward(): Boolean = (System.currentTimeMillis() - prefs.getLong("last_reward_claim", 0L)) >= 24 * 60 * 60 * 1000L
+    fun canClaimReward(onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val lastClaim = settingsManager.lastRewardClaimFlow.first()
+            onResult((System.currentTimeMillis() - lastClaim) >= 24 * 60 * 60 * 1000L)
+        }
+    }
 
     fun claimDailyReward() {
-        if (canClaimReward()) {
-            val rewards = listOf(50, 100, 150, 200, 300, 500, 1000)
-            addCoins(rewards[(currentRewardDay - 1) % 7])
-            prefs.edit().putLong("last_reward_claim", System.currentTimeMillis()).apply()
-            currentRewardDay = if (currentRewardDay >= 7) 1 else currentRewardDay + 1
-            prefs.edit().putInt("current_reward_day", currentRewardDay).apply()
+        viewModelScope.launch {
+            val lastClaim = settingsManager.lastRewardClaimFlow.first()
+            if ((System.currentTimeMillis() - lastClaim) >= 24 * 60 * 60 * 1000L) {
+                val rewards = listOf(50, 100, 150, 200, 300, 500, 1000)
+                addCoins(rewards[(currentRewardDay - 1) % 7])
+                settingsManager.setLastRewardClaim(System.currentTimeMillis())
+                val nextDay = if (currentRewardDay >= 7) 1 else currentRewardDay + 1
+                settingsManager.setCurrentRewardDay(nextDay)
+            }
         }
     }
 
-    fun addCoins(amount: Int) { coins += amount; prefs.edit().putInt("coins", coins).apply() }
-    fun spendCoins(amount: Int): Boolean { if (coins >= amount) { coins -= amount; prefs.edit().putInt("coins", coins).apply(); return true }; return false }
-
-    fun buyFireball(): Boolean {
-        if (!isFireballQueued && spendCoins(150)) {
-            isFireballQueued = true; soundEvent = SoundType.SWAP; return true
+    fun addCoins(amount: Int) { 
+        viewModelScope.launch { settingsManager.setCoins(coins + amount) }
+    }
+    
+    fun spendCoins(amount: Int, onResult: (Boolean) -> Unit) { 
+        if (coins >= amount) { 
+            viewModelScope.launch { 
+                settingsManager.setCoins(coins - amount)
+                onResult(true)
+            }
+        } else {
+            onResult(false)
         }
-        return false
+    }
+
+    fun buyFireball() {
+        spendCoins(150) { success ->
+            if (success) {
+                isFireballQueued = true
+                soundEvent = SoundType.SWAP
+            }
+        }
     }
 
     open fun changeGameMode(mode: GameMode) { this.gameMode = mode }
@@ -166,11 +215,22 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun restartGame() { loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6) }
-    fun swapBubbles() { if (activeProjectile == null && gameState == GameState.PLAYING && !isPaused) { val temp = nextBubbleColor; nextBubbleColor = previewBubbleColor; previewBubbleColor = temp; soundEvent = SoundType.SWAP; if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true } }
+    
+    fun swapBubbles() { 
+        if (activeProjectile == null && gameState == GameState.PLAYING && !isPaused) { 
+            val temp = nextBubbleColor
+            nextBubbleColor = previewBubbleColor
+            previewBubbleColor = temp
+            soundEvent = SoundType.SWAP
+            viewModelScope.launch {
+                if (settingsManager.vibrationEnabledFlow.first()) vibrationEvent = true
+            }
+        } 
+    }
+    
     fun setBoardMetrics(metrics: BoardMetricsPx) { this.metrics = metrics }
     fun togglePause() { if (gameState == GameState.PLAYING) isPaused = !isPaused }
-    fun setSfxVolume(volume: Float) { prefs.edit().putFloat("sfx_volume", volume).apply() }
-    fun getSfxVolume(): Float = prefs.getFloat("sfx_volume", 1.0f)
+    fun setSfxVolume(volume: Float) { viewModelScope.launch { settingsManager.setSfxVolume(volume) } }
     fun clearSoundEvent() { soundEvent = null }
     fun clearVibrationEvent() { vibrationEvent = false }
 
@@ -183,7 +243,9 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     open fun onShoot(spawnX: Float, spawnY: Float) {
         if (gameState != GameState.PLAYING || isPaused || activeProjectile != null) return
         shotTick++; soundEvent = SoundType.SHOOT
-        if (prefs.getBoolean("vibration_enabled", true)) vibrationEvent = true
+        viewModelScope.launch {
+            if (settingsManager.vibrationEnabledFlow.first()) vibrationEvent = true
+        }
         val angleRad = Math.toRadians(shooterAngle.toDouble()); val speed = 40f
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
         isFireballQueued = false; nextBubbleColor = previewBubbleColor; previewBubbleColor = generateProjectileColor()
@@ -201,13 +263,20 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     protected open fun updateHighScore() {
-        val key = if (gameMode == GameMode.TIME_ATTACK) "high_score_time" else "high_score"
-        val currentHigh = prefs.getInt(key, 0)
-        if (score > currentHigh) { prefs.edit().putInt(key, score).apply(); if (gameMode == GameMode.CLASSIC) highScore = score; addCoins(10) }
-        if (score >= 100) unlockAchievement("first_blood")
-        if (score >= 1000) unlockAchievement("score_1000")
+        viewModelScope.launch {
+            val isTimeMode = gameMode == GameMode.TIME_ATTACK
+            val currentHigh = if (isTimeMode) settingsManager.highScoreTimeFlow.first() else settingsManager.highScoreFlow.first()
+            
+            if (score > currentHigh) { 
+                if (isTimeMode) settingsManager.setHighScoreTime(score) else settingsManager.setHighScore(score)
+                addCoins(10) 
+            }
+            if (score >= 100) unlockAchievement("first_blood")
+            if (score >= 1000) unlockAchievement("score_1000")
+        }
     }
 
+    // --- LÓGICA DE FÍSICAS (SIN TOCAR) ---
     protected fun startPhysicsLoop(screenWidth: Float) {
         viewModelScope.launch {
             val physicsSteps = 10
@@ -378,12 +447,16 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     fun unlockAchievement(id: String) {
         val achievement = achievements.find { it.id == id }
         if (achievement != null && !achievement.isUnlocked) {
-            achievement.isUnlocked = true; prefs.edit().putBoolean("ach_${id}", true).apply(); addCoins(50)
-            viewModelScope.launch { activeAchievement = achievement; soundEvent = SoundType.WIN; delay(4000); activeAchievement = null }
+            viewModelScope.launch {
+                settingsManager.unlockAchievement(id)
+                addCoins(50)
+                activeAchievement = achievement; soundEvent = SoundType.WIN; delay(4000); activeAchievement = null
+            }
         }
     }
 
     private fun setupAchievements() {
+        achievements.clear()
         achievements.addAll(listOf(
             Achievement("first_blood", "¡Primeros Pasos!", "Consigue tus primeros 100 puntos"),
             Achievement("combo_master", "¡Combo Brutal!", "Explota 6 o más burbujas a la vez"),
@@ -393,6 +466,4 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             Achievement("secret_popper", "¡Curioso!", "Explotaste una burbuja del menú principal", isHidden = true)
         ))
     }
-
-    private fun loadAchievements() { achievements.forEach { if (prefs.getBoolean("ach_${it.id}", false)) it.isUnlocked = true } }
 }
