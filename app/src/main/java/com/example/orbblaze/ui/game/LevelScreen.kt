@@ -34,7 +34,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.BoardMetricsPx
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.components.*
@@ -76,12 +75,7 @@ fun LevelScreen(
 
     var showQuickShop by remember { mutableStateOf(false) }
     var hasRedeemedCoins by remember { mutableStateOf(false) }
-    
-    // Obtenemos el volumen de los ajustes directamente para el slider de pausa
-    // Nota: Como es una pantalla de juego, el volumen se suele ajustar en settings,
-    // pero mantenemos el slider si es necesario.
     var volumeSlider by remember { mutableFloatStateOf(1.0f) }
-    
     var isAiming by remember { mutableStateOf(false) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
@@ -104,7 +98,8 @@ fun LevelScreen(
         label = "shake"
     )
 
-    val isEmergency = (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10) || bubbles.keys.any { it.row >= 10 }
+    val dangerLineRow = 13
+    val isEmergency = (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10) || bubbles.keys.any { it.row >= (dangerLineRow - 2) }
 
     LaunchedEffect(timeLeft, gameState, isPaused) {
         if (viewModel.gameMode == GameMode.TIME_ATTACK && gameState == GameState.PLAYING && !isPaused) {
@@ -157,15 +152,24 @@ fun LevelScreen(
     ) {
         val screenWidth = constraints.maxWidth.toFloat()
         val bubbleDiameterPx = screenWidth / 10.5f
-        val boardTopPaddingPx = with(density) { 110.dp.toPx() }
+        
+        // Mantenemos 170.dp para que esté debajo de la barra
+        val boardTopPaddingPx = with(density) { 170.dp.toPx() }
+        
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
+        val horizontalSpacingPx = bubbleDiameterPx
         val centeredPadding = (screenWidth - (10 * bubbleDiameterPx)) / 2f
 
-        SideEffect {
+        // IMPORTANTE: Aseguramos que las métricas se actualicen ANTES de cualquier snap
+        LaunchedEffect(screenWidth, boardTopPaddingPx) {
             viewModel.setBoardMetrics(
                 BoardMetricsPx(
-                    bubbleDiameterPx, bubbleDiameterPx, verticalSpacingPx,
-                    boardTopPaddingPx, centeredPadding, boardTopPaddingPx + bubbleDiameterPx * 0.2f
+                    horizontalSpacing = horizontalSpacingPx,
+                    bubbleDiameter = bubbleDiameterPx,
+                    verticalSpacing = verticalSpacingPx,
+                    boardTopPadding = boardTopPaddingPx,
+                    boardStartPadding = centeredPadding,
+                    ceilingY = boardTopPaddingPx + bubbleDiameterPx * 0.2f
                 )
             )
         }
@@ -197,7 +201,14 @@ fun LevelScreen(
                 }
             }
 
-            drawLine(color = Color.Red.copy(alpha = dangerAlpha), start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * 12), end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * 12), strokeWidth = 8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f)))
+            drawLine(
+                color = Color.Red.copy(alpha = dangerAlpha), 
+                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
+                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
+                strokeWidth = 8f, 
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
+            )
+            
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint().apply { textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = android.graphics.Color.WHITE }
@@ -341,7 +352,7 @@ fun FireballRenderer(modifier: Modifier = Modifier) {
     val pulse by infiniteTransition.animateFloat(initialValue = 0.9f, targetValue = 1.1f, animationSpec = infiniteRepeatable(tween(100, easing = LinearEasing), RepeatMode.Reverse), label = "pulse")
     Canvas(modifier = modifier) {
         val r = size.minDimension / 2; val cx = size.width / 2; val cy = size.height / 2
-        drawPath(path = Path().apply { moveTo(cx - r * 0.5f, cy); quadraticBezierTo(cx, cy + r * 6f, cx + r * 0.5f, cy); close() }, brush = Brush.verticalGradient(colors = listOf(Color(0xFFFFEB3B), Color(0xFFFF5722), Color.Transparent), startY = cy, endY = cy + r * 5f))
+        drawPath(path = Path().apply { moveTo(cx - r * 0.5f, cy); quadraticTo(cx, cy + r * 6f, cx + r * 0.5f, cy); close() }, brush = Brush.verticalGradient(colors = listOf(Color(0xFFFFEB3B), Color(0xFFFF5722), Color.Transparent), startY = cy, endY = cy + r * 5f))
         drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0xFFFF5722).copy(alpha = 0.6f), Color.Transparent), center = center, radius = r * 1.5f * pulse))
         drawCircle(brush = Brush.radialGradient(colorStops = arrayOf(0.0f to Color.White, 0.4f to Color(0xFFFFEB3B), 1.0f to Color(0xFFFF5722)), center = center, radius = r * 0.9f))
     }
