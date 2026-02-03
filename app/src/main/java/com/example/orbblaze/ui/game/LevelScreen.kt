@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -151,16 +152,14 @@ fun LevelScreen(
             }
     ) {
         val screenWidth = constraints.maxWidth.toFloat()
-        val bubbleDiameterPx = screenWidth / 10.5f
         
-        // Mantenemos 170.dp para que esté debajo de la barra
-        val boardTopPaddingPx = with(density) { 170.dp.toPx() }
-        
-        val verticalSpacingPx = bubbleDiameterPx * 0.866f
+        // ✅ AJUSTE DE MÉTRICAS PARA QUE LAS BURBUJAS SE TOQUEN Y QUEDEN AL MISMO NIVEL
+        val bubbleDiameterPx = screenWidth / 10.0f 
         val horizontalSpacingPx = bubbleDiameterPx
-        val centeredPadding = (screenWidth - (10 * bubbleDiameterPx)) / 2f
+        val boardStartPadding = bubbleDiameterPx / 2f
+        val boardTopPaddingPx = with(density) { 170.dp.toPx() }
+        val verticalSpacingPx = bubbleDiameterPx * 0.866f
 
-        // IMPORTANTE: Aseguramos que las métricas se actualicen ANTES de cualquier snap
         LaunchedEffect(screenWidth, boardTopPaddingPx) {
             viewModel.setBoardMetrics(
                 BoardMetricsPx(
@@ -168,8 +167,8 @@ fun LevelScreen(
                     bubbleDiameter = bubbleDiameterPx,
                     verticalSpacing = verticalSpacingPx,
                     boardTopPadding = boardTopPaddingPx,
-                    boardStartPadding = centeredPadding,
-                    ceilingY = boardTopPaddingPx + bubbleDiameterPx * 0.2f
+                    boardStartPadding = boardStartPadding,
+                    ceilingY = boardTopPaddingPx + bubbleDiameterPx * 0.1f 
                 )
             )
         }
@@ -264,7 +263,15 @@ fun LevelScreen(
             )
         }
 
-        GameTopBar(score = score, bestScore = highScore, coins = coins, timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, onSettingsClick = { viewModel.togglePause() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding())
+        GameTopBar(
+            score = score, 
+            bestScore = highScore, 
+            coins = coins, 
+            timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null,
+            shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null,
+            onSettingsClick = { viewModel.togglePause() }, 
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()
+        )
 
         if (showQuickShop) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
@@ -284,12 +291,24 @@ fun LevelScreen(
         }
 
         if (gameState == GameState.IDLE) {
+            val title = when(viewModel.gameMode) {
+                GameMode.ADVENTURE -> "NIVEL ${(viewModel as? AdventureViewModel)?.currentLevelId ?: 1}"
+                GameMode.TIME_ATTACK -> "CONTRA TIEMPO"
+                else -> "MODO CLÁSICO"
+            }
+            
+            val description = when(viewModel.gameMode) {
+                GameMode.ADVENTURE -> "¡Tienes ${(viewModel as? AdventureViewModel)?.shotsRemaining ?: 0} movimientos para limpiar el tablero!"
+                GameMode.TIME_ATTACK -> "¡Tienes 60 segundos! Si el tiempo se acaba, caerán 3 filas nuevas."
+                else -> "Explota burbujas y evita que lleguen a la línea roja."
+            }
+
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))) {
                     Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = if(viewModel.gameMode == GameMode.TIME_ATTACK) "CONTRA TIEMPO" else "MODO CLÁSICO", style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
+                        Text(text = title, style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
                         Spacer(Modifier.height(12.dp))
-                        Text(text = if(viewModel.gameMode == GameMode.TIME_ATTACK) "¡Tienes 60 segundos! Si el tiempo se acaba, caerán 3 filas nuevas." else "Explota burbujas y evita que lleguen a la línea roja.", color = Color.White.copy(alpha = 0.8f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(text = description, color = Color.White.copy(alpha = 0.8f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         Spacer(Modifier.height(24.dp))
                         Button(onClick = { viewModel.startGame() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) { Text("¡EMPEZAR!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black) }
                     }
@@ -297,15 +316,31 @@ fun LevelScreen(
             }
         }
 
-        if (isPaused && gameState == GameState.PLAYING) OverlayMenu(title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }, showVolume = true, volume = volumeSlider, onVolumeChange = { volumeSlider = it; viewModel.setSfxVolume(it); soundManager.refreshSettings() })
+        if (isPaused && gameState == GameState.PLAYING) {
+            OverlayMenu(
+                title = "PAUSA", 
+                onContinue = { viewModel.togglePause() }, 
+                onRestart = { viewModel.restartGame() }, 
+                onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }, 
+                showVolume = true, 
+                volume = volumeSlider, 
+                onVolumeChange = { newVal -> 
+                    volumeSlider = newVal
+                    viewModel.setSfxVolume(newVal)
+                    soundManager.refreshSettings() 
+                }
+            )
+        }
+        
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
                 title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER",
                 onContinue = null,
                 onRestart = { viewModel.restartGame() },
-                onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() },
+                onExit = { onMenuClick() },
                 score = score,
                 isWin = gameState == GameState.WON,
+                isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 onRedeemCoins = if(!hasRedeemedCoins) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null,
                 onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } }
             )
@@ -323,7 +358,20 @@ fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> U
 }
 
 @Composable
-fun OverlayMenu(title: String, onContinue: (() -> Unit)? = null, onRestart: () -> Unit, onExit: () -> Unit, score: Int? = null, isWin: Boolean = false, showVolume: Boolean = false, volume: Float = 0f, onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null, onShowAd: (() -> Unit)? = null) {
+fun OverlayMenu(
+    title: String, 
+    onContinue: (() -> Unit)? = null, 
+    onRestart: () -> Unit, 
+    onExit: () -> Unit, 
+    score: Int? = null, 
+    isWin: Boolean = false, 
+    showVolume: Boolean = false, 
+    volume: Float = 0f, 
+    onVolumeChange: (Float) -> Unit = {}, 
+    onRedeemCoins: (() -> Unit)? = null, 
+    onShowAd: (() -> Unit)? = null,
+    isAdventure: Boolean = false
+) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             Text(text = title, style = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Black, color = if (isWin) Color(0xFFFFD700) else if (title == "PAUSA") Color.White else Color(0xFFFF4D4D), letterSpacing = 2.sp, shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f)))
@@ -336,7 +384,22 @@ fun OverlayMenu(title: String, onContinue: (() -> Unit)? = null, onRestart: () -
             onContinue?.let { action -> Box(modifier = Modifier.width(260.dp).height(64.dp).clip(RoundedCornerShape(50)).background(Color(0xFF64FFDA)).clickable { action() }, contentAlignment = Alignment.Center) { Text("CONTINUAR", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E))) }; Spacer(Modifier.height(24.dp)) }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(2.dp, Color.White, CircleShape).clickable { onRestart() }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Refresh, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
-                Spacer(Modifier.width(40.dp)); Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color.Red.copy(alpha = 0.2f)).border(2.dp, Color.White, CircleShape).clickable { onExit() }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Home, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
+                Spacer(Modifier.width(40.dp))
+                
+                val exitBgColor = if (isAdventure) Color(0xFF64FFDA).copy(alpha = 0.2f) else Color.Red.copy(alpha = 0.2f)
+                val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
+                
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(exitBgColor)
+                        .border(2.dp, Color.White, CircleShape)
+                        .clickable { onExit() }, 
+                    contentAlignment = Alignment.Center
+                ) { 
+                    Icon(exitIcon, null, tint = Color.White, modifier = Modifier.size(32.dp)) 
+                }
             }
         }
     }

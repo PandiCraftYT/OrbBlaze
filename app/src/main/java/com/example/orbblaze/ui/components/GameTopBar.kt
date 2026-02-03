@@ -27,7 +27,8 @@ fun GameTopBar(
     score: Int,
     bestScore: Int,
     coins: Int,
-    timeLeft: Int? = null, // ✅ NUEVO: Opcional
+    timeLeft: Int? = null,
+    shotsLeft: Int? = null, // ✅ NUEVO: Para modo aventura
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -52,9 +53,21 @@ fun GameTopBar(
             Text(text = "$coins", style = TextStyle(color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold))
         }
 
-        // CENTRO: MOSTRAR TIEMPO O SCORE
+        // CENTRO: DINÁMICO (TIEMPO, TIROS O SCORE)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (timeLeft != null) {
+            if (shotsLeft != null) {
+                // ✅ VISUALIZACIÓN PARA MODO AVENTURA
+                Text("TIROS", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
+                Text(
+                    text = "$shotsLeft", 
+                    style = TextStyle(
+                        color = if (shotsLeft <= 3) Color(0xFFFF4D4D) else Color(0xFF64FFDA), 
+                        fontSize = 26.sp, 
+                        fontWeight = FontWeight.Black, 
+                        shadow = Shadow(color = Color.Black, blurRadius = 4f)
+                    )
+                )
+            } else if (timeLeft != null) {
                 Text("TIEMPO", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
                 Text(text = "$timeLeft s", style = TextStyle(color = if (timeLeft < 10) Color.Red else Color(0xFF64FFDA), fontSize = 24.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
             } else {

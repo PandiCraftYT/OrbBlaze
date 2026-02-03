@@ -114,7 +114,10 @@ fun AppNavigation(
             LevelScreen(
                 viewModel = adventureVm,
                 soundManager = soundManager,
-                onMenuClick = { navController.navigate("menu") { popUpTo("menu") { inclusive = true } } },
+                onMenuClick = { 
+                    // ✅ Ahora vuelve al mapa de aventura en lugar de al menú principal
+                    navController.popBackStack() 
+                },
                 onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward -> 
                     activity?.let { adsManager.showRewardedAd(it, onReward) }

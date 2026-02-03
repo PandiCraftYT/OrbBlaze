@@ -18,7 +18,7 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         private set
 
     init {
-        changeGameMode(GameMode.CLASSIC)
+        changeGameMode(GameMode.ADVENTURE) // ✅ Cambiado de CLASSIC a ADVENTURE
     }
 
     fun loadAdventureLevel(levelId: Int) {
@@ -55,11 +55,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         previewBubbleColor = generateSmartColor()
     }
 
-    /**
-     * ✅ Generador Inteligente:
-     * Solo devuelve colores que existen en el tablero para que el nivel
-     * sea un reto de habilidad y no de suerte.
-     */
     private fun generateSmartColor(): BubbleColor {
         val availableColors = bubblesByPosition.values
             .map { it.color }
@@ -69,15 +64,12 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         return if (availableColors.isNotEmpty()) {
             availableColors.random()
         } else {
-            // Si el tablero está casi vacío, colores básicos aleatorios
             BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
         }
     }
 
     override fun onShoot(spawnX: Float, spawnY: Float) {
-        // Antes de disparar, preparamos el siguiente color inteligentemente
         super.onShoot(spawnX, spawnY)
-        // Sobrescribimos el preview que genera la clase base
         previewBubbleColor = generateSmartColor()
     }
 
@@ -92,7 +84,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
             gameState = GameState.LOST
             soundEvent = SoundType.LOSE
         } else {
-            // Aseguramos que el siguiente proyectil siempre sea útil
             if (!bubblesByPosition.values.any { it.color == nextBubbleColor }) {
                 nextBubbleColor = generateSmartColor()
             }
