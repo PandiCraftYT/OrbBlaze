@@ -65,11 +65,11 @@ object AdventureLevels {
         ), LevelObjective.ClearBoard(), 3000, 5000, 7000),
 
         Level(10, AdventureZone.CAVE, 35, listOf(
-            "R R R R R R R",
-            "B B     B B",
-            "G G G G G G G",
-            "P P     P P",
-            "Y Y Y Y Y Y Y"
+            "R R R R R R",
+            "B B    B B",
+            "G G G G G G",
+            "P P    P P",
+            "Y Y Y Y Y Y"
         ), LevelObjective.ReachScore(8000, "¡Sal de la cueva! (8000 pts)"), 5000, 8000, 10000),
 
         // ==========================================
@@ -214,7 +214,7 @@ object AdventureLevels {
         ), LevelObjective.CollectColor('P', 6), 11000, 16000, 22000),
 
         Level(28, AdventureZone.SPACE, 30, listOf(
-            "G G G G G G G",
+            "  G G G G G",
             " R R R R R R ",
             "  Y Y Y Y Y  ",
             "   B B B B   ",
@@ -230,11 +230,11 @@ object AdventureLevels {
         ), LevelObjective.ReachScore(25000, "¡Velocidad luz!"), 12000, 18000, 24000),
 
         Level(30, AdventureZone.SPACE, 40, listOf( // FINAL BOSS
-            "R B G Y P C R",
+            "  B G Y P C ",
             " C P Y G B R ",
-            "R B G Y P C R",
+            "  B G Y P C ",
             " C P Y G B R ",
-            "R B G Y P C R",
+            "  B G Y P C ",
             " C P Y G B R "
         ), LevelObjective.ClearBoard("¡EL ORIGEN DEL UNIVERSO!"), 20000, 30000, 40000)
     )

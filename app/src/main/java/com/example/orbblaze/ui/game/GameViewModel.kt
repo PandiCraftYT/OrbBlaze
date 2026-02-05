@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.*
 
 enum class GameState { IDLE, PLAYING, WON, LOST }
-enum class GameMode { CLASSIC, TIME_ATTACK, ADVENTURE } // ✅ Añadido ADVENTURE
+enum class GameMode { CLASSIC, TIME_ATTACK, ADVENTURE } 
 enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP }
 
 open class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -213,7 +213,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         isFireballQueued = false; particles.clear(); floatingTexts.clear(); timerJob?.cancel()
     }
 
-    fun restartGame() { loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6) }
+    // ✅ Añadimos 'open' para permitir que AdventureViewModel la sobrescriba
+    open fun restartGame() { loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6) }
     
     fun swapBubbles() { 
         if (activeProjectile == null && gameState == GameState.PLAYING && !isPaused) { 
@@ -248,7 +249,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         val angleRad = Math.toRadians(shooterAngle.toDouble()); val speed = 40f
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
         isFireballQueued = false; nextBubbleColor = previewBubbleColor; previewBubbleColor = generateProjectileColor()
-        startPhysicsLoop(0f) // El ancho se tomará de metrics en el loop
+        startPhysicsLoop(0f)
     }
 
     protected fun generateBoardBubbleColor() = BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
@@ -275,14 +276,13 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // --- LÓGICA DE FÍSICAS (SIN TOCAR) ---
     protected fun startPhysicsLoop(ignoredWidth: Float) {
         viewModelScope.launch {
             val physicsSteps = 10
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
                 val m = metrics ?: break
-                val realWidth = m.screenWidth // ✅ USAMOS EL ANCHO REAL PASADO DESDE LA UI
+                val realWidth = m.screenWidth 
                 var currentP = activeProjectile ?: break
                 var collisionDetected = false
 
@@ -291,7 +291,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                     val stepVx = currentP.velocityX / physicsSteps.toFloat(); val stepVy = currentP.velocityY / physicsSteps.toFloat()
                     var nextX = currentP.x + stepVx; var nextY = currentP.y + stepVy; var nextVx = currentP.velocityX
                     
-                    // ✅ REBOTE EN EL BORDE FÍSICO REAL (0 y realWidth)
                     if (nextX - bubbleRadius <= 0f || nextX + bubbleRadius >= realWidth) {
                         if (currentP.isFireball) { activeProjectile = null; spawnExplosion(nextX, nextY, BubbleColor.RED); return@repeat }
                         nextX = if (nextX - bubbleRadius <= 0f) bubbleRadius else realWidth - bubbleRadius
