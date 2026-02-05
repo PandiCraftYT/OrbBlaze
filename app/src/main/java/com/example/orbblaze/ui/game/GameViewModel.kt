@@ -248,7 +248,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         val angleRad = Math.toRadians(shooterAngle.toDouble()); val speed = 40f
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
         isFireballQueued = false; nextBubbleColor = previewBubbleColor; previewBubbleColor = generateProjectileColor()
-        startPhysicsLoop(metrics?.horizontalSpacing?.times(columnsCount) ?: 1080f)
+        startPhysicsLoop(0f) // El ancho se tomará de metrics en el loop
     }
 
     protected fun generateBoardBubbleColor() = BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
@@ -276,23 +276,28 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     // --- LÓGICA DE FÍSICAS (SIN TOCAR) ---
-    protected fun startPhysicsLoop(screenWidth: Float) {
+    protected fun startPhysicsLoop(ignoredWidth: Float) {
         viewModelScope.launch {
             val physicsSteps = 10
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
                 val m = metrics ?: break
+                val realWidth = m.screenWidth // ✅ USAMOS EL ANCHO REAL PASADO DESDE LA UI
                 var currentP = activeProjectile ?: break
                 var collisionDetected = false
+
                 repeat(physicsSteps) {
                     if (collisionDetected) return@repeat
                     val stepVx = currentP.velocityX / physicsSteps.toFloat(); val stepVy = currentP.velocityY / physicsSteps.toFloat()
                     var nextX = currentP.x + stepVx; var nextY = currentP.y + stepVy; var nextVx = currentP.velocityX
-                    if (nextX - bubbleRadius <= 0f || nextX + bubbleRadius >= screenWidth) {
+                    
+                    // ✅ REBOTE EN EL BORDE FÍSICO REAL (0 y realWidth)
+                    if (nextX - bubbleRadius <= 0f || nextX + bubbleRadius >= realWidth) {
                         if (currentP.isFireball) { activeProjectile = null; spawnExplosion(nextX, nextY, BubbleColor.RED); return@repeat }
-                        nextX = if (nextX - bubbleRadius <= 0f) bubbleRadius else screenWidth - bubbleRadius
+                        nextX = if (nextX - bubbleRadius <= 0f) bubbleRadius else realWidth - bubbleRadius
                         nextVx = -currentP.velocityX
                     }
+
                     if (currentP.isFireball) {
                         checkFireballDestruction(nextX, nextY)
                         if (nextY < -bubbleRadius * 2) { activeProjectile = null; return@repeat }

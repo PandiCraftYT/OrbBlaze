@@ -153,11 +153,16 @@ fun LevelScreen(
     ) {
         val screenWidth = constraints.maxWidth.toFloat()
         
-        // ✅ AJUSTE DE MÉTRICAS PARA QUE LAS BURBUJAS SE TOQUEN Y QUEDEN AL MISMO NIVEL
-        val bubbleDiameterPx = screenWidth / 10.0f 
+        // Margen mínimo para que las burbujas queden bien contenidas
+        val sideMarginPx = with(density) { 4.dp.toPx() }
+        val playableWidth = screenWidth - (sideMarginPx * 2)
+
+        val bubbleDiameterPx = playableWidth / 10.5f 
         val horizontalSpacingPx = bubbleDiameterPx
-        val boardStartPadding = bubbleDiameterPx / 2f
-        val boardTopPaddingPx = with(density) { 170.dp.toPx() }
+        val boardStartPadding = sideMarginPx + (bubbleDiameterPx * 0.5f)
+        
+        val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val boardTopPaddingPx = with(density) { statusBarHeightPx.toPx() + (104).dp.toPx() }
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
 
         LaunchedEffect(screenWidth, boardTopPaddingPx) {
@@ -168,7 +173,8 @@ fun LevelScreen(
                     verticalSpacing = verticalSpacingPx,
                     boardTopPadding = boardTopPaddingPx,
                     boardStartPadding = boardStartPadding,
-                    ceilingY = boardTopPaddingPx + bubbleDiameterPx * 0.1f 
+                    ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f),
+                    screenWidth = screenWidth
                 )
             )
         }
@@ -184,13 +190,12 @@ fun LevelScreen(
                 var current = Offset(pivotX + (sin(angleRad) * barrelLengthPx).toFloat(), pivotY - (cos(angleRad) * barrelLengthPx).toFloat())
                 var remaining = size.height * 0.9f
 
+                // ✅ REBOTE DE LA MIRA EXACTO EN EL BORDE FÍSICO (0 y Width)
                 while (remaining > 0f) {
-                    val tToWall = when {
-                        dirX > 0f -> (size.width - bubbleDiameterPx/2 - current.x) / dirX
-                        dirX < 0f -> (bubbleDiameterPx/2 - current.x) / dirX
-                        else -> Float.POSITIVE_INFINITY
-                    }
-                    if (tToWall.isInfinite() || tToWall.isNaN() || tToWall >= remaining) {
+                    val bounceX = if (dirX > 0f) size.width else 0f
+                    val tToWall = (bounceX - current.x) / dirX
+                    
+                    if (tToWall <= 0 || tToWall >= remaining) {
                         drawLine(Color.White.copy(0.5f), current, Offset(current.x + dirX * remaining, current.y + dirY * remaining), strokeWidth = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f), cap = StrokeCap.Round)
                         break
                     }
@@ -202,8 +207,8 @@ fun LevelScreen(
 
             drawLine(
                 color = Color.Red.copy(alpha = dangerAlpha), 
-                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
-                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
+                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * dangerLineRow),
+                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * dangerLineRow),
                 strokeWidth = 8f, 
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
             )

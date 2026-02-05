@@ -52,5 +52,6 @@ data class BoardMetricsPx(
     val verticalSpacing: Float,
     val boardTopPadding: Float,
     val boardStartPadding: Float,
-    val ceilingY: Float
+    val ceilingY: Float,
+    val screenWidth: Float = 1080f // ✅ Añadido para rebotes precisos
 )
