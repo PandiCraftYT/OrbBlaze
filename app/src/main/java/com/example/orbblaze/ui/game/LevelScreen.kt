@@ -31,6 +31,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -176,8 +177,9 @@ fun LevelScreen(
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = sideMarginPx + (bubbleDiameterPx * 0.5f)
         
-        val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        val boardTopPaddingPx = with(density) { statusBarHeightPx.toPx() + 104.dp.toPx() } 
+        // CORRECCIÓN: Padding sincronizado con la lógica del juego
+        val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
+        val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
 
         LaunchedEffect(totalWidth, boardTopPaddingPx) {
@@ -219,10 +221,11 @@ fun LevelScreen(
                 }
             }
 
+            // LÍNEA ROJA SINCRONIZADA EXACTAMENTE EN FILA 13
             drawLine(
                 color = Color.Red.copy(alpha = dangerAlpha), 
-                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
-                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
+                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * 13), 
+                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * 13), 
                 strokeWidth = 8f, 
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
             )
@@ -268,7 +271,6 @@ fun LevelScreen(
             }
         }
 
-        // --- CAPA DEL PANDA Y CAÑÓN (BAJO TODO) ---
         Box(modifier = Modifier.align(Alignment.BottomCenter)) {
             PandaShooter(
                 angle = viewModel.shooterAngle,
@@ -294,7 +296,7 @@ fun LevelScreen(
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
         )
 
-        // DIÁLOGOS DE ESTADO (QUICK SHOP, PAUSE, IDLE, ETC)
+        // DIÁLOGOS Y TUTORIAL (SIN CAMBIOS)
         if (showQuickShop) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
@@ -334,10 +336,8 @@ fun LevelScreen(
         
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
-                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", 
-                onContinue = null, 
-                onRestart = { viewModel.restartGame() }, 
-                onExit = { viewModel.restartGame(); onMenuClick() }, // ✅ SE REINICIA AL SALIR
+                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() }, 
+                onExit = { viewModel.restartGame(); onMenuClick() },
                 score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 onRedeemCoins = if(!hasRedeemedCoins) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null,
                 onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } }

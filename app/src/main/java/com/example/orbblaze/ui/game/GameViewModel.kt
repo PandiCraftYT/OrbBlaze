@@ -30,7 +30,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     protected val engine = LevelEngine()
     protected val matchFinder = MatchFinder()
     
-    private var _settingsManager: SettingsManager? = null
+    protected var _settingsManager: SettingsManager? = null
     protected val settingsManager: SettingsManager get() = _settingsManager!!
 
     var bubblesByPosition by mutableStateOf<Map<GridPosition, Bubble>>(emptyMap())
@@ -106,7 +106,9 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     val particles = mutableStateListOf<GameParticle>()
     val floatingTexts = mutableStateListOf<FloatingText>()
 
-    protected var metrics: BoardMetricsPx? = null
+    var metrics: BoardMetricsPx? = null
+        protected set
+        
     private var particleIdCounter = 0L
     private var textIdCounter = 0L
 
@@ -281,7 +283,11 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
                 val m = metrics ?: break
-                val realWidth = m.screenWidth 
+                
+                // ✅ REBOTE AJUSTADO A LOS MÁRGENES DEL TABLERO
+                val leftWall = m.boardStartPadding - bubbleRadius
+                val rightWall = m.screenWidth - (m.boardStartPadding - bubbleRadius)
+                
                 var currentP = activeProjectile ?: break
                 var collisionDetected = false
 
@@ -290,9 +296,10 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                     val stepVx = currentP.velocityX / physicsSteps.toFloat(); val stepVy = currentP.velocityY / physicsSteps.toFloat()
                     var nextX = currentP.x + stepVx; var nextY = currentP.y + stepVy; var nextVx = currentP.velocityX
                     
-                    if (nextX - bubbleRadius <= 0f || nextX + bubbleRadius >= realWidth) {
+                    // REBOTE EN PAREDES LATERALES REALES
+                    if (nextX - bubbleRadius <= leftWall || nextX + bubbleRadius >= rightWall) {
                         if (currentP.isFireball) { activeProjectile = null; spawnExplosion(nextX, nextY, BubbleColor.RED); return@repeat }
-                        nextX = if (nextX - bubbleRadius <= 0f) bubbleRadius else realWidth - bubbleRadius
+                        nextX = if (nextX - bubbleRadius <= leftWall) leftWall + bubbleRadius else rightWall - bubbleRadius
                         nextVx = -currentP.velocityX
                     }
 
@@ -361,6 +368,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     private fun snapToGrid(x: Float, y: Float, color: BubbleColor) {
         val m = metrics ?: return
         val estimatedPos = HexGridHelper.estimateGridPosition(x, y, m, rowsDroppedCount)
+        
+        // CORRECCIÓN: Búsqueda estricta de huecos libres cercanos
         val finalPos = (HexGridHelper.getNeighbors(estimatedPos, rowsDroppedCount) + estimatedPos)
             .filter { it.row >= 0 && it.col >= 0 && it.col < columnsCount && !bubblesByPosition.containsKey(it) }
             .minByOrNull { pos -> val (cx, cy) = getBubbleCenter(pos); (x - cx).pow(2) + (y - cy).pow(2) } ?: estimatedPos
@@ -418,8 +427,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     protected fun checkGameConditions(m: BoardMetricsPx) {
         if (bubblesByPosition.isEmpty()) { gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100) }
         
-        // ✅ CORRECCIÓN: La línea visible está en la fila 13.
-        // Perdemos cuando la parte inferior de cualquier burbuja llega o cruza esa fila.
         val dangerY = m.boardTopPadding + (m.verticalSpacing * 13)
         if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { 
             gameState = GameState.LOST 
