@@ -6,23 +6,15 @@ class ClassicViewModel(application: Application) : GameViewModel(application) {
 
     init {
         changeGameMode(GameMode.CLASSIC)
-        loadLevel(5)
+        loadLevel(5) // Iniciamos con 6 filas de burbujas
     }
 
     override fun onPostSnap() {
         shotsFiredCount++
         
-        // --- LÓGICA DE DIFICULTAD DINÁMICA ---
-        // Si el jugador ya ha hecho muchos tiros (p. ej. > 25), 
-        // aumentamos el margen de tiros antes de que bajen filas para que sea más fácil limpiar.
-        val dynamicThreshold = if (shotsFiredCount > 25) 12 else 8
-        
-        if (shotsFiredCount % dynamicThreshold == 0) {
-            // En lugar de bajar siempre, comprobamos si el tablero está casi lleno
-            // para no castigar injustamente.
-            addRows(1)
-        } else {
-            metrics?.let { checkGameConditions(it) }
-        }
+        // --- MODO LIBRE ---
+        // Eliminamos la lógica de addRows.
+        // Ahora el jugador puede disparar infinitamente sin que bajen nuevas filas.
+        metrics?.let { checkGameConditions(it) }
     }
 }

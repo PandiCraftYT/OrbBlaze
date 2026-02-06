@@ -213,7 +213,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         isFireballQueued = false; particles.clear(); floatingTexts.clear(); timerJob?.cancel()
     }
 
-    // ✅ Añadimos 'open' para permitir que AdventureViewModel la sobrescriba
     open fun restartGame() { loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6) }
     
     fun swapBubbles() { 
@@ -418,8 +417,14 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected fun checkGameConditions(m: BoardMetricsPx) {
         if (bubblesByPosition.isEmpty()) { gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100) }
-        val dangerY = m.boardTopPadding + (m.verticalSpacing * 12)
-        if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { gameState = GameState.LOST; soundEvent = SoundType.LOSE }
+        
+        // ✅ CORRECCIÓN: La línea visible está en la fila 13.
+        // Perdemos cuando la parte inferior de cualquier burbuja llega o cruza esa fila.
+        val dangerY = m.boardTopPadding + (m.verticalSpacing * 13)
+        if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { 
+            gameState = GameState.LOST 
+            soundEvent = SoundType.LOSE 
+        }
     }
 
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {

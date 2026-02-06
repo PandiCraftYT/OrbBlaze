@@ -23,22 +23,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.BoardMetricsPx
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.components.*
 import com.example.orbblaze.ui.theme.*
+import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -55,6 +61,7 @@ fun LevelScreen(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
 
     val bubbles = viewModel.bubblesByPosition
     val activeProjectile = viewModel.activeProjectile
@@ -79,24 +86,34 @@ fun LevelScreen(
     var volumeSlider by remember { mutableFloatStateOf(1.0f) }
     var isAiming by remember { mutableStateOf(false) }
 
+    // --- RECTÁNGULOS PARA EL TUTORIAL ---
+    var shopRect by remember { mutableStateOf<Rect?>(null) }
+    var cannonRect by remember { mutableStateOf<Rect?>(null) }
+    var nextBubbleRect by remember { mutableStateOf<Rect?>(null) }
+    var scoreRect by remember { mutableStateOf<Rect?>(null) }
+
+    val settingsManager = remember { SettingsManager(context) }
+    val tutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
+    var showTutorial by remember { mutableStateOf(false) }
+
+    LaunchedEffect(tutorialCompleted, viewModel.gameMode) {
+        if (!tutorialCompleted && viewModel.gameMode == GameMode.CLASSIC) {
+            showTutorial = true
+        }
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
     val dangerAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f, 
-        targetValue = 0.8f, 
-        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), 
-        label = "danger"
+        initialValue = 0.2f, targetValue = 0.8f, 
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger"
     )
     val masterRainbowRotation by infiniteTransition.animateFloat(
-        initialValue = 0f, 
-        targetValue = 360f, 
-        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), 
-        label = "rotation"
+        initialValue = 0f, targetValue = 360f, 
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "rotation"
     )
     val shakeOffset by infiniteTransition.animateFloat(
-        initialValue = -2f, 
-        targetValue = 2f, 
-        animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), 
-        label = "shake"
+        initialValue = -2f, targetValue = 2f, 
+        animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake"
     )
 
     val dangerLineRow = 13
@@ -117,13 +134,10 @@ fun LevelScreen(
     LaunchedEffect(soundEvent) { soundEvent?.let { soundManager.play(it); viewModel.clearSoundEvent() } }
     LaunchedEffect(vibrationEvent) { if (vibrationEvent) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.clearVibrationEvent() } }
 
-    val barrelLengthPx = with(density) { 95.dp.toPx() }
-    val pivotHeightPx = with(density) { 160.dp.toPx() }
-
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
-            .pointerInput(gameState, isPaused, showQuickShop) {
-                if (gameState != GameState.PLAYING || isPaused || showQuickShop) return@pointerInput
+            .pointerInput(gameState, isPaused, showQuickShop, showTutorial) {
+                if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(); val startPos = down.position
                     val centerX = size.width / 2; val pandaTopY = size.height - 220.dp.toPx()
@@ -143,6 +157,9 @@ fun LevelScreen(
                             }
                         } while (event.changes.any { it.pressed })
                         isAiming = false
+                        
+                        val barrelLengthPx = 95.dp.toPx()
+                        val pivotHeightPx = 160.dp.toPx()
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                         val pivotX = size.width / 2f
                         val pivotY = size.height - pivotHeightPx
@@ -151,21 +168,19 @@ fun LevelScreen(
                 }
             }
     ) {
-        val screenWidth = constraints.maxWidth.toFloat()
-        
-        // Margen mínimo para que las burbujas queden bien contenidas
+        val totalWidth = constraints.maxWidth.toFloat()
         val sideMarginPx = with(density) { 4.dp.toPx() }
-        val playableWidth = screenWidth - (sideMarginPx * 2)
+        val playableWidth = totalWidth - (sideMarginPx * 2)
 
-        val bubbleDiameterPx = playableWidth / 10.5f 
+        val bubbleDiameterPx = playableWidth / 11f 
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = sideMarginPx + (bubbleDiameterPx * 0.5f)
         
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        val boardTopPaddingPx = with(density) { statusBarHeightPx.toPx() + (104).dp.toPx() }
+        val boardTopPaddingPx = with(density) { statusBarHeightPx.toPx() + 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
 
-        LaunchedEffect(screenWidth, boardTopPaddingPx) {
+        LaunchedEffect(totalWidth, boardTopPaddingPx) {
             viewModel.setBoardMetrics(
                 BoardMetricsPx(
                     horizontalSpacing = horizontalSpacingPx,
@@ -174,7 +189,7 @@ fun LevelScreen(
                     boardTopPadding = boardTopPaddingPx,
                     boardStartPadding = boardStartPadding,
                     ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f),
-                    screenWidth = screenWidth
+                    screenWidth = totalWidth
                 )
             )
         }
@@ -182,19 +197,18 @@ fun LevelScreen(
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha), size = size)
 
+            val pivotX = size.width / 2f
+            val pivotY = size.height - 160.dp.toPx()
+
             if (isAiming) {
                 val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                 var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
-                val pivotX = size.width / 2f
-                val pivotY = size.height - pivotHeightPx
-                var current = Offset(pivotX + (sin(angleRad) * barrelLengthPx).toFloat(), pivotY - (cos(angleRad) * barrelLengthPx).toFloat())
+                var current = Offset(pivotX + (sin(angleRad) * 95.dp.toPx()).toFloat(), pivotY - (cos(angleRad) * 95.dp.toPx()).toFloat())
                 var remaining = size.height * 0.9f
 
-                // ✅ REBOTE DE LA MIRA EXACTO EN EL BORDE FÍSICO (0 y Width)
                 while (remaining > 0f) {
                     val bounceX = if (dirX > 0f) size.width else 0f
                     val tToWall = (bounceX - current.x) / dirX
-                    
                     if (tToWall <= 0 || tToWall >= remaining) {
                         drawLine(Color.White.copy(0.5f), current, Offset(current.x + dirX * remaining, current.y + dirY * remaining), strokeWidth = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f), cap = StrokeCap.Round)
                         break
@@ -207,8 +221,8 @@ fun LevelScreen(
 
             drawLine(
                 color = Color.Red.copy(alpha = dangerAlpha), 
-                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * dangerLineRow),
-                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * dangerLineRow),
+                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
+                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * dangerLineRow), 
                 strokeWidth = 8f, 
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
             )
@@ -254,6 +268,7 @@ fun LevelScreen(
             }
         }
 
+        // --- CAPA DEL PANDA Y CAÑÓN (BAJO TODO) ---
         Box(modifier = Modifier.align(Alignment.BottomCenter)) {
             PandaShooter(
                 angle = viewModel.shooterAngle,
@@ -264,56 +279,43 @@ fun LevelScreen(
                 shotTick = viewModel.shotTick,
                 joyTick = viewModel.joyTick,
                 rainbowRotation = masterRainbowRotation,
-                onShopClick = { showQuickShop = true }
+                onShopClick = { showQuickShop = true },
+                onShopPositioned = { shopRect = it },
+                onCannonPositioned = { cannonRect = it },
+                onNextBubblePositioned = { nextBubbleRect = it }
             )
         }
 
         GameTopBar(
-            score = score, 
-            bestScore = highScore, 
-            coins = coins, 
+            score = score, bestScore = highScore, coins = coins, 
             timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null,
             shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null,
             onSettingsClick = { viewModel.togglePause() }, 
-            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
         )
 
+        // DIÁLOGOS DE ESTADO (QUICK SHOP, PAUSE, IDLE, ETC)
         if (showQuickShop) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
-                Surface(modifier = Modifier.width(280.dp).padding(16.dp), shape = RoundedCornerShape(24.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.3f))) {
-                    Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("OBJETOS TÁCTICOS", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                        Spacer(Modifier.height(16.dp))
-                        ItemRow("BOLA DE FUEGO", "Atraviesa todo", 150, "🔥") {
-                            viewModel.buyFireball()
-                            showQuickShop = false
-                        }
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
+                Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
+                    Column(modifier = Modifier.background(Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("OBJETOS TÁCTICOS", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
                         Spacer(Modifier.height(20.dp))
-                        TextButton(onClick = { showQuickShop = false }) { Text("CERRAR", color = Color(0xFF64FFDA), fontWeight = FontWeight.Bold) }
+                        ItemRow("BOLA DE FUEGO", "Atraviesa todo", 150, "🔥") { viewModel.buyFireball(); showQuickShop = false }
+                        Spacer(Modifier.height(24.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Color(0xFF1A237E)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) { Text("CERRAR", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp) }
                     }
                 }
             }
         }
 
-        if (gameState == GameState.IDLE) {
-            val title = when(viewModel.gameMode) {
-                GameMode.ADVENTURE -> "NIVEL ${(viewModel as? AdventureViewModel)?.currentLevelId ?: 1}"
-                GameMode.TIME_ATTACK -> "CONTRA TIEMPO"
-                else -> "MODO CLÁSICO"
-            }
-            
-            val description = when(viewModel.gameMode) {
-                GameMode.ADVENTURE -> "¡Tienes ${(viewModel as? AdventureViewModel)?.shotsRemaining ?: 0} movimientos para limpiar el tablero!"
-                GameMode.TIME_ATTACK -> "¡Tienes 60 segundos! Si el tiempo se acaba, caerán 3 filas nuevas."
-                else -> "Explota burbujas y evita que lleguen a la línea roja."
-            }
-
+        if (gameState == GameState.IDLE && !showTutorial) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))) {
                     Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = title, style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
+                        Text(text = "MODO CLÁSICO", style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
                         Spacer(Modifier.height(12.dp))
-                        Text(text = description, color = Color.White.copy(alpha = 0.8f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(text = "Explota burbujas y evita que lleguen a la línea roja.", color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
                         Spacer(Modifier.height(24.dp))
                         Button(onClick = { viewModel.startGame() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) { Text("¡EMPEZAR!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black) }
                     }
@@ -323,31 +325,31 @@ fun LevelScreen(
 
         if (isPaused && gameState == GameState.PLAYING) {
             OverlayMenu(
-                title = "PAUSA", 
-                onContinue = { viewModel.togglePause() }, 
-                onRestart = { viewModel.restartGame() }, 
+                title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, 
                 onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }, 
-                showVolume = true, 
-                volume = volumeSlider, 
-                onVolumeChange = { newVal -> 
-                    volumeSlider = newVal
-                    viewModel.setSfxVolume(newVal)
-                    soundManager.refreshSettings() 
-                }
+                showVolume = true, volume = volumeSlider, 
+                onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() }
             )
         }
         
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
-                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER",
-                onContinue = null,
-                onRestart = { viewModel.restartGame() },
-                onExit = { onMenuClick() },
-                score = score,
-                isWin = gameState == GameState.WON,
-                isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
+                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", 
+                onContinue = null, 
+                onRestart = { viewModel.restartGame() }, 
+                onExit = { viewModel.restartGame(); onMenuClick() }, // ✅ SE REINICIA AL SALIR
+                score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 onRedeemCoins = if(!hasRedeemedCoins) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null,
                 onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } }
+            )
+        }
+
+        if (showTutorial) {
+            TutorialDialog(shopRect = shopRect, cannonRect = cannonRect, nextBubbleRect = nextBubbleRect, scoreRect = scoreRect,
+                onComplete = {
+                    showTutorial = false
+                    coroutineScope.launch { settingsManager.setTutorialCompleted(true); viewModel.startGame() }
+                }
             )
         }
     }
@@ -355,10 +357,10 @@ fun LevelScreen(
 
 @Composable
 fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.1f)).clickable { onBuy() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(icon, fontSize = 24.sp); Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) { Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp); Text(desc, color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp) }
-        Surface(color = Color(0xFFFFD700), shape = RoundedCornerShape(50)) { Text("🪙 $price", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E)) }
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF1A237E).copy(alpha = 0.05f)).border(1.dp, Color(0xFF1A237E).copy(alpha = 0.1f), RoundedCornerShape(16.dp)).clickable { onBuy() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(icon, fontSize = 32.sp); Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) { Text(name, color = Color(0xFF1A237E), fontWeight = FontWeight.Bold, fontSize = 15.sp); Text(desc, color = Color(0xFF1A237E).copy(alpha = 0.5f), fontSize = 11.sp) }
+        Surface(color = Color(0xFFFFD700), shape = RoundedCornerShape(50)) { Text("🪙 $price", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E)) }
     }
 }
 
@@ -390,21 +392,9 @@ fun OverlayMenu(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(2.dp, Color.White, CircleShape).clickable { onRestart() }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Refresh, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
                 Spacer(Modifier.width(40.dp))
-                
                 val exitBgColor = if (isAdventure) Color(0xFF64FFDA).copy(alpha = 0.2f) else Color.Red.copy(alpha = 0.2f)
                 val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
-                
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(exitBgColor)
-                        .border(2.dp, Color.White, CircleShape)
-                        .clickable { onExit() }, 
-                    contentAlignment = Alignment.Center
-                ) { 
-                    Icon(exitIcon, null, tint = Color.White, modifier = Modifier.size(32.dp)) 
-                }
+                Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(exitBgColor).border(2.dp, Color.White, CircleShape).clickable { onExit() }, contentAlignment = Alignment.Center) { Icon(exitIcon, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
             }
         }
     }

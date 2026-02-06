@@ -22,6 +22,12 @@ class SettingsManager(private val context: Context) {
         val CURRENT_REWARD_DAY = intPreferencesKey("current_reward_day")
         val LAST_REWARD_CLAIM = longPreferencesKey("last_reward_claim")
         val ADVENTURE_PROGRESS = intPreferencesKey("adventure_progress")
+        val TUTORIAL_COMPLETED = booleanPreferencesKey("tutorial_completed") // ✅ NUEVO
+    }
+
+    val tutorialCompletedFlow: Flow<Boolean> = context.dataStore.data.map { it[TUTORIAL_COMPLETED] ?: false }
+    suspend fun setTutorialCompleted(completed: Boolean) {
+        context.dataStore.edit { it[TUTORIAL_COMPLETED] = completed }
     }
 
     // SFX Volume
