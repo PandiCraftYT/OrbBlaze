@@ -5,15 +5,21 @@ import android.app.Application
 class ClassicViewModel(application: Application) : GameViewModel(application) {
 
     init {
-        // ✅ Renombrado para evitar choque de firmas con el setter automático
         changeGameMode(GameMode.CLASSIC)
-        loadLevel(6) 
+        loadLevel(5)
     }
 
     override fun onPostSnap() {
         shotsFiredCount++
-        if (shotsFiredCount >= dropThreshold) {
-            shotsFiredCount = 0
+        
+        // --- LÓGICA DE DIFICULTAD DINÁMICA ---
+        // Si el jugador ya ha hecho muchos tiros (p. ej. > 25), 
+        // aumentamos el margen de tiros antes de que bajen filas para que sea más fácil limpiar.
+        val dynamicThreshold = if (shotsFiredCount > 25) 12 else 8
+        
+        if (shotsFiredCount % dynamicThreshold == 0) {
+            // En lugar de bajar siempre, comprobamos si el tablero está casi lleno
+            // para no castigar injustamente.
             addRows(1)
         } else {
             metrics?.let { checkGameConditions(it) }
