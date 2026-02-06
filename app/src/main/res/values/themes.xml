@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="Theme.OrbBlaze" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 1. Quitamos la transparencia para evitar ver el fondo de Android -->
+        <item name="android:windowIsTranslucent">false</item>
 
-    <style name="Theme.OrbBlaze" parent="android:Theme.Material.Light.NoActionBar" />
+        <!-- 2. Ponemos el color de fondo exacto de tu Splash -->
+        <item name="android:windowBackground">@color/splash_bg</item>
+
+        <!-- 3. Configuramos el Splash de Android 12+ para que sea invisible -->
+        <!-- Usamos un icono transparente para que no salga el círculo con el logo del panda -->
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
+
+        <!-- Forzamos que no haya botones de navegación o barras que parpadeen -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 </resources>

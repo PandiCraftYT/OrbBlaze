@@ -18,6 +18,7 @@ import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.*
 import com.example.orbblaze.ui.menu.MenuScreen
 import com.example.orbblaze.ui.menu.GameModesScreen
+import com.example.orbblaze.ui.menu.SplashScreen
 import com.example.orbblaze.ui.settings.SettingsScreen
 import com.example.orbblaze.ui.score.HighScoreScreen
 import com.example.orbblaze.ui.score.AchievementsScreen
@@ -87,7 +88,14 @@ fun AppNavigation(
         soundManager.refreshSettings()
     }
 
-    NavHost(navController = navController, startDestination = "menu") {
+    NavHost(navController = navController, startDestination = "splash") {
+        composable("splash") {
+            SplashScreen(onAnimationFinished = {
+                navController.navigate("menu") {
+                    popUpTo("splash") { inclusive = true }
+                }
+            })
+        }
         composable("menu") {
             MenuScreen(
                 onPlayClick = { navController.navigate("game") },
@@ -115,7 +123,6 @@ fun AppNavigation(
                 viewModel = adventureVm,
                 soundManager = soundManager,
                 onMenuClick = { 
-                    // ✅ Ahora vuelve al mapa de aventura en lugar de al menú principal
                     navController.popBackStack() 
                 },
                 onShopClick = { navController.navigate("shop") },
