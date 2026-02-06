@@ -12,10 +12,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.OrbBlaze">
 
-        <!-- ✅ AdMob App ID (Modo Prueba oficial de Google) -->
+        <!-- ✅ ID de Aplicación REAL de AdMob -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-3395921255182308~7550838173"/>
 
         <activity
             android:name=".MainActivity"

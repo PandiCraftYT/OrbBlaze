@@ -11,7 +11,8 @@ import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAdLoa
 class AdsManager(private val context: Context) {
 
     private var rewardedInterstitialAd: RewardedInterstitialAd? = null
-    private val adUnitId = "ca-app-pub-3940256099942544/5354046379" // ✅ ID de prueba oficial
+    // ✅ ID REAL obtenido de tu consola AdMob
+    private val adUnitId = "ca-app-pub-3395921255182308/8441248018" 
 
     init {
         MobileAds.initialize(context) { loadRewardedInterstitialAd() }
@@ -42,7 +43,7 @@ class AdsManager(private val context: Context) {
                 loadRewardedInterstitialAd() // Cargar el siguiente
             }
         } ?: run {
-            // Si no hay anuncio, intentar cargar uno para la próxima vez
+            // Si no hay anuncio cargado, intentamos cargar uno para la próxima
             loadRewardedInterstitialAd()
         }
     }
