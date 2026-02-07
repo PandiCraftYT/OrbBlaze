@@ -20,11 +20,20 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // ✅ Activa la minificación (R8) para reducir el peso
+            isMinifyEnabled = true
+            // ✅ Elimina recursos que no se utilizan
+            isShrinkResources = true
+            
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // Mantener desactivado en debug para compilaciones rápidas
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
     compileOptions {

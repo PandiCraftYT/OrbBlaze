@@ -1,21 +1,18 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Reglas específicas para OrbBlaze
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# AdMob: Evitar que R8 elimine clases necesarias de Google Play Services
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.ads.** { *; }
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Compose: Reglas generales para que Compose funcione correctamente tras la ofuscación
+-keepclassmembers class * extends androidx.lifecycle.ViewModel {
+    <init>(...);
+}
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# DataStore y Serialización (si usas modelos que se guardan)
+-keepclassmembers class com.example.orbblaze.domain.model.** { *; }
+
+# Mantener atributos necesarios para debugging de errores (opcional pero recomendado)
+-keepattributes SourceFile,LineNumberTable,Signature,InnerClasses,EnclosingMethod
+
+# Si usas bibliotecas que usan reflexión (Gson, Moshi, etc), se añadirían aquí.
