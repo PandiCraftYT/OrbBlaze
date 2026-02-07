@@ -21,7 +21,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         changeGameMode(GameMode.ADVENTURE)
     }
 
-    // ✅ Sobrescribimos restartGame para que recargue el nivel de aventura actual
     override fun restartGame() {
         loadAdventureLevel(currentLevelId)
     }
@@ -30,19 +29,19 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         val level = AdventureLevels.levels.find { it.id == levelId } ?: return
         currentLevelId = levelId
 
-        val newGrid = mutableMapOf<GridPosition, Bubble>()
         val layout = level.layout.filter { it.isNotEmpty() }
         
-        // Encontrar el ancho máximo del bloque para centrarlo
-        val maxLayoutWidth = layout.maxOfOrNull { it.length } ?: 0
+        // ✅ CALCULAR ANCHO DINÁMICO
+        // Buscamos la línea más larga del diseño para determinar el número de columnas
+        val maxLayoutWidth = layout.maxOfOrNull { it.trimEnd().length } ?: 10
+        // Ajustamos columnsCount (mínimo 10 para mantener consistencia con el modo clásico)
+        columnsCount = maxLayoutWidth.coerceAtLeast(10)
 
+        val newGrid = mutableMapOf<GridPosition, Bubble>()
         layout.forEachIndexed { row, rowText ->
-            val isOffsetRow = row % 2 != 0
-            val totalGridCols = if (isOffsetRow) 10 else 11
+            val isOffsetRow = (row + rowsDroppedCount) % 2 != 0
+            val rowMaxCols = if (isOffsetRow) columnsCount else columnsCount + 1
             
-            // Calcular un margen único para centrar el bloque de texto completo
-            val startCol = ((totalGridCols - maxLayoutWidth) / 2).coerceAtLeast(0)
-
             rowText.forEachIndexed { charIndex, char ->
                 val color = when(char) {
                     'R' -> BubbleColor.RED
@@ -53,12 +52,8 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
                     'C' -> BubbleColor.CYAN
                     else -> null
                 }
-                if (color != null) {
-                    // Se usa charIndex para respetar los espacios internos del layout
-                    val finalCol = startCol + charIndex
-                    if (finalCol < totalGridCols) {
-                        newGrid[GridPosition(row, finalCol)] = Bubble(color = color)
-                    }
+                if (color != null && charIndex < rowMaxCols) {
+                    newGrid[GridPosition(row, charIndex)] = Bubble(color = color)
                 }
             }
         }

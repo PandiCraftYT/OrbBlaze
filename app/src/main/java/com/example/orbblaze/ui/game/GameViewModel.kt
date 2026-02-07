@@ -75,7 +75,10 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         private set
 
     protected val dropThreshold = 8
-    protected val columnsCount = 10
+    
+    // ✅ Ahora columnsCount es dinámico para adaptarse a niveles anchos
+    var columnsCount by mutableIntStateOf(10)
+        protected set
 
     var soundEvent by mutableStateOf<SoundType?>(null)
         protected set
@@ -202,6 +205,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     open fun startGame() { gameState = GameState.PLAYING; startTimer() }
 
     open fun loadLevel(initialRows: Int = 6) {
+        columnsCount = 10 // Resetear a estándar
         engine.setupInitialLevel(rows = initialRows, cols = columnsCount)
         val cleanGrid = engine.gridState.toMutableMap()
         cleanGrid.forEach { (pos, bubble) ->
@@ -279,7 +283,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected fun startPhysicsLoop(ignoredWidth: Float) {
         viewModelScope.launch {
-            // Aumentamos los pasos de física para mayor precisión y evitar "traspasos"
             val physicsSteps = 15
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
@@ -306,7 +309,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                         checkFireballDestruction(nextX, nextY)
                         if (nextY < -bubbleRadius * 2) { activeProjectile = null; return@repeat }
                     } else {
-                        // Comprobación de colisión más frecuente y precisa
                         if (nextY - bubbleRadius <= m.ceilingY || checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
                             snapToGrid(nextX, nextY, currentP.color); collisionDetected = true
                         }
@@ -371,11 +373,10 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
         val estRow = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt()
         
-        // Área de escaneo más reducida para evitar "saltos" por traspaso físico
         val candidates = mutableListOf<GridPosition>()
         for (r in (estRow - 1)..(estRow + 1)) {
             if (r < 0) continue
-            for (c in 0 until columnsCount) {
+            for (c in 0 until columnsCount + 1) { // Escanear hasta la columna extra de filas pares
                 val p = GridPosition(r, c)
                 if (!newGrid.containsKey(p)) candidates.add(p)
             }
@@ -383,7 +384,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
         if (candidates.isEmpty()) { activeProjectile = null; return }
 
-        // Succión magnética con bias vertical fuerte para asegurar que encaje en el primer hueco que toca
         val finalPos = candidates.minByOrNull { pos ->
             val (cx, cy) = getBubbleCenter(pos)
             val dx = x - cx
@@ -454,7 +454,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
         val m = metrics ?: return false
-        // Umbral aumentado a 0.82f para que la burbuja no pueda pasar por huecos estrechos
         return bubblesByPosition.keys.any { pos -> 
             val (cx, cy) = getBubbleCenter(pos)
             distancePointToSegment(cx, cy, x1, y1, x2, y2) <= m.bubbleDiameter * 0.82f

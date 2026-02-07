@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.domain.model.AdventureLevels
 import com.example.orbblaze.domain.model.BoardMetricsPx
 import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.components.*
@@ -74,6 +75,7 @@ fun LevelScreen(
     val floatingTexts = viewModel.floatingTexts
     val rowsDroppedCount = viewModel.rowsDroppedCount
     val timeLeft = viewModel.timeLeft
+    val columnsCount = viewModel.columnsCount
 
     val currentBubbleColor = viewModel.currentBubbleColor
     val previewBubbleColor = viewModel.previewBubbleColor
@@ -171,8 +173,8 @@ fun LevelScreen(
     ) {
         val totalWidth = constraints.maxWidth.toFloat()
         
-        // SIN PADDING LATERAL: Ajustamos para que 10 columnas quepan perfectamente (10.5 diámetros de ancho total)
-        val bubbleDiameterPx = totalWidth / 10.5f 
+        // ✅ CÁLCULO ADAPTATIVO: El diámetro depende de columnsCount
+        val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
         
@@ -180,7 +182,7 @@ fun LevelScreen(
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
 
-        LaunchedEffect(totalWidth, boardTopPaddingPx) {
+        LaunchedEffect(totalWidth, boardTopPaddingPx, columnsCount) {
             viewModel.setBoardMetrics(
                 BoardMetricsPx(
                     horizontalSpacing = horizontalSpacingPx,
@@ -309,18 +311,30 @@ fun LevelScreen(
             }
         }
 
-        if (gameState == GameState.IDLE && !showTutorial && viewModel.gameMode != GameMode.ADVENTURE) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
-                Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))) {
-                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        val title = if (viewModel.gameMode == GameMode.TIME_ATTACK) "TIME ATTACK" else "MODO CLÁSICO"
-                        val desc = if (viewModel.gameMode == GameMode.TIME_ATTACK) "¡Explota burbujas rápido antes de que se agote el tiempo!" else "Explota burbujas y evita que lleguen a la línea roja."
-                        
-                        Text(text = title, style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
-                        Spacer(Modifier.height(12.dp))
-                        Text(text = desc, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(24.dp))
-                        Button(onClick = { viewModel.startGame() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) { Text("¡EMPEZAR!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black) }
+        if (gameState == GameState.IDLE && !showTutorial) {
+            if (viewModel.gameMode == GameMode.ADVENTURE) {
+                val advViewModel = viewModel as? AdventureViewModel
+                val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
+                if (currentLevel != null) {
+                    AdventureStartDialog(
+                        levelId = currentLevel.id,
+                        objective = currentLevel.objective,
+                        onStartClick = { viewModel.startGame() }
+                    )
+                }
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
+                    Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))) {
+                        Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            val title = if (viewModel.gameMode == GameMode.TIME_ATTACK) "TIME ATTACK" else "MODO CLÁSICO"
+                            val desc = if (viewModel.gameMode == GameMode.TIME_ATTACK) "¡Explota burbujas rápido antes de que se agote el tiempo!" else "Explota burbujas y evita que lleguen a la línea roja."
+                            
+                            Text(text = title, style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
+                            Spacer(Modifier.height(12.dp))
+                            Text(text = desc, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+                            Spacer(Modifier.height(24.dp))
+                            Button(onClick = { viewModel.startGame() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) { Text("¡EMPEZAR!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black) }
+                        }
                     }
                 }
             }
