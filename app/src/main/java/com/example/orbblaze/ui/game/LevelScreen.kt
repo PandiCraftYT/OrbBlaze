@@ -170,14 +170,12 @@ fun LevelScreen(
             }
     ) {
         val totalWidth = constraints.maxWidth.toFloat()
-        val sideMarginPx = with(density) { 4.dp.toPx() }
-        val playableWidth = totalWidth - (sideMarginPx * 2)
-
-        val bubbleDiameterPx = playableWidth / 11f 
-        val horizontalSpacingPx = bubbleDiameterPx
-        val boardStartPadding = sideMarginPx + (bubbleDiameterPx * 0.5f)
         
-        // CORRECCIÓN: Padding sincronizado con la lógica del juego
+        // SIN PADDING LATERAL: Ajustamos para que 10 columnas quepan perfectamente (10.5 diámetros de ancho total)
+        val bubbleDiameterPx = totalWidth / 10.5f 
+        val horizontalSpacingPx = bubbleDiameterPx
+        val boardStartPadding = bubbleDiameterPx * 0.5f
+        
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
@@ -311,13 +309,16 @@ fun LevelScreen(
             }
         }
 
-        if (gameState == GameState.IDLE && !showTutorial) {
+        if (gameState == GameState.IDLE && !showTutorial && viewModel.gameMode != GameMode.ADVENTURE) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))) {
                     Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "MODO CLÁSICO", style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
+                        val title = if (viewModel.gameMode == GameMode.TIME_ATTACK) "TIME ATTACK" else "MODO CLÁSICO"
+                        val desc = if (viewModel.gameMode == GameMode.TIME_ATTACK) "¡Explota burbujas rápido antes de que se agote el tiempo!" else "Explota burbujas y evita que lleguen a la línea roja."
+                        
+                        Text(text = title, style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
                         Spacer(Modifier.height(12.dp))
-                        Text(text = "Explota burbujas y evita que lleguen a la línea roja.", color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
+                        Text(text = desc, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
                         Spacer(Modifier.height(24.dp))
                         Button(onClick = { viewModel.startGame() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) { Text("¡EMPEZAR!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black) }
                     }

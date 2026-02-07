@@ -279,12 +279,12 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected fun startPhysicsLoop(ignoredWidth: Float) {
         viewModelScope.launch {
-            val physicsSteps = 10
+            // Aumentamos los pasos de física para mayor precisión y evitar "traspasos"
+            val physicsSteps = 15
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
                 val m = metrics ?: break
                 
-                // ✅ REBOTE AJUSTADO A LOS MÁRGENES DEL TABLERO
                 val leftWall = m.boardStartPadding - bubbleRadius
                 val rightWall = m.screenWidth - (m.boardStartPadding - bubbleRadius)
                 
@@ -296,7 +296,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                     val stepVx = currentP.velocityX / physicsSteps.toFloat(); val stepVy = currentP.velocityY / physicsSteps.toFloat()
                     var nextX = currentP.x + stepVx; var nextY = currentP.y + stepVy; var nextVx = currentP.velocityX
                     
-                    // REBOTE EN PAREDES LATERALES REALES
                     if (nextX - bubbleRadius <= leftWall || nextX + bubbleRadius >= rightWall) {
                         if (currentP.isFireball) { activeProjectile = null; spawnExplosion(nextX, nextY, BubbleColor.RED); return@repeat }
                         nextX = if (nextX - bubbleRadius <= leftWall) leftWall + bubbleRadius else rightWall - bubbleRadius
@@ -307,6 +306,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                         checkFireballDestruction(nextX, nextY)
                         if (nextY < -bubbleRadius * 2) { activeProjectile = null; return@repeat }
                     } else {
+                        // Comprobación de colisión más frecuente y precisa
                         if (nextY - bubbleRadius <= m.ceilingY || checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
                             snapToGrid(nextX, nextY, currentP.color); collisionDetected = true
                         }
@@ -367,14 +367,31 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun snapToGrid(x: Float, y: Float, color: BubbleColor) {
         val m = metrics ?: return
-        val estimatedPos = HexGridHelper.estimateGridPosition(x, y, m, rowsDroppedCount)
-        
-        // CORRECCIÓN: Búsqueda estricta de huecos libres cercanos
-        val finalPos = (HexGridHelper.getNeighbors(estimatedPos, rowsDroppedCount) + estimatedPos)
-            .filter { it.row >= 0 && it.col >= 0 && it.col < columnsCount && !bubblesByPosition.containsKey(it) }
-            .minByOrNull { pos -> val (cx, cy) = getBubbleCenter(pos); (x - cx).pow(2) + (y - cy).pow(2) } ?: estimatedPos
-
         val newGrid = bubblesByPosition.toMutableMap()
+
+        val estRow = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt()
+        
+        // Área de escaneo más reducida para evitar "saltos" por traspaso físico
+        val candidates = mutableListOf<GridPosition>()
+        for (r in (estRow - 1)..(estRow + 1)) {
+            if (r < 0) continue
+            for (c in 0 until columnsCount) {
+                val p = GridPosition(r, c)
+                if (!newGrid.containsKey(p)) candidates.add(p)
+            }
+        }
+
+        if (candidates.isEmpty()) { activeProjectile = null; return }
+
+        // Succión magnética con bias vertical fuerte para asegurar que encaje en el primer hueco que toca
+        val finalPos = candidates.minByOrNull { pos ->
+            val (cx, cy) = getBubbleCenter(pos)
+            val dx = x - cx
+            val dy = y - cy
+            val magneticBias = if (dy > 0) 0.25f else 5.0f
+            dx * dx + (dy * dy * magneticBias)
+        }!!
+
         when (color) {
             BubbleColor.BOMB -> { unlockAchievement("bomb_squad"); explodeAt(finalPos, newGrid) }
             BubbleColor.RAINBOW -> handleRainbowAt(finalPos, newGrid, x, y)
@@ -384,6 +401,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                 if (matches.size >= 3) { joyTick++; processMatches(matches, newGrid, x, y, color) } else soundEvent = SoundType.STICK
             }
         }
+        
         bubblesByPosition = newGrid; activeProjectile = null; onPostSnap()
     }
 
@@ -436,7 +454,11 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
         val m = metrics ?: return false
-        return bubblesByPosition.keys.any { pos -> val (cx, cy) = getBubbleCenter(pos); distancePointToSegment(cx, cy, x1, y1, x2, y2) <= m.bubbleDiameter * 0.65f }
+        // Umbral aumentado a 0.82f para que la burbuja no pueda pasar por huecos estrechos
+        return bubblesByPosition.keys.any { pos -> 
+            val (cx, cy) = getBubbleCenter(pos)
+            distancePointToSegment(cx, cy, x1, y1, x2, y2) <= m.bubbleDiameter * 0.82f
+        }
     }
 
     private fun distancePointToSegment(cx: Float, cy: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {

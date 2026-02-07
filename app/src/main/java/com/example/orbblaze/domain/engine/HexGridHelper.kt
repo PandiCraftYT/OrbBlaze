@@ -40,11 +40,16 @@ object HexGridHelper {
 
     /**
      * Estima la posición en la rejilla a partir de coordenadas táctiles/físicas.
+     * Se ha mejorado el redondeo para evitar problemas en los bordes.
      */
-    fun estimateGridPosition(x: Float, y: Float, metrics: BoardMetricsPx, rowOffset: Int): GridPosition {
+    fun estimateGridPosition(x: Float, y: Float, metrics: BoardMetricsPx, rowOffset: Int, columnsCount: Int): GridPosition {
         val estimatedRow = ((y - metrics.boardTopPadding) / metrics.verticalSpacing).roundToInt().coerceAtLeast(0)
         val xOffsetEst = if ((estimatedRow + rowOffset) % 2 != 0) (metrics.bubbleDiameter / 2f) else 0f
-        val estimatedCol = ((x - (metrics.boardStartPadding + xOffsetEst)) / metrics.horizontalSpacing).roundToInt().coerceAtLeast(0)
+        
+        // Calculamos la columna con un redondeo más preciso
+        val estimatedCol = ((x - (metrics.boardStartPadding + xOffsetEst)) / metrics.horizontalSpacing).roundToInt()
+            .coerceIn(0, columnsCount - 1)
+
         return GridPosition(estimatedRow, estimatedCol)
     }
 }
