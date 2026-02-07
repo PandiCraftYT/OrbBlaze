@@ -48,7 +48,7 @@ fun TutorialDialog(
         TutorialStep("¡BIENVENIDO!", "Apunta y dispara para explotar 3 o más burbujas del mismo color.", "🎯", TutorialTarget.NONE),
         TutorialStep("MARCADOR", "Aquí puedes ver tu puntuación y monedas actuales.", "💰", TutorialTarget.SCORE),
         TutorialStep("TIENDA RÁPIDA", "Toca aquí para comprar objetos especiales como la Bola de Fuego.", "🏪", TutorialTarget.SHOP),
-        TutorialStep("CAÑÓN PANDA", "Desliza para apuntar. ¡Toca al panda para cambiar el color!", "🐼", TutorialTarget.CANNON),
+        TutorialStep("CAÑÓN PANDA", "Desliza para apuntar. ¡Toca al cañon para cambiar el color!", "🐼", TutorialTarget.CANNON),
         TutorialStep("PRÓXIMA GEMA", "Este es el color de la siguiente gema que cargarás.", "🔮", TutorialTarget.NEXT_BUBBLE),
         TutorialStep("¡TODO LISTO!", "¡Disfruta de OrbBlaze y alcanza el récord más alto!", "✨", TutorialTarget.NONE)
     )

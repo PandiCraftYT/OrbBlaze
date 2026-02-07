@@ -83,6 +83,7 @@ fun LevelScreen(
     val vibrationEvent = viewModel.vibrationEvent
     val isPaused = viewModel.isPaused
     val isFireballQueued = viewModel.isFireballQueued
+    val currentGameMode = viewModel.gameMode
 
     var showQuickShop by remember { mutableStateOf(false) }
     var hasRedeemedCoins by remember { mutableStateOf(false) }
@@ -173,7 +174,6 @@ fun LevelScreen(
     ) {
         val totalWidth = constraints.maxWidth.toFloat()
         
-        // ✅ CÁLCULO ADAPTATIVO: El diámetro depende de columnsCount
         val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
@@ -221,7 +221,6 @@ fun LevelScreen(
                 }
             }
 
-            // LÍNEA ROJA SINCRONIZADA EXACTAMENTE EN FILA 13
             drawLine(
                 color = Color.Red.copy(alpha = dangerAlpha), 
                 start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * 13), 
@@ -281,7 +280,14 @@ fun LevelScreen(
                 shotTick = viewModel.shotTick,
                 joyTick = viewModel.joyTick,
                 rainbowRotation = masterRainbowRotation,
-                onShopClick = { showQuickShop = true },
+                onShopClick = { 
+                    if (currentGameMode == GameMode.ADVENTURE) {
+                        Toast.makeText(context, "Tienda no disponible en modo Aventura. Solo en Clásico y Contrarreloj.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        showQuickShop = true 
+                    }
+                },
+                isShopEnabled = currentGameMode != GameMode.ADVENTURE,
                 onShopPositioned = { shopRect = it },
                 onCannonPositioned = { cannonRect = it },
                 onNextBubblePositioned = { nextBubbleRect = it }
@@ -296,7 +302,6 @@ fun LevelScreen(
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
         )
 
-        // DIÁLOGOS Y TUTORIAL (SIN CAMBIOS)
         if (showQuickShop) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {

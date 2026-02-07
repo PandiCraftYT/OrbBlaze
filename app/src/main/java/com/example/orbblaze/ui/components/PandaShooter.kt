@@ -29,6 +29,7 @@ fun PandaShooter(
     joyTick: Int = 0,
     rainbowRotation: Float,
     onShopClick: () -> Unit = {},
+    isShopEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     onShopPositioned: (Rect) -> Unit = {},
     onCannonPositioned: (Rect) -> Unit = {},
@@ -93,9 +94,13 @@ fun PandaShooter(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .offset(x = 60.dp, y = (-95).dp)
+                .graphicsLayer { alpha = if (isShopEnabled) 1f else 0.4f }
                 .onGloballyPositioned { onShopPositioned(it.boundsInRoot()) }
         ) {
-            ShopButton(onClick = onShopClick)
+            ShopButton(
+                onClick = onShopClick,
+                isEnabled = isShopEnabled // ✅ Pasamos el estado
+            )
         }
 
         // 3. PANDA ASISTENTE
@@ -142,7 +147,7 @@ fun PandaShooter(
             VisualBubble(color = nextBubbleColor, isRainbow = isNextRainbow, rainbowRotation = rainbowRotation, modifier = Modifier.size(34.dp))
         }
 
-        // 5. CAÑÓN SUPREMO (REDISEÑO TOTAL)
+        // 5. CAÑÓN SUPREMO
         Box(
             modifier = Modifier
                 .size(260.dp)
@@ -159,16 +164,12 @@ fun PandaShooter(
                 val goldColor = Color(0xFFFFD700)
                 val pivot = Offset(cx, cy + 50f)
 
-                // BASE DEL CAÑÓN CON DEGRADADO METÁLICO
                 val baseBrush = Brush.verticalGradient(listOf(steelMid, steelDark))
                 drawRoundRect(baseBrush, Offset(cx - 75f, cy + 25f), Size(150f, 65f), CornerRadius(15f))
 
-                // RUEDAS CON LUCES LED (Color de la burbuja actual)
                 listOf(-70f, 70f).forEach { xOff ->
                     drawCircle(steelDark, 32f, Offset(cx + xOff, cy + 55f))
-                    // Aro de luz LED
                     drawCircle(currentBubbleColor.copy(alpha = 0.4f), 28f, Offset(cx + xOff, cy + 55f), style = Stroke(5f))
-                    // Centro de la rueda
                     drawCircle(currentBubbleColor, 14f, Offset(cx + xOff, cy + 55f))
                     drawCircle(Color.White.copy(0.6f), 4f, Offset(cx + xOff - 6f, cy + 50f))
                 }
@@ -180,14 +181,9 @@ fun PandaShooter(
                     val barrelW = 110f
                     val barrelH = 185f
                     val metalGradient = Brush.horizontalGradient(
-                        0.0f to steelDark,
-                        0.15f to steelMid,
-                        0.5f to steelLight,
-                        0.85f to steelMid,
-                        1.0f to steelDark
+                        0.0f to steelDark, 0.15f to steelMid, 0.5f to steelLight, 0.85f to steelMid, 1.0f to steelDark
                     )
 
-                    // CUERPO DEL CAÑÓN
                     val path = Path().apply {
                         moveTo(cx - barrelW/2, cy + 55f); lineTo(cx + barrelW/2, cy + 55f)
                         lineTo(cx + barrelW*0.42f, cy - barrelH + 30f); lineTo(cx - barrelW*0.42f, cy - barrelH + 30f)
@@ -195,28 +191,21 @@ fun PandaShooter(
                     }
                     drawPath(path, metalGradient)
                     
-                    // LÍNEA DE REFLEJO
                     drawRect(
                         brush = Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(0.2f), Color.Transparent)),
                         topLeft = Offset(cx - 10f, cy - barrelH + 30f),
                         size = Size(20f, barrelH + 25f)
                     )
 
-                    // ANILLO DE ORO (Refuerzo)
                     drawRoundRect(Color(0xFF8B6B00), Offset(cx - barrelW/2 - 4f, cy + 10f), Size(barrelW + 6f, 22f), CornerRadius(5f))
                     drawRoundRect(goldColor, Offset(cx - barrelW/2 - 2f, cy + 10f), Size(barrelW + 4f, 18f), CornerRadius(4f))
-                    
-                    // SEGUNDO ANILLO DE ORO
                     drawRect(goldColor, Offset(cx - barrelW*0.38f, cy - 100f), Size(barrelW*0.76f, 10f))
 
-                    // BOCA DEL CAÑÓN (Efecto 3D)
                     drawOval(metalGradient, Offset(cx - barrelW*0.45f, cy - barrelH), Size(barrelW*0.9f, 45f))
                     drawOval(Color.Black, Offset(cx - barrelW*0.45f + 16f, cy - barrelH + 10f), Size(barrelW*0.9f - 32f, 25f))
 
-                    // EJE ROTATORIO
                     drawCircle(Brush.radialGradient(listOf(steelLight, steelDark)), 32f, Offset(cx, cy + 65f))
 
-                    // EFECTO DE FLASH AL DISPARAR
                     if (flashAlpha.value > 0f) {
                         drawCircle(
                             brush = Brush.radialGradient(listOf(Color.White, goldColor, Color.Transparent)),
