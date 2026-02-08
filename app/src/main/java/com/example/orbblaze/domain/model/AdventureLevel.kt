@@ -2,7 +2,6 @@ package com.example.orbblaze.domain.model
 
 import androidx.compose.ui.graphics.Color
 
-// 1. TUS ZONAS (Intactas, con colores y descripción)
 enum class AdventureZone(
     val title: String,
     val bgColors: List<Color>,
@@ -16,21 +15,20 @@ enum class AdventureZone(
     SPACE("GALAXIA", listOf(Color(0xFF0D47A1), Color(0xFF000000)), "Hacia lo desconocido.")
 }
 
-// 2. OBJETIVOS DE MISIÓN (Lo nuevo para el estilo Candy Crush)
 sealed class LevelObjective {
     data class ClearBoard(val description: String = "Limpia todas las orbes") : LevelObjective()
     data class ReachScore(val target: Int, val description: String = "Consigue $target puntos") : LevelObjective()
     data class CollectColor(val colorChar: Char, val count: Int, val description: String = "Destruye $count orbes de color") : LevelObjective()
 }
 
-// 3. TU DATA CLASS LEVEL (Adaptada con objetivos y estrellas)
 data class Level(
     val id: Int,
     val zone: AdventureZone,
-    val maxShots: Int,         // Mantenemos tu nombre de variable
-    val layout: List<String>,  // Tu mapa visual
-    val objective: LevelObjective, // NUEVO: La misión
-    val star1Threshold: Int,   // Puntos para 1 estrella
-    val star2Threshold: Int,   // Puntos para 2 estrellas
-    val star3Threshold: Int    // Puntos para 3 estrellas
+    val maxShots: Int,
+    val layout: List<String>,
+    val objective: LevelObjective,
+    val star1Threshold: Int,
+    val star2Threshold: Int,
+    val star3Threshold: Int,
+    val rowDropInterval: Int = 0 // ✅ 0 = No caen filas. >0 = Caen cada X disparos.
 )

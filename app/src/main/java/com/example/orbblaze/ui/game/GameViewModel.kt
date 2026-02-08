@@ -57,7 +57,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var coins by mutableIntStateOf(0)
         protected set
 
-    var timeLeft by mutableIntStateOf(60) 
+    // ✅ Tiempo inicial aumentado a 90 segundos
+    var timeLeft by mutableIntStateOf(90) 
         protected set
 
     protected var timerJob: Job? = null
@@ -216,13 +217,12 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         nextBubbleColor = generateProjectileColor()
         previewBubbleColor = generateProjectileColor()
         
-        // ✅ RESET COMPLETO DE ESTADO VISUAL
         score = 0
         gameState = GameState.IDLE
         isPaused = false
         shotsFiredCount = 0
         rowsDroppedCount = 0
-        timeLeft = 60
+        timeLeft = 90 // ✅ Al reiniciar, también a 90s
         isFireballQueued = false
         activeProjectile = null
         shooterAngle = 0f
@@ -266,7 +266,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             if (settingsManager.vibrationEnabledFlow.first()) vibrationEvent = true
         }
-        val angleRad = Math.toRadians(shooterAngle.toDouble()); val speed = 40f
+        val angleRad = Math.toRadians(shooterAngle.toDouble())
+        val speed = 75f 
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
         isFireballQueued = false; nextBubbleColor = previewBubbleColor; previewBubbleColor = generateProjectileColor()
         startPhysicsLoop(0f)
@@ -298,7 +299,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected fun startPhysicsLoop(ignoredWidth: Float) {
         viewModelScope.launch {
-            val physicsSteps = 15
+            val physicsSteps = 20 
             while (activeProjectile != null) {
                 if (isPaused) { delay(100); continue }
                 val m = metrics ?: break
@@ -311,7 +312,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
                 repeat(physicsSteps) {
                     if (collisionDetected) return@repeat
-                    val stepVx = currentP.velocityX / physicsSteps.toFloat(); val stepVy = currentP.velocityY / physicsSteps.toFloat()
+                    val stepVx = currentP.velocityX / physicsSteps.toFloat()
+                    val stepVy = currentP.velocityY / physicsSteps.toFloat()
                     var nextX = currentP.x + stepVx; var nextY = currentP.y + stepVy; var nextVx = currentP.velocityX
                     
                     if (nextX - bubbleRadius <= leftWall || nextX + bubbleRadius >= rightWall) {
@@ -331,7 +333,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                     if (!collisionDetected && activeProjectile != null) currentP = currentP.copy(x = nextX, y = nextY, velocityX = nextVx)
                 }
                 if (!collisionDetected && activeProjectile != null) activeProjectile = currentP
-                delay(16)
+                
+                delay(8) 
             }
         }
     }
@@ -369,7 +372,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             while (gameState == GameState.PLAYING) {
                 delay(1000)
                 if (!isPaused && gameMode == GameMode.TIME_ATTACK) {
-                    timeLeft--; if (timeLeft <= 0) { addRows(3); timeLeft = 60 }
+                    timeLeft--; if (timeLeft <= 0) { addRows(3); timeLeft = 90 } // ✅ Al acabarse, reinicia a 90s
                 }
             }
         }

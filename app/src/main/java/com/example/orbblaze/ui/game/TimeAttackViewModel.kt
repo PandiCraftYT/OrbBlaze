@@ -1,26 +1,28 @@
 package com.example.orbblaze.ui.game
 
 import android.app.Application
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
+import com.example.orbblaze.domain.model.Bubble
+import com.example.orbblaze.domain.model.GridPosition
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 class TimeAttackViewModel(application: Application) : GameViewModel(application) {
-
-    private var currentPhase by mutableIntStateOf(1) // 1: 60s, 2: 40s, 3: 20s
 
     init {
         changeGameMode(GameMode.TIME_ATTACK)
         loadLevel(3)
     }
 
+    override fun loadLevel(initialRows: Int) {
+        super.loadLevel(initialRows)
+        timeLeft = 90 // Aseguramos que empiece en 90
+    }
+
     override fun startGame() {
         super.startGame()
-        currentPhase = 1
-        timeLeft = 60
+        timeLeft = 90
         startTimer()
     }
 
@@ -40,22 +42,38 @@ class TimeAttackViewModel(application: Application) : GameViewModel(application)
     }
 
     private fun handleTimeOut() {
-        when (currentPhase) {
-            1 -> {
-                addRows(3)
-                currentPhase = 2
-                timeLeft = 40
-            }
-            2 -> {
-                addRows(3)
-                currentPhase = 3
-                timeLeft = 20
-            }
-            3 -> {
-                gameState = GameState.LOST
-                soundEvent = SoundType.LOSE
+        // ✅ 1. CAEN 3 FILAS
+        addRandomDifficultyRows(3)
+        
+        // ✅ 2. REINICIAR TIEMPO A 90s DE LEY
+        timeLeft = 90
+        
+        // Efecto de sonido para avisar que cayeron filas
+        soundEvent = SoundType.STICK
+    }
+
+    /**
+     * Añade filas con dificultad aleatoria (colores mezclados sin patrón fijo)
+     */
+    private fun addRandomDifficultyRows(count: Int) {
+        rowsDroppedCount += count
+        val newGrid = mutableMapOf<GridPosition, Bubble>()
+        
+        // Desplazar las burbujas actuales hacia abajo
+        bubblesByPosition.forEach { (pos, bubble) -> 
+            newGrid[GridPosition(pos.row + count, pos.col)] = bubble 
+        }
+        
+        // Añadir nuevas filas arriba con colores aleatorios puros para aumentar dificultad
+        for (r in 0 until count) {
+            for (c in 0 until columnsCount) {
+                newGrid[GridPosition(r, c)] = Bubble(color = generateBoardBubbleColor())
             }
         }
+        
+        bubblesByPosition = newGrid
+        removeFloatingBubbles(newGrid)
+        metrics?.let { checkGameConditions(it) }
     }
 
     override fun onPostSnap() {

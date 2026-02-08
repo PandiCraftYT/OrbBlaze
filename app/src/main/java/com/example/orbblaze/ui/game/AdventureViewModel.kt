@@ -17,6 +17,9 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     var shotsRemaining by mutableIntStateOf(0)
         private set
 
+    private var shotsTakenInLevel = 0
+    private var currentLevelObj: Level? = null
+
     init {
         changeGameMode(GameMode.ADVENTURE)
     }
@@ -28,13 +31,11 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     fun loadAdventureLevel(levelId: Int) {
         val level = AdventureLevels.levels.find { it.id == levelId } ?: return
         currentLevelId = levelId
+        currentLevelObj = level
 
         val layout = level.layout.filter { it.isNotEmpty() }
         
-        // ✅ CALCULAR ANCHO DINÁMICO
-        // Buscamos la línea más larga del diseño para determinar el número de columnas
         val maxLayoutWidth = layout.maxOfOrNull { it.trimEnd().length } ?: 10
-        // Ajustamos columnsCount (mínimo 10 para mantener consistencia con el modo clásico)
         columnsCount = maxLayoutWidth.coerceAtLeast(10)
 
         val newGrid = mutableMapOf<GridPosition, Bubble>()
@@ -60,6 +61,7 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         
         bubblesByPosition = newGrid
         shotsRemaining = level.maxShots
+        shotsTakenInLevel = 0
         score = 0
         gameState = GameState.IDLE
         isPaused = false
@@ -89,8 +91,38 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
 
     override fun onPostSnap() {
         shotsRemaining--
+        shotsTakenInLevel++
         
-        if (bubblesByPosition.isEmpty()) {
+        val level = currentLevelObj
+        
+        // Mecánica de caída de filas por intervalo
+        if (level != null && level.rowDropInterval > 0 && shotsTakenInLevel % level.rowDropInterval == 0) {
+            addRows(1)
+        }
+
+        checkWinCondition()
+    }
+
+    private fun checkWinCondition() {
+        val level = currentLevelObj ?: return
+        var won = false
+
+        when (val obj = level.objective) {
+            is LevelObjective.ClearBoard -> {
+                if (bubblesByPosition.isEmpty()) won = true
+            }
+            is LevelObjective.ReachScore -> {
+                if (score >= obj.target) won = true
+            }
+            is LevelObjective.CollectColor -> {
+                // Para simplificar, si el objetivo es recolectar colores pero 
+                // ya no quedan en el mapa, o se llega a ClearBoard, se gana.
+                // Podríamos añadir un contador específico, pero ClearBoard es la base pedida.
+                if (bubblesByPosition.isEmpty()) won = true
+            }
+        }
+
+        if (won) {
             gameState = GameState.WON
             soundEvent = SoundType.WIN
             saveProgress()
