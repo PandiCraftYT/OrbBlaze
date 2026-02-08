@@ -76,7 +76,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected val dropThreshold = 8
     
-    // ✅ Ahora columnsCount es dinámico para adaptarse a niveles anchos
     var columnsCount by mutableIntStateOf(10)
         protected set
 
@@ -205,7 +204,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     open fun startGame() { gameState = GameState.PLAYING; startTimer() }
 
     open fun loadLevel(initialRows: Int = 6) {
-        columnsCount = 10 // Resetear a estándar
+        columnsCount = 10 
         engine.setupInitialLevel(rows = initialRows, cols = columnsCount)
         val cleanGrid = engine.gridState.toMutableMap()
         cleanGrid.forEach { (pos, bubble) ->
@@ -214,9 +213,25 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         bubblesByPosition = cleanGrid
-        nextBubbleColor = generateProjectileColor(); previewBubbleColor = generateProjectileColor()
-        score = 0; gameState = GameState.IDLE; isPaused = false; shotsFiredCount = 0; rowsDroppedCount = 0; timeLeft = 60
-        isFireballQueued = false; particles.clear(); floatingTexts.clear(); timerJob?.cancel()
+        nextBubbleColor = generateProjectileColor()
+        previewBubbleColor = generateProjectileColor()
+        
+        // ✅ RESET COMPLETO DE ESTADO VISUAL
+        score = 0
+        gameState = GameState.IDLE
+        isPaused = false
+        shotsFiredCount = 0
+        rowsDroppedCount = 0
+        timeLeft = 60
+        isFireballQueued = false
+        activeProjectile = null
+        shooterAngle = 0f
+        shotTick = 0
+        joyTick = 0
+        
+        particles.clear()
+        floatingTexts.clear()
+        timerJob?.cancel()
     }
 
     open fun restartGame() { loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6) }
@@ -376,7 +391,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         val candidates = mutableListOf<GridPosition>()
         for (r in (estRow - 1)..(estRow + 1)) {
             if (r < 0) continue
-            for (c in 0 until columnsCount + 1) { // Escanear hasta la columna extra de filas pares
+            for (c in 0 until columnsCount + 1) {
                 val p = GridPosition(r, c)
                 if (!newGrid.containsKey(p)) candidates.add(p)
             }

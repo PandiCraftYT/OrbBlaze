@@ -348,7 +348,7 @@ fun LevelScreen(
         if (isPaused && gameState == GameState.PLAYING) {
             OverlayMenu(
                 title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, 
-                onExit = { soundManager.startMusic(); viewModel.restartGame(); onMenuClick() }, 
+                onExit = { soundManager.startMusic(); onMenuClick() }, // ✅ Eliminado restartGame() de aquí
                 showVolume = true, volume = volumeSlider, 
                 onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() }
             )
@@ -357,7 +357,7 @@ fun LevelScreen(
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
                 title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() }, 
-                onExit = { viewModel.restartGame(); onMenuClick() },
+                onExit = { onMenuClick() }, // ✅ Eliminado restartGame() de aquí
                 score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 onRedeemCoins = if(!hasRedeemedCoins) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null,
                 onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } }

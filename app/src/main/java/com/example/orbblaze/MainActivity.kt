@@ -98,7 +98,10 @@ fun AppNavigation(
         }
         composable("menu") {
             MenuScreen(
-                onPlayClick = { navController.navigate("game") },
+                onPlayClick = { 
+                    classicVm.loadLevel() // ✅ Reiniciar antes de entrar
+                    navController.navigate("game") 
+                },
                 onModesClick = { navController.navigate("modes") },
                 onScoreClick = { navController.navigate("score") },
                 onAchievementsClick = { navController.navigate("achievements") },
@@ -133,7 +136,14 @@ fun AppNavigation(
         }
         composable("modes") {
             GameModesScreen(
-                onModeSelect = { mode -> navController.navigate(mode) },
+                onModeSelect = { mode -> 
+                    // ✅ Reiniciar el modo correspondiente antes de navegar
+                    when(mode) {
+                        "game" -> classicVm.loadLevel()
+                        "time_attack" -> timeAttackVm.loadLevel()
+                    }
+                    navController.navigate(mode) 
+                },
                 onBackClick = { navController.popBackStack() },
                 soundManager = soundManager
             )
