@@ -28,7 +28,7 @@ fun GameTopBar(
     bestScore: Int,
     coins: Int,
     timeLeft: Int? = null,
-    shotsLeft: Int? = null, // ✅ NUEVO: Para modo aventura
+    shotsLeft: Int? = null,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -44,29 +44,20 @@ fun GameTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // MONEDAS
+        // IZQUIERDA: MONEDAS
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))), contentAlignment = Alignment.Center) {
-                Text("C", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))), contentAlignment = Alignment.Center) {
+                Text("C", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
             }
-            Spacer(Modifier.width(8.dp))
-            Text(text = "$coins", style = TextStyle(color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold))
+            Spacer(Modifier.width(6.dp))
+            Text(text = "$coins", style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold))
         }
 
-        // CENTRO: DINÁMICO (TIEMPO, TIROS O SCORE)
+        // CENTRO: TIROS O TIEMPO
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (shotsLeft != null) {
-                // ✅ VISUALIZACIÓN PARA MODO AVENTURA
                 Text("TIROS", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
-                Text(
-                    text = "$shotsLeft", 
-                    style = TextStyle(
-                        color = if (shotsLeft <= 3) Color(0xFFFF4D4D) else Color(0xFF64FFDA), 
-                        fontSize = 26.sp, 
-                        fontWeight = FontWeight.Black, 
-                        shadow = Shadow(color = Color.Black, blurRadius = 4f)
-                    )
-                )
+                Text(text = "$shotsLeft", style = TextStyle(color = if (shotsLeft <= 3) Color(0xFFFF4D4D) else Color(0xFF64FFDA), fontSize = 26.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
             } else if (timeLeft != null) {
                 Text("TIEMPO", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
                 Text(text = "$timeLeft s", style = TextStyle(color = if (timeLeft < 10) Color.Red else Color(0xFF64FFDA), fontSize = 24.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
@@ -76,11 +67,15 @@ fun GameTopBar(
             }
         }
 
-        // DERECHA: BEST + TUERCA
+        // DERECHA: SCORE (AVENTURA) O MAX (OTROS)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.End) {
-                Text("MAX", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold))
-                Text(text = "$bestScore", style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold))
+                val isAdventure = (shotsLeft != null)
+                val label = if (isAdventure) "SCORE" else "MAX"
+                val value = if (isAdventure) "$score" else "$bestScore"
+                
+                Text(text = label, style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold))
+                Text(text = value, style = TextStyle(color = if (isAdventure) Color(0xFF64FFDA) else Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold))
             }
             Spacer(Modifier.width(12.dp))
             Box(modifier = Modifier.size(42.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)).border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape).clickable { onSettingsClick() }, contentAlignment = Alignment.Center) {

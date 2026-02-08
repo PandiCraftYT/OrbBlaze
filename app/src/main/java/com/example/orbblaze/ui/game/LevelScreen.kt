@@ -31,7 +31,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -41,11 +40,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.data.SettingsManager
-import com.example.orbblaze.domain.model.AdventureLevels
-import com.example.orbblaze.domain.model.BoardMetricsPx
-import com.example.orbblaze.domain.model.BubbleColor
+import com.example.orbblaze.domain.model.*
 import com.example.orbblaze.ui.components.*
 import com.example.orbblaze.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -90,7 +88,6 @@ fun LevelScreen(
     var volumeSlider by remember { mutableFloatStateOf(1.0f) }
     var isAiming by remember { mutableStateOf(false) }
 
-    // --- RECTÁNGULOS PARA EL TUTORIAL ---
     var shopRect by remember { mutableStateOf<Rect?>(null) }
     var cannonRect by remember { mutableStateOf<Rect?>(null) }
     var nextBubbleRect by remember { mutableStateOf<Rect?>(null) }
@@ -99,6 +96,23 @@ fun LevelScreen(
     val settingsManager = remember { SettingsManager(context) }
     val tutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
     var showTutorial by remember { mutableStateOf(false) }
+
+    // ✅ LÓGICA DE FONDO SINCRONIZADA (Igual al mapa)
+    val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
+    val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
+        when {
+            currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7)) // Azul (Original)
+            currentLevelId <= 50 -> listOf(Color(0xFF3E2723), Color(0xFFBF360C)) // Marrón/Rojo (Núcleo)
+            currentLevelId <= 70 -> listOf(Color(0xFF1B5E20), Color(0xFF4DB6AC)) // Verde (Superficie)
+            currentLevelId <= 90 -> listOf(Color(0xFF0277BD), Color(0xFFE1F5FE)) // Celeste (Atmósfera)
+            else -> listOf(Color(0xFF0D47A1), Color(0xFF000000)) // Azul Oscuro/Negro (Galaxia)
+        }
+    } else {
+        listOf(BgTop, BgBottom)
+    }
+
+    val animatedBgTop by animateColorAsState(targetValue = bgColors.first(), animationSpec = tween(1000), label = "bgTop")
+    val animatedBgBottom by animateColorAsState(targetValue = bgColors.last(), animationSpec = tween(1000), label = "bgBottom")
 
     LaunchedEffect(tutorialCompleted, viewModel.gameMode) {
         if (!tutorialCompleted && viewModel.gameMode == GameMode.CLASSIC) {
@@ -139,7 +153,8 @@ fun LevelScreen(
     LaunchedEffect(vibrationEvent) { if (vibrationEvent) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.clearVibrationEvent() } }
 
     BoxWithConstraints(
-        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
+        modifier = Modifier.fillMaxSize()
+            .background(Brush.verticalGradient(colors = listOf(animatedBgTop, animatedBgBottom)))
             .pointerInput(gameState, isPaused, showQuickShop, showTutorial) {
                 if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
                 awaitEachGesture {
@@ -173,11 +188,9 @@ fun LevelScreen(
             }
     ) {
         val totalWidth = constraints.maxWidth.toFloat()
-        
         val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
-        
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
@@ -198,7 +211,6 @@ fun LevelScreen(
 
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha), size = size)
-
             val pivotX = size.width / 2f
             val pivotY = size.height - 160.dp.toPx()
 
@@ -221,10 +233,11 @@ fun LevelScreen(
                 }
             }
 
+            val redLineY = boardTopPaddingPx + verticalSpacingPx * 13
             drawLine(
                 color = Color.Red.copy(alpha = dangerAlpha), 
-                start = Offset(0f, boardTopPaddingPx + verticalSpacingPx * 13), 
-                end = Offset(size.width, boardTopPaddingPx + verticalSpacingPx * 13), 
+                start = Offset(0f, redLineY), 
+                end = Offset(size.width, redLineY), 
                 strokeWidth = 8f, 
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
             )
@@ -282,7 +295,7 @@ fun LevelScreen(
                 rainbowRotation = masterRainbowRotation,
                 onShopClick = { 
                     if (currentGameMode == GameMode.ADVENTURE) {
-                        Toast.makeText(context, "Tienda no disponible en modo Aventura. Solo en Clásico y Contrarreloj.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Tienda no disponible en modo Aventura.", Toast.LENGTH_SHORT).show()
                     } else {
                         showQuickShop = true 
                     }
@@ -321,19 +334,14 @@ fun LevelScreen(
                 val advViewModel = viewModel as? AdventureViewModel
                 val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
                 if (currentLevel != null) {
-                    AdventureStartDialog(
-                        levelId = currentLevel.id,
-                        objective = currentLevel.objective,
-                        onStartClick = { viewModel.startGame() }
-                    )
+                    AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { viewModel.startGame() })
                 }
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
                     Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))) {
                         Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             val title = if (viewModel.gameMode == GameMode.TIME_ATTACK) "TIME ATTACK" else "MODO CLÁSICO"
-                            val desc = if (viewModel.gameMode == GameMode.TIME_ATTACK) "¡Explota burbujas rápido antes de que se agote el tiempo!" else "Explota burbujas y evita que lleguen a la línea roja."
-                            
+                            val desc = if (viewModel.gameMode == GameMode.TIME_ATTACK) "¡Explota burbujas rápido!" else "Evita que lleguen a la línea roja."
                             Text(text = title, style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
                             Spacer(Modifier.height(12.dp))
                             Text(text = desc, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
@@ -348,7 +356,7 @@ fun LevelScreen(
         if (isPaused && gameState == GameState.PLAYING) {
             OverlayMenu(
                 title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, 
-                onExit = { soundManager.startMusic(); onMenuClick() }, // ✅ Eliminado restartGame() de aquí
+                onExit = { soundManager.startMusic(); onMenuClick() }, 
                 showVolume = true, volume = volumeSlider, 
                 onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() }
             )
@@ -357,10 +365,12 @@ fun LevelScreen(
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
                 title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() }, 
-                onExit = { onMenuClick() }, // ✅ Eliminado restartGame() de aquí
+                onExit = { onMenuClick() },
                 score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
+                stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
                 onRedeemCoins = if(!hasRedeemedCoins) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null,
-                onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } }
+                onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } },
+                currentLevelId = currentLevelId // ✅ Pasamos el ID para ocultar estrellas en 1-30
             )
         }
 
@@ -386,22 +396,28 @@ fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> U
 
 @Composable
 fun OverlayMenu(
-    title: String, 
-    onContinue: (() -> Unit)? = null, 
-    onRestart: () -> Unit, 
-    onExit: () -> Unit, 
-    score: Int? = null, 
-    isWin: Boolean = false, 
-    showVolume: Boolean = false, 
-    volume: Float = 0f, 
-    onVolumeChange: (Float) -> Unit = {}, 
-    onRedeemCoins: (() -> Unit)? = null, 
-    onShowAd: (() -> Unit)? = null,
-    isAdventure: Boolean = false
+    title: String, onContinue: (() -> Unit)? = null, onRestart: () -> Unit, onExit: () -> Unit, 
+    score: Int? = null, isWin: Boolean = false, showVolume: Boolean = false, volume: Float = 0f, 
+    onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null, 
+    onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
+    currentLevelId: Int = 0 // ✅ Nuevo parámetro
 ) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             Text(text = title, style = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Black, color = if (isWin) Color(0xFFFFD700) else if (title == "PAUSA") Color.White else Color(0xFFFF4D4D), letterSpacing = 2.sp, shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f)))
+            
+            // ✅ OCULTAR ESTRELLAS SI NIVEL <= 30
+            if (isAdventure && isWin && currentLevelId > 30) {
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.Center) {
+                    repeat(3) { i ->
+                        val animScale = remember { Animatable(0f) }
+                        LaunchedEffect(Unit) { delay(i * 300L); animScale.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 200f)) }
+                        Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.2f), modifier = Modifier.size(48.dp).graphicsLayer { scaleX = animScale.value; scaleY = animScale.value })
+                    }
+                }
+            }
+
             if (score != null) {
                 Spacer(Modifier.height(8.dp)); Text(text = "PUNTUACIÓN FINAL: $score", style = TextStyle(fontSize = 20.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.ExtraBold))
                 onRedeemCoins?.let { action -> Spacer(Modifier.height(16.dp)); Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFD700).copy(alpha = 0.2f)).border(1.dp, Color(0xFFFFD700), RoundedCornerShape(12.dp)).clickable { action() }.padding(horizontal = 16.dp, vertical = 8.dp)) { Text("CANJEAR PUNTOS POR MONEDAS", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold) } }

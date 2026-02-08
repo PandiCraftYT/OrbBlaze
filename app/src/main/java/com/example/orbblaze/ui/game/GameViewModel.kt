@@ -49,15 +49,13 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         protected set
 
     var score by mutableIntStateOf(0)
-        protected set
-
+    
     var highScore by mutableIntStateOf(0)
         protected set
 
     var coins by mutableIntStateOf(0)
         protected set
 
-    // ✅ Tiempo inicial aumentado a 90 segundos
     var timeLeft by mutableIntStateOf(90) 
         protected set
 
@@ -69,14 +67,11 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var rowsDroppedCount by mutableIntStateOf(0)
         protected set
 
+    var visualScrollOffset by mutableStateOf(0f)
+    
     var joyTick by mutableIntStateOf(0)
         protected set
 
-    var currentRewardDay by mutableIntStateOf(1)
-        private set
-
-    protected val dropThreshold = 8
-    
     var columnsCount by mutableIntStateOf(10)
         protected set
 
@@ -133,46 +128,12 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             settingsManager.coinsFlow.collectLatest { coins = it }
         }
         viewModelScope.launch {
-            settingsManager.currentRewardDayFlow.collectLatest { currentRewardDay = it }
-        }
-        viewModelScope.launch {
             achievements.forEach { achievement ->
                 launch {
                     settingsManager.isAchievementUnlocked(achievement.id).collectLatest { unlocked ->
                         achievement.isUnlocked = unlocked
                     }
                 }
-            }
-        }
-        viewModelScope.launch {
-            checkRewardDayReset()
-        }
-    }
-
-    private suspend fun checkRewardDayReset() {
-        val lastClaim = settingsManager.lastRewardClaimFlow.first()
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastClaim > 48 * 60 * 60 * 1000L && lastClaim != 0L) {
-            settingsManager.setCurrentRewardDay(1)
-        }
-    }
-
-    fun canClaimReward(onResult: (Boolean) -> Unit) {
-        viewModelScope.launch {
-            val lastClaim = settingsManager.lastRewardClaimFlow.first()
-            onResult((System.currentTimeMillis() - lastClaim) >= 24 * 60 * 60 * 1000L)
-        }
-    }
-
-    fun claimDailyReward() {
-        viewModelScope.launch {
-            val lastClaim = settingsManager.lastRewardClaimFlow.first()
-            if ((System.currentTimeMillis() - lastClaim) >= 24 * 60 * 60 * 1000L) {
-                val rewards = listOf(50, 100, 150, 200, 300, 500, 1000)
-                addCoins(rewards[(currentRewardDay - 1) % 7])
-                settingsManager.setLastRewardClaim(System.currentTimeMillis())
-                val nextDay = if (currentRewardDay >= 7) 1 else currentRewardDay + 1
-                settingsManager.setCurrentRewardDay(nextDay)
             }
         }
     }
@@ -222,7 +183,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         isPaused = false
         shotsFiredCount = 0
         rowsDroppedCount = 0
-        timeLeft = 90 // ✅ Al reiniciar, también a 90s
+        visualScrollOffset = 0f
+        timeLeft = 90 
         isFireballQueued = false
         activeProjectile = null
         shooterAngle = 0f
@@ -326,14 +288,14 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                         checkFireballDestruction(nextX, nextY)
                         if (nextY < -bubbleRadius * 2) { activeProjectile = null; return@repeat }
                     } else {
-                        if (nextY - bubbleRadius <= m.ceilingY || checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
+                        val ceiling = m.ceilingY + if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
+                        if (nextY - bubbleRadius <= ceiling || checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
                             snapToGrid(nextX, nextY, currentP.color); collisionDetected = true
                         }
                     }
                     if (!collisionDetected && activeProjectile != null) currentP = currentP.copy(x = nextX, y = nextY, velocityX = nextVx)
                 }
                 if (!collisionDetected && activeProjectile != null) activeProjectile = currentP
-                
                 delay(8) 
             }
         }
@@ -372,7 +334,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             while (gameState == GameState.PLAYING) {
                 delay(1000)
                 if (!isPaused && gameMode == GameMode.TIME_ATTACK) {
-                    timeLeft--; if (timeLeft <= 0) { addRows(3); timeLeft = 90 } // ✅ Al acabarse, reinicia a 90s
+                    timeLeft--; if (timeLeft <= 0) { addRows(3); timeLeft = 90 }
                 }
             }
         }
@@ -389,12 +351,13 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         val m = metrics ?: return
         val newGrid = bubblesByPosition.toMutableMap()
 
-        val estRow = ((y - m.boardTopPadding) / m.verticalSpacing).roundToInt()
+        val offset = if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
+        val estRow = ((y - m.boardTopPadding - offset) / m.verticalSpacing).roundToInt()
         
         val candidates = mutableListOf<GridPosition>()
         for (r in (estRow - 1)..(estRow + 1)) {
-            if (r < 0) continue
-            for (c in 0 until columnsCount + 1) {
+            if (r < -1) continue // Permitir fila -1 en aventura
+            for (c in 0 until columnsCount + 1) { 
                 val p = GridPosition(r, c)
                 if (!newGrid.containsKey(p)) candidates.add(p)
             }
@@ -452,7 +415,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         val visited = mutableSetOf<GridPosition>(); val queue = ArrayDeque<GridPosition>()
-        val ceiling = grid.keys.filter { it.row == 0 }; queue.addAll(ceiling); visited.addAll(ceiling)
+        // ✅ ANCLAJE MEJORADO: Considerar filas <= 0 como techo para evitar que todo caiga en cascada
+        val ceiling = grid.keys.filter { it.row <= 0 }; queue.addAll(ceiling); visited.addAll(ceiling)
         while (queue.isNotEmpty()) {
             val current = queue.removeFirst()
             HexGridHelper.getNeighbors(current, rowsDroppedCount).filter { grid.containsKey(it) && it !in visited }.forEach { visited.add(it); queue.add(it) }
@@ -486,7 +450,11 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun getBubbleCenter(pos: GridPosition): Pair<Float, Float> {
-        return metrics?.let { HexGridHelper.getBubbleCenter(pos, it, rowsDroppedCount) } ?: (0f to 0f)
+        return metrics?.let { 
+            val base = HexGridHelper.getBubbleCenter(pos, it, rowsDroppedCount)
+            val offset = if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
+            base.first to (base.second + offset)
+        } ?: (0f to 0f)
     }
 
     fun spawnExplosion(cx: Float, cy: Float, color: BubbleColor) {
