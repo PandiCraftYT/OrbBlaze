@@ -3,6 +3,7 @@ package com.example.orbblaze.ui.game
 import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.domain.engine.HexGridHelper
@@ -24,6 +25,10 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     var starsEarned by mutableIntStateOf(0)
         private set
 
+    // ✅ Estado para la alerta de recompensa
+    var showReviveAlert by mutableStateOf(false)
+
+    private var shotsTakenInLevel = 0
     private var currentLevelObj: Level? = null
     private var cascadeJob: Job? = null
 
@@ -70,6 +75,7 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         starsEarned = 0
         gameState = GameState.IDLE
         isPaused = false
+        showReviveAlert = false
         rowsDroppedCount = 0
         visualScrollOffset = 0f
         
@@ -93,10 +99,11 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         cascadeJob?.cancel()
         cascadeJob = viewModelScope.launch {
             while (isActive) {
-                if (gameState == GameState.PLAYING && !isPaused) {
+                // ✅ Bloqueo total si hay alerta o pausa
+                if (gameState == GameState.PLAYING && !isPaused && !showReviveAlert) {
                     val m = metrics
                     if (m != null) {
-                        visualScrollOffset += 2.50f
+                        visualScrollOffset += 3.50f
                         checkAdventureDefeat(m)
                         if (visualScrollOffset >= m.verticalSpacing && gameState == GameState.PLAYING) {
                             anchorVisualOffset(m.verticalSpacing)
@@ -160,6 +167,7 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     }
 
     override fun onShoot(spawnX: Float, spawnY: Float) {
+        if (showReviveAlert || isPaused) return
         super.onShoot(spawnX, spawnY)
         previewBubbleColor = generateSmartColor()
     }
@@ -210,7 +218,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     private fun checkAdventureDefeat(m: BoardMetricsPx) {
         val dangerY = m.boardTopPadding + (m.verticalSpacing * 13)
         if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { 
-            // ✅ CORRECCIÓN: Si ya conseguiste al menos 1 estrella, no pierdes, ¡GANAS!
             val level = currentLevelObj
             if (level != null && currentLevelId > 30 && score >= level.star1Threshold) {
                 evaluateFinishingStatus()
@@ -242,5 +249,24 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
                 settingsManager.setLevelStars(currentLevelId, starsEarned)
             }
         }
+    }
+
+    fun reviveWithAd() {
+        val currentBubbles = bubblesByPosition.toMutableMap()
+        val maxRow = currentBubbles.keys.maxOfOrNull { it.row } ?: 0
+        
+        val toRemove = currentBubbles.keys.filter { it.row >= maxRow - 5 }
+        toRemove.forEach { currentBubbles.remove(it) }
+        
+        shotsRemaining = 15 
+        bubblesByPosition = currentBubbles
+        removeFloatingBubbles(currentBubbles)
+        
+        // ✅ CRUCIAL: Mantener pausa activa y activar la alerta
+        gameState = GameState.PLAYING
+        isPaused = true 
+        showReviveAlert = true
+        
+        if (currentLevelId >= 31) startCascadeLoop()
     }
 }

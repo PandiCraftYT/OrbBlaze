@@ -3,42 +3,42 @@ package com.example.orbblaze.domain.model
 object AdventureLevels {
     val levels = listOf(
         // ==========================================
-        // ZONA 1: JUNGLA (1-15) - Tutoriales (Sin Estrellas)
+        // ZONA 1: JUNGLA (1-15) - Dificultad Media (Sin Estrellas)
         // ==========================================
-        Level(1, AdventureZone.JUNGLE, 15, listOf("  R B G Y  ", " B G Y R B ", "  G Y R B  "), LevelObjective.ClearBoard(), 500, 1000, 1500),
-        Level(2, AdventureZone.JUNGLE, 15, listOf("P B G Y C R", " B G Y C R P"), LevelObjective.ClearBoard(), 1000, 2000, 3000),
-        Level(3, AdventureZone.JUNGLE, 18, listOf("R B G Y P C", " C P Y G B R"), LevelObjective.ClearBoard(), 1500, 2500, 3500),
-        Level(4, AdventureZone.JUNGLE, 20, listOf("R B G Y P C", " B G Y P C R"), LevelObjective.ClearBoard(), 2000, 3500, 5000),
-        Level(5, AdventureZone.JUNGLE, 20, listOf("R G B Y P C", " C P Y G B R"), LevelObjective.ClearBoard(), 2500, 4000, 6000),
-        Level(6, AdventureZone.JUNGLE, 18, listOf("Y R G B P C", " R G B P C Y"), LevelObjective.ClearBoard(), 2000, 3500, 5000),
-        Level(7, AdventureZone.JUNGLE, 22, listOf("R C R C R C R", " C R C R C R "), LevelObjective.ClearBoard(), 3000, 5000, 7000),
-        Level(8, AdventureZone.JUNGLE, 22, listOf("P B G Y P C", "B G Y P C R"), LevelObjective.ClearBoard(), 4000, 6000, 8000),
-        Level(9, AdventureZone.JUNGLE, 20, listOf("G R B Y P C", " R B Y P C G"), LevelObjective.ClearBoard(), 3000, 5000, 7000),
-        Level(10, AdventureZone.JUNGLE, 28, listOf("R R B B G G", " B B G G R R"), LevelObjective.ClearBoard(), 5000, 8000, 10000),
-        Level(11, AdventureZone.JUNGLE, 20, listOf("R B G Y P C", " B G Y P C "), LevelObjective.ClearBoard(), 5000, 8000, 11000),
-        Level(12, AdventureZone.JUNGLE, 18, listOf("P B G Y C R", " B G Y C R P"), LevelObjective.ClearBoard(), 4500, 7500, 10000),
-        Level(13, AdventureZone.JUNGLE, 25, listOf("G Y R B G Y", " Y R B G Y R"), LevelObjective.ClearBoard(), 5500, 8500, 11500),
-        Level(14, AdventureZone.JUNGLE, 22, listOf("Y R B G Y R", " R B G Y R B"), LevelObjective.ClearBoard(), 5000, 8000, 11000),
-        Level(15, AdventureZone.JUNGLE, 28, listOf("C P Y G B R C", " P Y G B R C P"), LevelObjective.ClearBoard(), 7000, 10000, 14000),
+        Level(1, AdventureZone.JUNGLE, 12, listOf("RRBBGGYYCC", "BBGGYYCCRR", "RRGGBBYYCC"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(2, AdventureZone.JUNGLE, 12, listOf("R B G Y P C", " C P Y G B R", " R B G Y P C"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(3, AdventureZone.JUNGLE, 14, listOf("R R G G B B", " R G B R G B", "  B B R R G G"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(4, AdventureZone.JUNGLE, 15, listOf("RBG YPC RBG", "GBR PCY GBR", "BRG CY P BRG"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(5, AdventureZone.JUNGLE, 15, listOf("RRR BBB GGG", "YYY PPP CCC", "RRR BBB GGG"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(6, AdventureZone.JUNGLE, 16, listOf("R B R B R B", " G Y G Y G Y", " P C P C P C", " R B R B R B"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(7, AdventureZone.JUNGLE, 18, listOf("RRBB RRBB RR", "GGYY GGYY GG", "PPCC PPCC PP"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(8, AdventureZone.JUNGLE, 18, listOf("R G B Y P C", " R G B Y P C", "  R G B Y P C", "   R G B Y P C"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(9, AdventureZone.JUNGLE, 20, listOf("RGBYPC RGBY", "BCYRP G BCP", "RGBYPC RGBY"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(10, AdventureZone.JUNGLE, 22, listOf("RRRRRBBBBB", "GGGGGYYYYY", "PPPPPCCCCC", "RRRRRBBBBB"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(11, AdventureZone.JUNGLE, 20, listOf("R B G Y P C", " B G Y P C R", " G Y P C R B", " Y P C R B G"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(12, AdventureZone.JUNGLE, 18, listOf("RRRRR GGGGG", "BBBBB YYYYY", "PPPPP CCCCC"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(13, AdventureZone.JUNGLE, 22, listOf("RGBYPC", "CPYBGR", "RGBYPC", "CPYBGR", "RGBYPC"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(14, AdventureZone.JUNGLE, 20, listOf("RR BB GG YY", "PP CC RR BB", "GG YY PP CC"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(15, AdventureZone.JUNGLE, 25, listOf("R B G Y P C R B", " B G Y P C R B G", " G Y P C R B G Y"), LevelObjective.ClearBoard(), 0, 0, 0),
 
         // ==========================================
-        // ZONA 2: CUEVA (16-30) - Retos Estáticos (Sin Estrellas)
+        // ZONA 2: CUEVA (16-30) - Dificultad Media+ (Sin Estrellas)
         // ==========================================
-        Level(16, AdventureZone.CAVE, 25, listOf("R B G Y P C", " B G Y P C R", " G Y P C R B"), LevelObjective.ClearBoard(), 6000, 9000, 12000),
-        Level(17, AdventureZone.CAVE, 18, listOf("P C Y G B R", " C Y G B R P", " Y G B R P C"), LevelObjective.ClearBoard(), 8000, 11000, 15000),
-        Level(18, AdventureZone.CAVE, 25, listOf("C R B Y P G", " R B Y P G C"), LevelObjective.ClearBoard(), 7500, 11000, 14500),
-        Level(19, AdventureZone.CAVE, 22, listOf("R G B Y P C", " C P Y G B R"), LevelObjective.ClearBoard(), 8000, 12000, 16000),
-        Level(20, AdventureZone.CAVE, 28, listOf("R G B Y P C", " G B Y P C R"), LevelObjective.ClearBoard(), 9000, 13000, 17000),
-        Level(21, AdventureZone.CAVE, 22, listOf("C P Y G B R", " P Y G B R C"), LevelObjective.ClearBoard(), 6000, 9000, 12000),
-        Level(22, AdventureZone.CAVE, 18, listOf("B G Y P C R", " R B G Y P C"), LevelObjective.ClearBoard(), 7000, 10000, 13000),
-        Level(23, AdventureZone.CAVE, 25, listOf("Y P G C R B", " P G C R B Y"), LevelObjective.ClearBoard(), 5000, 8000, 11000),
-        Level(24, AdventureZone.CAVE, 25, listOf("R B G Y P C", " G Y P C R B"), LevelObjective.ClearBoard(), 8000, 12000, 16000),
-        Level(25, AdventureZone.CAVE, 30, listOf("C R B Y P G", " R B Y P G C"), LevelObjective.ClearBoard(), 9000, 14000, 18000),
-        Level(26, AdventureZone.CAVE, 25, listOf("G Y P C R B", " Y P C R B G"), LevelObjective.ClearBoard(), 10000, 15000, 20000),
-        Level(27, AdventureZone.CAVE, 25, listOf("Y R B G P C", " R B G P C Y"), LevelObjective.ClearBoard(), 11000, 16000, 22000),
-        Level(28, AdventureZone.CAVE, 28, listOf("R G B Y P C", " G B Y P C R"), LevelObjective.ClearBoard(), 15000, 20000, 25000),
-        Level(29, AdventureZone.CAVE, 20, listOf("R C P Y B G R", " G B Y P C R "), LevelObjective.ClearBoard(), 12000, 18000, 24000),
-        Level(30, AdventureZone.CAVE, 35, listOf("P B G Y P C R", " B G Y P C R B"), LevelObjective.ClearBoard(), 20000, 30000, 40000),
+        Level(16, AdventureZone.CAVE, 22, listOf("RRRRRBBBBB", "BBBBBRRRRR", "GGGGGYYYYY", "YYYYYGGGGG"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(17, AdventureZone.CAVE, 20, listOf("R B G Y P C", " R B G Y P C", "R B G Y P C", " R B G Y P C"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(18, AdventureZone.CAVE, 24, listOf("RR GG BB YY", "RR GG BB YY", "PP CC RR GG", "PP CC RR GG"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(19, AdventureZone.CAVE, 22, listOf("RGBYPC", "RGBYPC", "RGBYPC", "RGBYPC", "RGBYPC"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(20, AdventureZone.CAVE, 25, listOf("RRRRR", "GGGGG", "BBBBB", "YYYYY", "PPPPP", "CCCCC"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(21, AdventureZone.CAVE, 22, listOf("R B R B R B", "G Y G Y G Y", "P C P C P C", "R B R B R B"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(22, AdventureZone.CAVE, 20, listOf("RRRRRBBBBB", "GGGGGYYYYY", "PPPPPCCCCC"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(23, AdventureZone.CAVE, 24, listOf("R G B Y P C", "P C Y G B R", "G B R P C Y"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(24, AdventureZone.CAVE, 22, listOf("RRRRR GGGGG", "RRRRR GGGGG", "BBBBB YYYYY", "BBBBB YYYYY"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(25, AdventureZone.CAVE, 28, listOf("RGBYPC RGBY", "RGBYPC RGBY", "RGBYPC RGBY"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(26, AdventureZone.CAVE, 24, listOf("RR BB GG YY", " PP CC RR BB", " GG YY PP CC", " RR BB GG YY"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(27, AdventureZone.CAVE, 22, listOf("R B G Y P C", " C P Y G B R", " R B G Y P C", " C P Y G B R"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(28, AdventureZone.CAVE, 25, listOf("RRRRR", "RRRRR", "BBBBB", "BBBBB", "GGGGG", "GGGGG"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(29, AdventureZone.CAVE, 22, listOf("R G B Y P C R B", " B G Y P C R B G"), LevelObjective.ClearBoard(), 0, 0, 0),
+        Level(30, AdventureZone.CAVE, 30, listOf("R B G Y P C R B", " R B G Y P C R B", " R B G Y P C R B"), LevelObjective.ClearBoard(), 0, 0, 0),
 
         // ==========================================
         // ZONA 3: NÚCLEO (31-50) - 🌊 MODO CASCADA COMPACTO

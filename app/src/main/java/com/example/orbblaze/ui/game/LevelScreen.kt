@@ -97,7 +97,7 @@ fun LevelScreen(
     val tutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
     var showTutorial by remember { mutableStateOf(false) }
 
-    // ✅ LÓGICA DE FONDO DINÁMICO SINCRONIZADA CON EL MAPA
+    // ✅ LÓGICA DE FONDO DINÁMICO
     val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
         when {
@@ -113,6 +113,17 @@ fun LevelScreen(
 
     val animatedBgTop by animateColorAsState(targetValue = bgColors.first(), animationSpec = tween(1000), label = "bgTop")
     val animatedBgBottom by animateColorAsState(targetValue = bgColors.last(), animationSpec = tween(1000), label = "bgBottom")
+
+    val isReviveAlertActive = (viewModel as? AdventureViewModel)?.showReviveAlert == true
+
+    // CONTROL DE MÚSICA REFORZADO
+    LaunchedEffect(gameState, isPaused, isReviveAlertActive) {
+        if (gameState == GameState.PLAYING && !isPaused && !isReviveAlertActive) {
+            soundManager.startMusic()
+        } else {
+            soundManager.pauseMusic()
+        }
+    }
 
     LaunchedEffect(tutorialCompleted, viewModel.gameMode) {
         if (!tutorialCompleted && viewModel.gameMode == GameMode.CLASSIC) {
@@ -143,18 +154,12 @@ fun LevelScreen(
         } else soundManager.setMusicSpeed(1.0f)
     }
 
-    LaunchedEffect(gameState) {
-        if (gameState == GameState.IDLE) hasRedeemedCoins = false
-        if (gameState == GameState.PLAYING) soundManager.startMusic()
-        else if (gameState != GameState.IDLE) soundManager.pauseMusic()
-    }
-
     LaunchedEffect(soundEvent) { soundEvent?.let { soundManager.play(it); viewModel.clearSoundEvent() } }
     LaunchedEffect(vibrationEvent) { if (vibrationEvent) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.clearVibrationEvent() } }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(colors = listOf(animatedBgTop, animatedBgBottom))) // ✅ Fondo animado y sincronizado
+            .background(Brush.verticalGradient(colors = listOf(animatedBgTop, animatedBgBottom)))
             .pointerInput(gameState, isPaused, showQuickShop, showTutorial) {
                 if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
                 awaitEachGesture {
@@ -191,7 +196,6 @@ fun LevelScreen(
         val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
-        
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
@@ -320,7 +324,8 @@ fun LevelScreen(
         if (showQuickShop) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
                 Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
-                    Column(modifier = Modifier.background(Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))
+                    Column(modifier = Modifier.background(brush).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("OBJETOS TÁCTICOS", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
                         Spacer(Modifier.height(20.dp))
                         ItemRow("BOLA DE FUEGO", "Atraviesa todo", 150, "🔥") { viewModel.buyFireball(); showQuickShop = false }
@@ -355,7 +360,8 @@ fun LevelScreen(
             }
         }
 
-        if (isPaused && gameState == GameState.PLAYING) {
+        // ✅ OCULTAR MENÚ DE PAUSA SI LA ALERTA DE REVIVIR ESTÁ ACTIVA
+        if (isPaused && gameState == GameState.PLAYING && !isReviveAlertActive) {
             OverlayMenu(
                 title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, 
                 onExit = { soundManager.startMusic(); onMenuClick() }, 
@@ -370,7 +376,7 @@ fun LevelScreen(
                 onExit = { onMenuClick() },
                 score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
-                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { // ✅ DESACTIVADO EN AVENTURA
+                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) {
                     { 
                         if (score >= 100) { 
                             viewModel.addCoins(score / 100)
@@ -379,9 +385,74 @@ fun LevelScreen(
                         } 
                     } 
                 } else null,
-                onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } },
+                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { 
+                    { 
+                        onShowAd { _ -> 
+                            if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) {
+                                (viewModel as? AdventureViewModel)?.reviveWithAd()
+                            } else {
+                                viewModel.addCoins(50)
+                                Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                },
                 currentLevelId = currentLevelId
             )
+        }
+
+        // ✅ MEJORA DE DISEÑO DE ALERTA DE INTENTO RECUPERADO
+        if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+                Surface(
+                    modifier = Modifier.width(320.dp).padding(16.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    color = Color(0xFF1A237E),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 12.dp,
+                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.15f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF64FFDA),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = "¡INTENTO RECUPERADO!",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "Se han eliminado 6 líneas y tienes 15 tiros extra. ¡Dale duro!",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 20.sp
+                        )
+                        Spacer(Modifier.height(32.dp))
+                        Button(
+                            onClick = { 
+                                viewModel.showReviveAlert = false 
+                                viewModel.togglePause() 
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text("¡LISTO!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp)
+                        }
+                    }
+                }
+            }
         }
 
         if (showTutorial) {
@@ -430,15 +501,26 @@ fun OverlayMenu(
             if (score != null) {
                 Spacer(Modifier.height(8.dp)); Text(text = "PUNTUACIÓN FINAL: $score", style = TextStyle(fontSize = 20.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.ExtraBold))
                 
-                // ✅ El botón de canje solo aparece si onRedeemCoins no es null
                 onRedeemCoins?.let { action -> 
                     Spacer(Modifier.height(16.dp))
                     Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFD700).copy(alpha = 0.2f)).border(1.dp, Color(0xFFFFD700), RoundedCornerShape(12.dp)).clickable { action() }.padding(horizontal = 16.dp, vertical = 8.dp)) { 
                         Text("CANJEAR PUNTOS POR MONEDAS", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold) 
                     } 
                 }
-
-                onShowAd?.let { adAction -> Spacer(Modifier.height(12.dp)); Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF64FFDA).copy(alpha = 0.2f)).border(1.dp, Color(0xFF64FFDA), RoundedCornerShape(12.dp)).clickable { adAction() }.padding(horizontal = 16.dp, vertical = 8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, tint = Color(0xFF64FFDA), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("VER ANUNCIO (+50 🪙)", color = Color(0xFF64FFDA), fontSize = 12.sp, fontWeight = FontWeight.Bold) } } }
+                
+                onShowAd?.let { adAction -> 
+                    val adLabel = if (isAdventure && !isWin) "RECUPERAR INTENTO" else "VER ANUNCIO (+50 🪙)"
+                    val adColor = if (isAdventure && !isWin) Color(0xFFFF5252) else Color(0xFF64FFDA)
+                    
+                    Spacer(Modifier.height(12.dp))
+                    Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(adColor.copy(alpha = 0.2f)).border(1.dp, adColor, RoundedCornerShape(12.dp)).clickable { adAction() }.padding(horizontal = 16.dp, vertical = 8.dp)) { 
+                        Row(verticalAlignment = Alignment.CenterVertically) { 
+                            Icon(Icons.Default.PlayArrow, null, tint = adColor, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(adLabel, color = adColor, fontSize = 12.sp, fontWeight = FontWeight.Bold) 
+                        } 
+                    } 
+                }
             }
             Spacer(Modifier.height(50.dp))
             onContinue?.let { action -> Box(modifier = Modifier.width(260.dp).height(64.dp).clip(RoundedCornerShape(50)).background(Color(0xFF64FFDA)).clickable { action() }, contentAlignment = Alignment.Center) { Text("CONTINUAR", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E))) }; Spacer(Modifier.height(24.dp)) }
