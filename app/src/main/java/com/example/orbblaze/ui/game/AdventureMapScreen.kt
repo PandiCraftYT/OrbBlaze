@@ -58,12 +58,14 @@ fun AdventureMapScreen(
     val density = LocalDensity.current
     val levels = AdventureLevels.levels
 
-    val currentProgress by settingsManager.adventureProgressFlow.collectAsState(initial = 0)
+    // ✅ RECOLECCIÓN SEGURA DE DATOS
+    val currentProgress by settingsManager.adventureProgressFlow.collectAsState(initial = -1) // -1 indica "cargando"
     val nodesState = remember { mutableStateListOf<LevelNodeData>() }
-    var isLoading by remember { mutableStateOf(true) }
+    var dataReady by remember { mutableStateOf(false) }
 
-    // Carga de datos y estados de niveles
     LaunchedEffect(currentProgress) {
+        if (currentProgress == -1) return@LaunchedEffect
+        
         val starsMap = settingsManager.allStarsFlow.first()
         val list = levels.map { level ->
             val state = when {
@@ -75,12 +77,12 @@ fun AdventureMapScreen(
         }
         nodesState.clear()
         nodesState.addAll(list)
-        isLoading = false
+        dataReady = true
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        if (isLoading) {
-            Box(Modifier.fillMaxSize().background(OrbBlueBg), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(OrbBlueBg)) {
+        if (!dataReady) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color.White)
             }
         } else {
@@ -104,21 +106,20 @@ fun AdventureMapScreen(
                 }
             }
 
-            // ✅ CORRECCIÓN SCROLL: Centrar el nivel actual (CURRENT)
-            LaunchedEffect(finalNodes) {
+            // Scroll automático solo la primera vez que cargan los datos
+            LaunchedEffect(dataReady) {
                 val currentNode = finalNodes.find { it.state == LevelState.CURRENT }
                 if (currentNode != null) {
                     val targetY = currentNode.position.y - (screenHeightPx / 2)
                     scrollState.scrollTo(targetY.toInt().coerceIn(0, scrollState.maxValue))
                 } else if (currentProgress >= levels.size) {
-                    // Si completó todo, mostrar el final (arriba)
                     scrollState.scrollTo(0)
                 } else {
-                    // Inicio
                     scrollState.scrollTo(scrollState.maxValue)
                 }
             }
 
+            // Lógica de fondo dinámico
             val currentViewY = totalHeightPx - scrollState.value - (screenHeightPx / 2)
             val estimatedIndex = ((totalHeightPx - bottomPaddingPx - currentViewY) / nodeSpacingPx)
                 .coerceIn(0f, (levels.size - 1).toFloat()).toInt()

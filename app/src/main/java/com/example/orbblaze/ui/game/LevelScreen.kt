@@ -97,7 +97,7 @@ fun LevelScreen(
     val tutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
     var showTutorial by remember { mutableStateOf(false) }
 
-    // ✅ LÓGICA DE FONDO SINCRONIZADA (Igual al mapa)
+    // ✅ LÓGICA DE FONDO DINÁMICO SINCRONIZADA CON EL MAPA
     val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
         when {
@@ -154,7 +154,7 @@ fun LevelScreen(
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(colors = listOf(animatedBgTop, animatedBgBottom)))
+            .background(Brush.verticalGradient(colors = listOf(animatedBgTop, animatedBgBottom))) // ✅ Fondo animado y sincronizado
             .pointerInput(gameState, isPaused, showQuickShop, showTutorial) {
                 if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
                 awaitEachGesture {
@@ -191,6 +191,7 @@ fun LevelScreen(
         val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
+        
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
@@ -233,6 +234,7 @@ fun LevelScreen(
                 }
             }
 
+            // LÍNEA ROJA ESTÁTICA
             val redLineY = boardTopPaddingPx + verticalSpacingPx * 13
             drawLine(
                 color = Color.Red.copy(alpha = dangerAlpha), 
@@ -368,9 +370,17 @@ fun LevelScreen(
                 onExit = { onMenuClick() },
                 score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
-                onRedeemCoins = if(!hasRedeemedCoins) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null,
+                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { // ✅ DESACTIVADO EN AVENTURA
+                    { 
+                        if (score >= 100) { 
+                            viewModel.addCoins(score / 100)
+                            hasRedeemedCoins = true
+                            Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() 
+                        } 
+                    } 
+                } else null,
                 onShowAd = { onShowAd { _ -> viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } },
-                currentLevelId = currentLevelId // ✅ Pasamos el ID para ocultar estrellas en 1-30
+                currentLevelId = currentLevelId
             )
         }
 
@@ -400,13 +410,12 @@ fun OverlayMenu(
     score: Int? = null, isWin: Boolean = false, showVolume: Boolean = false, volume: Float = 0f, 
     onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null, 
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
-    currentLevelId: Int = 0 // ✅ Nuevo parámetro
+    currentLevelId: Int = 0
 ) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
             Text(text = title, style = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Black, color = if (isWin) Color(0xFFFFD700) else if (title == "PAUSA") Color.White else Color(0xFFFF4D4D), letterSpacing = 2.sp, shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f)))
             
-            // ✅ OCULTAR ESTRELLAS SI NIVEL <= 30
             if (isAdventure && isWin && currentLevelId > 30) {
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.Center) {
@@ -420,7 +429,15 @@ fun OverlayMenu(
 
             if (score != null) {
                 Spacer(Modifier.height(8.dp)); Text(text = "PUNTUACIÓN FINAL: $score", style = TextStyle(fontSize = 20.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.ExtraBold))
-                onRedeemCoins?.let { action -> Spacer(Modifier.height(16.dp)); Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFD700).copy(alpha = 0.2f)).border(1.dp, Color(0xFFFFD700), RoundedCornerShape(12.dp)).clickable { action() }.padding(horizontal = 16.dp, vertical = 8.dp)) { Text("CANJEAR PUNTOS POR MONEDAS", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold) } }
+                
+                // ✅ El botón de canje solo aparece si onRedeemCoins no es null
+                onRedeemCoins?.let { action -> 
+                    Spacer(Modifier.height(16.dp))
+                    Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFD700).copy(alpha = 0.2f)).border(1.dp, Color(0xFFFFD700), RoundedCornerShape(12.dp)).clickable { action() }.padding(horizontal = 16.dp, vertical = 8.dp)) { 
+                        Text("CANJEAR PUNTOS POR MONEDAS", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold) 
+                    } 
+                }
+
                 onShowAd?.let { adAction -> Spacer(Modifier.height(12.dp)); Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF64FFDA).copy(alpha = 0.2f)).border(1.dp, Color(0xFF64FFDA), RoundedCornerShape(12.dp)).clickable { adAction() }.padding(horizontal = 16.dp, vertical = 8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, tint = Color(0xFF64FFDA), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("VER ANUNCIO (+50 🪙)", color = Color(0xFF64FFDA), fontSize = 12.sp, fontWeight = FontWeight.Bold) } } }
             }
             Spacer(Modifier.height(50.dp))

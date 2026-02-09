@@ -24,7 +24,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     var starsEarned by mutableIntStateOf(0)
         private set
 
-    private var shotsTakenInLevel = 0
     private var currentLevelObj: Level? = null
     private var cascadeJob: Job? = null
 
@@ -46,7 +45,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         columnsCount = maxLayoutWidth.coerceAtLeast(10)
 
         val newGrid = mutableMapOf<GridPosition, Bubble>()
-        
         layout.forEachIndexed { row, rowText ->
             rowText.forEachIndexed { charIndex, char ->
                 val color = charToColor(char)
@@ -56,7 +54,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
             }
         }
         
-        // Pre-cargar fila superior (-1) para efecto fluido
         if (levelId >= 31) {
             val patternText = layout[0]
             patternText.forEachIndexed { charIndex, char ->
@@ -69,7 +66,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         
         bubblesByPosition = newGrid
         shotsRemaining = level.maxShots
-        shotsTakenInLevel = 0
         score = 0
         starsEarned = 0
         gameState = GameState.IDLE
@@ -79,7 +75,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         
         nextBubbleColor = generateSmartColor()
         previewBubbleColor = generateSmartColor()
-
         cascadeJob?.cancel()
     }
 
@@ -91,9 +86,7 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
 
     override fun startGame() {
         super.startGame()
-        if (currentLevelId >= 31) {
-            startCascadeLoop()
-        }
+        if (currentLevelId >= 31) startCascadeLoop()
     }
 
     private fun startCascadeLoop() {
@@ -103,9 +96,9 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
                 if (gameState == GameState.PLAYING && !isPaused) {
                     val m = metrics
                     if (m != null) {
-                        visualScrollOffset += 3.50f
+                        visualScrollOffset += 2.50f
                         checkAdventureDefeat(m)
-                        if (visualScrollOffset >= m.verticalSpacing) {
+                        if (visualScrollOffset >= m.verticalSpacing && gameState == GameState.PLAYING) {
                             anchorVisualOffset(m.verticalSpacing)
                         }
                     }
@@ -121,23 +114,18 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         val newGrid = mutableMapOf<GridPosition, Bubble>()
         
         bubblesByPosition.forEach { (pos, bubble) ->
-            if (pos.row < 30) {
-                newGrid[GridPosition(pos.row + 1, pos.col)] = bubble
-            }
+            if (pos.row < 30) newGrid[GridPosition(pos.row + 1, pos.col)] = bubble
         }
         
         val nextRowIndex = (rowsDroppedCount + 1) % layout.size
-        val rowText = layout[nextRowIndex]
-        
+        val patternText = layout[nextRowIndex]
         val colors = listOf('R', 'B', 'G', 'Y', 'P', 'C')
         val colorOffset = (rowsDroppedCount / layout.size) % colors.size
-        
-        val horizontalShift = rowsDroppedCount % rowText.length
+        val horizontalShift = rowsDroppedCount % patternText.length
 
-        rowText.forEachIndexed { charIndex, char ->
-            val shiftedIdx = (charIndex + horizontalShift) % rowText.length
-            val colorChar = rowText[shiftedIdx]
-            
+        patternText.forEachIndexed { charIndex, char ->
+            val shiftedIdx = (charIndex + horizontalShift) % patternText.length
+            val colorChar = patternText[shiftedIdx]
             val finalColorChar = if (colorChar in colors) {
                 val cIdx = colors.indexOf(colorChar)
                 colors[(cIdx + colorOffset) % colors.size]
@@ -149,50 +137,26 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
             }
         }
 
+        removeFloatingBubbles(newGrid)
         bubblesByPosition = newGrid
         rowsDroppedCount++
         visualScrollOffset -= rowHeight
-        removeFloatingBubbles(newGrid)
     }
 
-    // ✅ LÓGICA ULTRA-INTELIGENTE: Cero suerte, siempre útil
     private fun generateSmartColor(): BubbleColor {
         val currentBubbles = bubblesByPosition
-        if (currentBubbles.isEmpty()) {
-            return BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
-        }
-
-        // 1. Identificar la fila más baja
-        val maxRow = currentBubbles.keys.maxOf { it.row }
-        // Miramos las 3 filas inferiores (zona de impacto inmediato)
+        if (currentBubbles.isEmpty()) return BubbleColor.RED
+        val maxRow = currentBubbles.keys.maxOfOrNull { it.row } ?: 0
         val targetEntries = currentBubbles.entries.filter { it.key.row >= maxRow - 2 }
-        
-        // 2. Prioridad: Buscar colores que ya tengan una pareja formada en el tablero
         val colorsWithPairs = mutableListOf<BubbleColor>()
         for (entry in targetEntries) {
-            val pos = entry.key
-            val color = entry.value.color
+            val pos = entry.key; val color = entry.value.color
             if (color == BubbleColor.BOMB || color == BubbleColor.RAINBOW) continue
-            
             val neighbors = HexGridHelper.getNeighbors(pos, rowsDroppedCount)
-            if (neighbors.any { currentBubbles[it]?.color == color }) {
-                colorsWithPairs.add(color)
-            }
+            if (neighbors.any { currentBubbles[it]?.color == color }) colorsWithPairs.add(color)
         }
-
-        if (colorsWithPairs.isNotEmpty()) {
-            return colorsWithPairs.distinct().random()
-        }
-
-        // 3. Fallback: Simplemente dar un color de los que están en la fila más baja
-        val lowestColors = currentBubbles.entries
-            .filter { it.key.row == maxRow }
-            .map { it.value.color }
-            .filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
-            .distinct()
-
-        return if (lowestColors.isNotEmpty()) lowestColors.random()
-        else BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
+        return if (colorsWithPairs.isNotEmpty()) colorsWithPairs.distinct().random()
+        else currentBubbles.values.map { it.color }.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
     }
 
     override fun onShoot(spawnX: Float, spawnY: Float) {
@@ -246,9 +210,15 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     private fun checkAdventureDefeat(m: BoardMetricsPx) {
         val dangerY = m.boardTopPadding + (m.verticalSpacing * 13)
         if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { 
-            gameState = GameState.LOST 
-            soundEvent = SoundType.LOSE 
-            cascadeJob?.cancel()
+            // ✅ CORRECCIÓN: Si ya conseguiste al menos 1 estrella, no pierdes, ¡GANAS!
+            val level = currentLevelObj
+            if (level != null && currentLevelId > 30 && score >= level.star1Threshold) {
+                evaluateFinishingStatus()
+            } else {
+                gameState = GameState.LOST 
+                soundEvent = SoundType.LOSE 
+                cascadeJob?.cancel()
+            }
         }
     }
 
