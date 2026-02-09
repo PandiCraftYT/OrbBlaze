@@ -39,7 +39,7 @@ fun ShopScreen(onBackClick: () -> Unit) {
     val coins by remember { mutableIntStateOf(1250) } // Ejemplo de saldo
 
     val powerUps = listOf(
-        ShopItem("fire", "Burbuja Fuego", "Quema filas enteras", 150, "🔥"),
+        ShopItem("fire", "Burbuja Fuego", "Quema filas enteras", 1000, "🔥"),
         ShopItem("ice", "Burbuja Hielo", "Detiene el techo", 200, "❄️"),
         ShopItem("laser", "Super Guía", "Puntería infinita", 100, "🎯")
     )

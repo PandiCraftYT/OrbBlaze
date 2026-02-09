@@ -154,7 +154,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun buyFireball() {
-        spendCoins(150) { success ->
+        spendCoins(1000) { success ->
             if (success) {
                 isFireballQueued = true
                 soundEvent = SoundType.SWAP

@@ -328,7 +328,7 @@ fun LevelScreen(
                     Column(modifier = Modifier.background(brush).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("OBJETOS TÁCTICOS", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
                         Spacer(Modifier.height(20.dp))
-                        ItemRow("BOLA DE FUEGO", "Atraviesa todo", 150, "🔥") { viewModel.buyFireball(); showQuickShop = false }
+                        ItemRow("BOLA DE FUEGO", "Atraviesa todo", 1000, "🔥") { viewModel.buyFireball(); showQuickShop = false }
                         Spacer(Modifier.height(24.dp))
                         Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Color(0xFF1A237E)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) { Text("CERRAR", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp) }
                     }
@@ -344,16 +344,56 @@ fun LevelScreen(
                     AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { viewModel.startGame() })
                 }
             } else {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
-                    Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), border = BorderStroke(2.dp, Color.White.copy(alpha = 0.2f))) {
-                        Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            val title = if (viewModel.gameMode == GameMode.TIME_ATTACK) "TIME ATTACK" else "MODO CLÁSICO"
-                            val desc = if (viewModel.gameMode == GameMode.TIME_ATTACK) "¡Explota burbujas rápido!" else "Evita que lleguen a la línea roja."
-                            Text(text = title, style = TextStyle(color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black))
-                            Spacer(Modifier.height(12.dp))
-                            Text(text = desc, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center)
-                            Spacer(Modifier.height(24.dp))
-                            Button(onClick = { viewModel.startGame() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) { Text("¡EMPEZAR!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black) }
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, 
+                    contentAlignment = Alignment.Center
+                ) {
+                    val isTimeAttack = viewModel.gameMode == GameMode.TIME_ATTACK
+                    val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
+                    
+                    Surface(
+                        modifier = Modifier.width(340.dp).padding(16.dp), 
+                        shape = RoundedCornerShape(32.dp), 
+                        color = Color(0xFF0F1444), 
+                        border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))),
+                        shadowElevation = 24.dp
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (isTimeAttack) "TIME ATTACK" else "MODO CLÁSICO", 
+                                style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center)
+                            )
+                            
+                            Spacer(Modifier.height(16.dp))
+                            
+                            Text(
+                                text = if (isTimeAttack) "¡Sé el más rápido y explota todas las burbujas!" else "No dejes que las burbujas toquen la línea roja. ¡Sobrevive todo lo que puedas!", 
+                                color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp
+                            )
+
+                            if (highScore > 0) {
+                                Spacer(Modifier.height(24.dp))
+                                Row(
+                                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 20.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("RÉCORD: $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+                            
+                            Spacer(Modifier.height(40.dp))
+                            
+                            Button(
+                                onClick = { viewModel.startGame() }, 
+                                modifier = Modifier.fillMaxWidth().height(64.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)
+                            ) { 
+                                Text("¡JUGAR AHORA!", color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp)
+                            }
                         }
                     }
                 }
