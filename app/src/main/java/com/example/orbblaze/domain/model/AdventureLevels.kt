@@ -51,7 +51,7 @@ object AdventureLevels {
         Level(36, AdventureZone.CORE, 30, listOf("CCCCCYYYYY", "YYYYYCCCCC"), LevelObjective.ReachScore(1200), 900, 1100, 1200),
         Level(37, AdventureZone.CORE, 32, listOf("RRRRRGGGGG", "BBBBBYYYYY"), LevelObjective.ReachScore(1300), 1000, 1200, 1300),
         Level(38, AdventureZone.CORE, 30, listOf("BBBGGGYYYR", "GGGYYYRRRB"), LevelObjective.ReachScore(1250), 900, 1150, 1250),
-        Level(39, AdventureZone.CORE, 35, listOf("RBRBRBRBRB", "GYGYGYGYGY"), LevelObjective.ReachScore(1500), 1100, 1350, 1500),
+        Level(39, AdventureZone.CORE, 35, listOf("RRBBGGYYPP", "GYGYGYGYGY"), LevelObjective.ReachScore(1500), 1100, 1350, 1500),
         Level(40, AdventureZone.CORE, 32, listOf("RRGGBBYYCC", "GGBBYYCCRR"), LevelObjective.ReachScore(1400), 1000, 1250, 1400),
         Level(41, AdventureZone.CORE, 35, listOf("RRBBGGYYRR", "BBGGYYRRBB"), LevelObjective.ReachScore(1600), 1200, 1450, 1600),
         Level(42, AdventureZone.CORE, 35, listOf("PPPPCCCCBB", "BBPPPPCCCC"), LevelObjective.ReachScore(1550), 1150, 1400, 1550),

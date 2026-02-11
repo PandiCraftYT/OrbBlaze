@@ -86,9 +86,9 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     var activeAchievement by mutableStateOf<Achievement?>(null)
         protected set
 
-    var nextBubbleColor by mutableStateOf(generateProjectileColor())
+    var nextBubbleColor by mutableStateOf(BubbleColor.BLUE)
         protected set
-    var previewBubbleColor by mutableStateOf(generateProjectileColor())
+    var previewBubbleColor by mutableStateOf(BubbleColor.RED)
         protected set
 
     var isFireballQueued by mutableStateOf(false)
@@ -163,7 +163,13 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     open fun changeGameMode(mode: GameMode) { this.gameMode = mode }
-    open fun startGame() { gameState = GameState.PLAYING; startTimer() }
+    open fun startGame() { 
+        gameState = GameState.PLAYING
+        // Inicializar colores basados en el tablero cargado
+        nextBubbleColor = generateProjectileColor()
+        previewBubbleColor = generateProjectileColor()
+        startTimer() 
+    }
 
     open fun loadLevel(initialRows: Int = 6) {
         columnsCount = 10 
@@ -175,8 +181,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         bubblesByPosition = cleanGrid
-        nextBubbleColor = generateProjectileColor()
-        previewBubbleColor = generateProjectileColor()
         
         score = 0
         gameState = GameState.IDLE
@@ -236,12 +240,23 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     protected fun generateBoardBubbleColor() = BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
+    
+    // ✅ GENERACIÓN DE COLOR INTELIGENTE: Solo genera colores que existen en el tablero
     protected fun generateProjectileColor(): BubbleColor {
         val rand = Math.random()
-        return when {
-            rand < 0.025 -> BubbleColor.RAINBOW
-            rand < 0.08 -> BubbleColor.BOMB
-            else -> generateBoardBubbleColor()
+        // Probabilidades de ítems especiales
+        if (rand < 0.025) return BubbleColor.RAINBOW
+        if (rand < 0.08) return BubbleColor.BOMB
+
+        // Obtener colores únicos presentes en el tablero actual
+        val colorsInBoard = bubblesByPosition.values.map { it.color }.distinct()
+            .filter { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB }
+
+        return if (colorsInBoard.isNotEmpty()) {
+            colorsInBoard.random()
+        } else {
+            // Si el tablero está vacío, generar cualquier color base
+            generateBoardBubbleColor()
         }
     }
 
@@ -415,7 +430,6 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         val visited = mutableSetOf<GridPosition>(); val queue = ArrayDeque<GridPosition>()
-        // ✅ ANCLAJE MEJORADO: Considerar filas <= 0 como techo para evitar que todo caiga en cascada
         val ceiling = grid.keys.filter { it.row <= 0 }; queue.addAll(ceiling); visited.addAll(ceiling)
         while (queue.isNotEmpty()) {
             val current = queue.removeFirst()
