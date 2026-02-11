@@ -113,6 +113,17 @@ fun LevelScreen(
         label = "bg_scroll"
     )
 
+    // ✅ ANIMACIÓN PARA LA LÍNEA DE TIRO (Marching Dots)
+    val aimPulse by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "aim_pulse"
+    )
+
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
         when {
             currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7)) // Azul (Original)
@@ -272,22 +283,65 @@ fun LevelScreen(
             val pivotX = size.width / 2f
             val pivotY = size.height - 160.dp.toPx()
 
+            // ✅ MEJORA DE DISEÑO: LÍNEA DE TIRO PROFESIONAL
             if (isAiming) {
                 val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
-                var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
-                var current = Offset(pivotX + (sin(angleRad) * 95.dp.toPx()).toFloat(), pivotY - (cos(angleRad) * 95.dp.toPx()).toFloat())
-                var remaining = size.height * 0.9f
+                var dirX = sin(angleRad).toFloat()
+                var dirY = -cos(angleRad).toFloat()
+                val barrelLength = 95.dp.toPx()
+                var current = Offset(pivotX + dirX * barrelLength, pivotY + dirY * barrelLength)
+                val totalAimLength = size.height * 0.85f
+                var remaining = totalAimLength
+                
+                val dotSpacing = 24.dp.toPx()
+                val baseDotRadius = 4.dp.toPx()
+                val bubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor)
+                
+                var totalTraversed = 0f
 
                 while (remaining > 0f) {
                     val bounceX = if (dirX > 0f) size.width else 0f
                     val tToWall = (bounceX - current.x) / dirX
-                    if (tToWall <= 0 || tToWall >= remaining) {
-                        drawLine(Color.White.copy(0.5f), current, Offset(current.x + dirX * remaining, current.y + dirY * remaining), strokeWidth = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f), cap = StrokeCap.Round)
-                        break
+                    
+                    val segmentLength = if (tToWall <= 0 || tToWall >= remaining) remaining else tToWall
+                    
+                    // Efecto de puntos que fluyen
+                    var segmentTraversed = (aimPulse * dotSpacing) % dotSpacing
+                    while (segmentTraversed < segmentLength) {
+                        val dotPos = Offset(current.x + dirX * segmentTraversed, current.y + dirY * segmentTraversed)
+                        
+                        val progress = (totalTraversed + segmentTraversed) / totalAimLength
+                        val alpha = (0.7f - progress * 0.5f).coerceIn(0.1f, 0.7f)
+                        val radius = baseDotRadius * (1f - progress * 0.3f)
+
+                        // Resplandor del punto
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(bubbleColor.copy(alpha = alpha), Color.Transparent),
+                                center = dotPos,
+                                radius = radius * 3f
+                            ),
+                            radius = radius * 3f,
+                            center = dotPos
+                        )
+                        
+                        // Núcleo del punto
+                        drawCircle(
+                            color = Color.White.copy(alpha = (alpha + 0.2f).coerceAtMost(1f)),
+                            radius = radius,
+                            center = dotPos
+                        )
+                        
+                        segmentTraversed += dotSpacing
                     }
+
+                    if (tToWall <= 0 || tToWall >= remaining) break
+                    
+                    totalTraversed += segmentLength
                     val hit = Offset(current.x + dirX * tToWall, current.y + dirY * tToWall)
-                    drawLine(Color.White.copy(0.5f), current, hit, strokeWidth = 5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f), cap = StrokeCap.Round)
-                    remaining -= tToWall; dirX *= -1f; current = hit
+                    remaining -= tToWall
+                    dirX *= -1f
+                    current = hit
                 }
             }
 
@@ -314,6 +368,7 @@ fun LevelScreen(
                 VisualBubble(
                     color = mapBubbleColor(bubble.color),
                     isRainbow = bubble.color == BubbleColor.RAINBOW,
+                    isBomb = bubble.color == BubbleColor.BOMB,
                     rainbowRotation = masterRainbowRotation,
                     modifier = Modifier
                         .size(with(density) { bubbleDiameterPx.toDp() })
@@ -330,6 +385,7 @@ fun LevelScreen(
                 VisualBubble(
                     color = mapBubbleColor(p.color),
                     isRainbow = p.color == BubbleColor.RAINBOW,
+                    isBomb = p.color == BubbleColor.BOMB,
                     rainbowRotation = masterRainbowRotation,
                     modifier = Modifier
                         .size(with(density) { sizePx.toDp() })

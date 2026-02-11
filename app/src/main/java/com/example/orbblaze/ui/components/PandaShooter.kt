@@ -17,6 +17,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.unit.dp
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 fun PandaShooter(
@@ -76,6 +78,13 @@ fun PandaShooter(
     val recoilOffset = recoilAnim.value * 40f
     val joyJump = joyAnim.value * -20f
 
+    // Identificar si la burbuja es una bomba (Color negro)
+    val bombColor = Color(0xFF212121)
+    val isCurrentBomb = currentBubbleColor == bombColor
+    val isNextBomb = nextBubbleColor == bombColor
+
+    val rainbowColors = listOf(Color.Red, Color(0xFFFF7F00), Color.Yellow, Color.Green, Color.Blue, Color(0xFF4B0082), Color(0xFF8B00FF))
+
     Box(
         modifier = modifier.fillMaxWidth().height(320.dp),
         contentAlignment = Alignment.BottomCenter
@@ -83,7 +92,6 @@ fun PandaShooter(
         // 1. NUBES DE FONDO
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cloudColor = Color.White
-            drawRect(color = cloudColor, topLeft = Offset(0f, size.height - 100.dp.toPx()), size = Size(size.width, 250.dp.toPx()))
             drawCloud(Offset(size.width / 2, size.height - 125.dp.toPx()), 260f, cloudColor)
             drawCloud(Offset(size.width - 85.dp.toPx(), size.height - 90.dp.toPx()), 180f, cloudColor)
             drawCloud(Offset(85.dp.toPx(), size.height - 90.dp.toPx()), 180f, cloudColor)
@@ -99,7 +107,7 @@ fun PandaShooter(
         ) {
             ShopButton(
                 onClick = onShopClick,
-                isEnabled = isShopEnabled // ✅ Pasamos el estado
+                isEnabled = isShopEnabled
             )
         }
 
@@ -144,7 +152,13 @@ fun PandaShooter(
                 .offset(x = (-35).dp, y = (-112).dp + joyJump.dp)
                 .onGloballyPositioned { onNextBubblePositioned(it.boundsInRoot()) }
         ) {
-            VisualBubble(color = nextBubbleColor, isRainbow = isNextRainbow, rainbowRotation = rainbowRotation, modifier = Modifier.size(34.dp))
+            VisualBubble(
+                color = nextBubbleColor, 
+                isRainbow = isNextRainbow, 
+                isBomb = isNextBomb,
+                rainbowRotation = rainbowRotation, 
+                modifier = Modifier.size(34.dp)
+            )
         }
 
         // 5. CAÑÓN SUPREMO
@@ -167,10 +181,32 @@ fun PandaShooter(
                 val baseBrush = Brush.verticalGradient(listOf(steelMid, steelDark))
                 drawRoundRect(baseBrush, Offset(cx - 75f, cy + 25f), Size(150f, 65f), CornerRadius(15f))
 
+                // Adornos laterales - Muestran el color/estado de la burbuja actual
                 listOf(-70f, 70f).forEach { xOff ->
-                    drawCircle(steelDark, 32f, Offset(cx + xOff, cy + 55f))
-                    drawCircle(currentBubbleColor.copy(alpha = 0.4f), 28f, Offset(cx + xOff, cy + 55f), style = Stroke(5f))
-                    drawCircle(currentBubbleColor, 14f, Offset(cx + xOff, cy + 55f))
+                    val circleCenter = Offset(cx + xOff, cy + 55f)
+                    drawCircle(steelDark, 32f, circleCenter)
+                    
+                    if (isCurrentRainbow) {
+                        rotate(rainbowRotation, circleCenter) {
+                            drawCircle(
+                                brush = Brush.sweepGradient(rainbowColors, circleCenter),
+                                radius = 28f,
+                                center = circleCenter,
+                                style = Stroke(5f)
+                            )
+                            drawCircle(
+                                brush = Brush.sweepGradient(rainbowColors, circleCenter),
+                                radius = 14f,
+                                center = circleCenter
+                            )
+                        }
+                    } else if (isCurrentBomb) {
+                        drawCircle(Color.Black, radius = 28f, center = circleCenter, style = Stroke(5f))
+                        drawCircle(Color(0xFF424242), radius = 14f, center = circleCenter)
+                    } else {
+                        drawCircle(currentBubbleColor.copy(alpha = 0.4f), 28f, circleCenter, style = Stroke(5f))
+                        drawCircle(currentBubbleColor, 14f, circleCenter)
+                    }
                     drawCircle(Color.White.copy(0.6f), 4f, Offset(cx + xOff - 6f, cy + 50f))
                 }
 
@@ -201,6 +237,7 @@ fun PandaShooter(
                     drawRoundRect(goldColor, Offset(cx - barrelW/2 - 2f, cy + 10f), Size(barrelW + 4f, 18f), CornerRadius(4f))
                     drawRect(goldColor, Offset(cx - barrelW*0.38f, cy - 100f), Size(barrelW*0.76f, 10f))
 
+                    // Boca del cañón
                     drawOval(metalGradient, Offset(cx - barrelW*0.45f, cy - barrelH), Size(barrelW*0.9f, 45f))
                     drawOval(Color.Black, Offset(cx - barrelW*0.45f + 16f, cy - barrelH + 10f), Size(barrelW*0.9f - 32f, 25f))
 

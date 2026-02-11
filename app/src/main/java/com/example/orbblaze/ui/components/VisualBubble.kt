@@ -23,11 +23,12 @@ fun VisualBubble(
     color: Color,
     modifier: Modifier = Modifier,
     isRainbow: Boolean = false,
+    isBomb: Boolean = false,
     rainbowRotation: Float = 0f,
     isActive: Boolean = false,
     isMatchingTarget: Boolean = false
 ) {
-    // --- LÓGICA DE ANIMACIÓN (INTACTA) ---
+    // --- LÓGICA DE ANIMACIÓN ---
     val infiniteTransition = rememberInfiniteTransition(label = "jewel_pro_fx")
 
     val scale by infiniteTransition.animateFloat(
@@ -56,9 +57,9 @@ fun VisualBubble(
         label = "indicator_pulse"
     )
 
-    // Colores del borde (Oro sutil)
-    val goldDark = Color(0xFFC5A059) // Oro mate
-    val goldLight = Color(0xFFFFE5B4) // Champagne
+    // Colores del borde
+    val goldDark = Color(0xFFC5A059)
+    val goldLight = Color(0xFFFFE5B4)
 
     val rainbowColors = remember {
         listOf(Color.Red, Color(0xFFFF7F00), Color.Yellow, Color.Green, Color.Blue, Color(0xFF4B0082), Color(0xFF8B00FF))
@@ -75,64 +76,108 @@ fun VisualBubble(
                 val radius = size.minDimension / 2f
                 val center = Offset(size.width / 2, size.height / 2)
 
-                // Movimiento ligero del brillo (lógica original)
                 val rad = Math.toRadians(lightTime.toDouble())
                 val lightOffsetX = (sin(rad) * radius * 0.05f).toFloat()
                 val lightOffsetY = (cos(rad) * radius * 0.05f).toFloat()
 
                 onDrawBehind {
-                    // Radio un poco más pequeño para dejar espacio al borde
                     val bubbleRadius = radius * 0.92f
 
-                    // --- 1. SOMBRA SUAVE (Profundidad) ---
+                    // --- 1. SOMBRA SUAVE ---
                     drawCircle(
                         color = Color.Black.copy(alpha = 0.2f),
                         radius = radius * 0.95f,
                         center = center.copy(y = center.y + 2.dp.toPx())
                     )
 
-                    // --- 2. BORDE (Anillo fino y elegante) ---
-                    drawCircle(
-                        brush = Brush.linearGradient(
-                            colors = listOf(goldLight, goldDark),
-                            start = Offset(center.x - radius, center.y - radius),
-                            end = Offset(center.x + radius, center.y + radius)
-                        ),
-                        radius = radius,
-                        center = center
-                    )
-
-                    // --- 3. RELLENO DE COLOR (Vibrante) ---
-                    if (isRainbow) {
-                        rotate(rainbowRotation, center) {
-                            drawCircle(
-                                brush = Brush.sweepGradient(rainbowColors, center),
-                                radius = bubbleRadius, center = center
+                    if (isBomb) {
+                        // --- DISEÑO DE BOMBA ---
+                        // 1. Mecha
+                        val fusePath = Path().apply {
+                            moveTo(center.x, center.y - bubbleRadius)
+                            quadraticTo(
+                                center.x + bubbleRadius * 0.3f, center.y - bubbleRadius * 1.3f,
+                                center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f
                             )
                         }
-                    } else {
-                        // Gradiente Radial Offset: Simula luz 3D pero limpia
+                        drawPath(
+                            path = fusePath,
+                            color = Color(0xFF795548),
+                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                        )
+
+                        // 2. Chispas de la mecha
+                        val sparkleAlpha = (sin(lightTime * 0.1f) * 0.5f + 0.5f)
+                        drawCircle(
+                            color = Color(0xFFFF9800).copy(alpha = sparkleAlpha),
+                            radius = 4.dp.toPx(),
+                            center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f)
+                        )
+                        drawCircle(
+                            color = Color.Yellow.copy(alpha = sparkleAlpha),
+                            radius = 2.dp.toPx(),
+                            center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f)
+                        )
+
+                        // 3. Cuerpo de la bomba
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colors = listOf(
-                                    color.copy(alpha = 0.9f).compositeOver(Color.White), // Centro luminoso
-                                    color, // Color puro
-                                    color.copy(red=color.red*0.4f, green=color.green*0.4f, blue=color.blue*0.4f) // Sombra borde
-                                ),
+                                colors = listOf(Color(0xFF424242), Color.Black),
                                 center = center.copy(x = center.x - radius * 0.2f, y = center.y - radius * 0.2f),
-                                radius = bubbleRadius * 1.3f
+                                radius = bubbleRadius * 1.2f
                             ),
                             radius = bubbleRadius,
                             center = center
                         )
+                        
+                        // 4. Detalle metálico
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.1f),
+                            radius = bubbleRadius * 0.4f,
+                            center = center,
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                    } else {
+                        // --- DISEÑO DE BURBUJA NORMAL ---
+                        drawCircle(
+                            brush = Brush.linearGradient(
+                                colors = listOf(goldLight, goldDark),
+                                start = Offset(center.x - radius, center.y - radius),
+                                end = Offset(center.x + radius, center.y + radius)
+                            ),
+                            radius = radius,
+                            center = center
+                        )
+
+                        if (isRainbow) {
+                            rotate(rainbowRotation, center) {
+                                drawCircle(
+                                    brush = Brush.sweepGradient(rainbowColors, center),
+                                    radius = bubbleRadius, center = center
+                                )
+                            }
+                        } else {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        color.copy(alpha = 0.9f).compositeOver(Color.White),
+                                        color,
+                                        color.copy(red=color.red*0.4f, green=color.green*0.4f, blue=color.blue*0.4f)
+                                    ),
+                                    center = center.copy(x = center.x - radius * 0.2f, y = center.y - radius * 0.2f),
+                                    radius = bubbleRadius * 1.3f
+                                ),
+                                radius = bubbleRadius,
+                                center = center
+                            )
+                        }
                     }
 
-                    // --- 4. BRILLO "WET LOOK" (Efecto cristal húmedo) ---
-                    // Este es el secreto de las burbujas modernas: un brillo blanco ovalado y suave
+                    // --- BRILLO COMÚN ---
                     rotate(-45f, center) {
                         drawOval(
                             brush = Brush.linearGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.8f), Color.White.copy(alpha = 0.05f)),
+                                colors = listOf(Color.White.copy(alpha = 0.6f), Color.White.copy(alpha = 0.05f)),
                                 start = Offset(center.x, center.y - bubbleRadius),
                                 end = Offset(center.x, center.y)
                             ),
@@ -141,31 +186,17 @@ fun VisualBubble(
                         )
                     }
 
-                    // --- 5. REFLEJO INFERIOR (Rim Light sutil) ---
-                    // Da volumen sin ensuciar el diseño
-                    drawArc(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.35f)),
-                            startY = center.y, endY = center.y + bubbleRadius
-                        ),
-                        startAngle = 45f, sweepAngle = 90f, useCenter = false,
-                        topLeft = Offset(center.x - bubbleRadius * 0.8f, center.y - bubbleRadius * 0.8f),
-                        size = Size(bubbleRadius * 1.6f, bubbleRadius * 1.6f),
-                        style = Stroke(width = bubbleRadius * 0.08f, cap = StrokeCap.Round)
-                    )
-
-                    // Pequeño punto de luz (Hotspot) - Movible
+                    // Hotspot
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.9f),
-                        radius = bubbleRadius * 0.1f,
+                        color = Color.White.copy(alpha = 0.8f),
+                        radius = bubbleRadius * 0.08f,
                         center = Offset(center.x - bubbleRadius * 0.35f + lightOffsetX, center.y - bubbleRadius * 0.35f + lightOffsetY)
                     )
 
-                    // --- 6. DESTELLO (Sparkle) ---
+                    // --- DESTELLO ---
                     if (isActive && sparkleScale > 0f) {
                         val sPos = Offset(center.x + radius * 0.35f, center.y - radius * 0.35f)
                         val sSize = radius * 0.6f * sparkleScale
-
                         drawLine(
                             brush = Brush.radialGradient(listOf(Color.White, Color.Transparent)),
                             start = sPos.copy(y = sPos.y - sSize), end = sPos.copy(y = sPos.y + sSize),
@@ -176,14 +207,13 @@ fun VisualBubble(
                             start = sPos.copy(x = sPos.x - sSize), end = sPos.copy(x = sPos.x + sSize),
                             strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round
                         )
-                        drawCircle(Color.White, radius = radius * 0.15f * sparkleScale, center = sPos)
                     }
 
-                    // --- 7. INDICADOR DE OBJETIVO ---
+                    // --- INDICADOR DE OBJETIVO ---
                     if (isMatchingTarget) {
                         drawCircle(
                             color = Color.White.copy(alpha = indicatorAlpha),
-                            radius = radius, // Coincide con el borde exterior
+                            radius = radius,
                             center = center,
                             style = Stroke(width = 3.dp.toPx())
                         )
