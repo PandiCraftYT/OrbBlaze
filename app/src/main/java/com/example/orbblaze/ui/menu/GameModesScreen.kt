@@ -189,7 +189,8 @@ fun GameModesScreen(
                     Text("VOLVER AL MENÚ", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                // ✅ MARGEN EXTRA PARA EVITAR EL BANNER
+                Spacer(modifier = Modifier.height(60.dp))
                 
                 Text(text = "v1.0 - OrbBlaze", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
             }

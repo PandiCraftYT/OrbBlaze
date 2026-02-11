@@ -72,7 +72,6 @@ fun AchievementsScreen(
         var frameTick by remember { mutableStateOf(0L) }
         val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
 
-        // Burbujas físicas de fondo para consistencia visual
         val physicsBubbles = remember(screenWidthPx, screenHeightPx) {
             List(15) {
                 PhysicsBubble(
@@ -107,7 +106,6 @@ fun AchievementsScreen(
             }
         }
 
-        // Capa de fondo interactiva
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -169,7 +167,6 @@ fun AchievementsScreen(
                     items(displayList) { achievement ->
                         val isUnlocked = achievement.isUnlocked
                         val showDescription = isUnlocked || revealedId == achievement.id
-                        // Tarjetas Blancas Opacas para logros desbloqueados
                         val cardColor = if (isUnlocked) Color.White else Color.Black.copy(alpha = 0.4f)
                         val borderColor = if (isUnlocked) Color(0xFFFFD700) else Color.White.copy(alpha = 0.2f)
                         val titleColor = if (isUnlocked) Color(0xFF1A237E) else Color.Gray
@@ -224,7 +221,9 @@ fun AchievementsScreen(
                     Text(text = "VOLVER", style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                // ✅ MARGEN EXTRA PARA EVITAR EL BANNER
+                // Esto añade 60dp de espacio al final de la pantalla
+                Spacer(modifier = Modifier.height(60.dp))
 
             }
         }

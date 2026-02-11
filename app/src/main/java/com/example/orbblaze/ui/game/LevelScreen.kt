@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -99,7 +100,7 @@ fun LevelScreen(
 
     // ✅ LÓGICA DE FONDO DINÁMICO Y ANIMADO
     val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
-    
+
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
     
     // Animación de desplazamiento suave para el fondo (nubes o auroras)
@@ -188,7 +189,7 @@ fun LevelScreen(
                 if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(); val startPos = down.position
-                    val centerX = size.width / 2; val pandaTopY = size.height - 220.dp.toPx()
+                    val centerX = size.width / 2; val pandaTopY = size.height - 280.dp.toPx() // Ajustado por el banner
                     val isPandaClick = startPos.x >= (centerX - 120.dp.toPx()) && startPos.x <= (centerX + 120.dp.toPx()) && startPos.y >= pandaTopY
 
                     if (isPandaClick) {
@@ -207,7 +208,7 @@ fun LevelScreen(
                         isAiming = false
                         
                         val barrelLengthPx = 95.dp.toPx()
-                        val pivotHeightPx = 160.dp.toPx()
+                        val pivotHeightPx = 220.dp.toPx() // Elevado por el banner
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                         val pivotX = size.width / 2f
                         val pivotY = size.height - pivotHeightPx
@@ -281,7 +282,7 @@ fun LevelScreen(
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha), size = size)
             val pivotX = size.width / 2f
-            val pivotY = size.height - 160.dp.toPx()
+            val pivotY = size.height - 220.dp.toPx() // Elevado por el banner
 
             // ✅ MEJORA DE DISEÑO: LÍNEA DE TIRO PROFESIONAL
             if (isAiming) {
@@ -398,7 +399,8 @@ fun LevelScreen(
             }
         }
 
-        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+        // ✅ SECCIÓN DEL CAÑÓN ELEVADA PARA EL BANNER
+        Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp)) {
             PandaShooter(
                 angle = viewModel.shooterAngle,
                 currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor),
@@ -509,34 +511,21 @@ fun LevelScreen(
             }
         }
 
-        // ✅ MENÚ DE PAUSA REDISEÑADO
+        // ✅ OCULTAR MENÚ DE PAUSA SI LA ALERTA DE REVIVIR ESTÁ ACTIVA
         if (isPaused && gameState == GameState.PLAYING && !isReviveAlertActive) {
             OverlayMenu(
-                title = "PAUSA",
-                onContinue = { viewModel.togglePause() },
-                onRestart = { viewModel.restartGame() }, 
-                onExit = { soundManager.startMusic(); onMenuClick() },
-                showVolume = true,
-                volume = volumeSlider, 
-                onVolumeChange = { newVal ->
-                    volumeSlider = newVal
-                    viewModel.setSfxVolume(newVal)
-                    soundManager.refreshSettings()
-                },
-                score = score,
-                isAdventure = viewModel.gameMode == GameMode.ADVENTURE
+                title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() },
+                onExit = { soundManager.startMusic(); onMenuClick() }, 
+                showVolume = true, volume = volumeSlider,
+                onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() }
             )
         }
 
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
-                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER",
-                onContinue = null,
-                onRestart = { viewModel.restartGame() },
+                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() },
                 onExit = { onMenuClick() },
-                score = score,
-                isWin = gameState == GameState.WON,
-                isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
+                score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
                 onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) {
                     {
@@ -649,148 +638,126 @@ fun OverlayMenu(
     val accentColor = if (isPause) Color(0xFF64FFDA) else if (isWin) Color(0xFFFFD700) else Color(0xFFFF5252)
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.9f))
-            .clickable(enabled = false) {},
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, 
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally, 
             modifier = Modifier
-                .width(320.dp)
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color(0xFF0F1444))
-                .border(2.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
-                .padding(32.dp)
+                .width(280.dp)
+                .clip(RoundedCornerShape(40.dp))
+                .background(Color(0xFF080B25).copy(alpha = 0.95f))
+                .padding(vertical = 40.dp, horizontal = 24.dp)
         ) {
-            // TÍTULO CON ESTILO
+            // TÍTULO LIMPIO
             Text(
                 text = title, 
                 style = TextStyle(
-                    fontSize = 42.sp,
-                    fontWeight = FontWeight.Black,
+                    fontSize = 32.sp, 
+                    fontWeight = FontWeight.ExtraBold, 
                     color = accentColor, 
-                    letterSpacing = 2.sp,
-                    shadow = Shadow(color = accentColor.copy(alpha = 0.5f), blurRadius = 20f)
+                    letterSpacing = 1.sp,
+                    textAlign = TextAlign.Center
                 )
             )
             
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
 
-            // CONTENIDO ESPECÍFICO DE PAUSA (VOLUMEN)
-            if (showVolume) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("VOLUMEN", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Notifications, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
-                        Slider(
-                            value = volume,
-                            onValueChange = onVolumeChange,
-                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-                            colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor)
-                        )
-                        Icon(Icons.Default.Notifications, null, tint = accentColor, modifier = Modifier.size(20.dp))
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
+            // SCORE MINIMALISTA
+            if (score != null) {
+                Text("SCORE", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text("$score", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Light)
+                Spacer(Modifier.height(32.dp))
             }
 
-            // ESTRELLAS PARA ADVENTURA/WIN
+            // ESTRELLAS MINIMALISTAS
             if (isAdventure && isWin) {
-                Row(horizontalArrangement = Arrangement.Center) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(3) { i ->
-                        val animScale = remember { Animatable(0f) }
-                        LaunchedEffect(Unit) { delay(i * 200L); animScale.animateTo(1f, spring(0.5f, 200f)) }
+                        val scale = remember { Animatable(0f) }
+                        LaunchedEffect(Unit) { delay(i * 150L); scale.animateTo(1f, spring(0.6f, 300f)) }
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
-                            tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.1f),
-                            modifier = Modifier.size(48.dp).graphicsLayer { scaleX = animScale.value; scaleY = animScale.value }
+                            tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.05f),
+                            modifier = Modifier.size(32.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(32.dp))
             }
 
-            // SCORE
-            if (score != null) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("PUNTUACIÓN", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("$score", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black)
+            // VOLUMEN SLIM
+            if (showVolume) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("SOUND", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("${(volume * 100).toInt()}%", color = accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = volume,
+                        onValueChange = onVolumeChange,
+                        colors = SliderDefaults.colors(
+                            thumbColor = accentColor,
+                            activeTrackColor = accentColor,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.1f)
+                        ),
+                        modifier = Modifier.height(32.dp)
+                    )
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(32.dp))
             }
 
-            // BOTÓN CONTINUAR (Principal)
-            onContinue?.let { action -> 
+            // BOTÓN PRINCIPAL
+            onContinue?.let { action ->
                 Button(
                     onClick = action,
-                    modifier = Modifier.fillMaxWidth().height(60.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                 ) {
-                    Text("CONTINUAR", color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp)
+                    Text("RESUME", color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp)
                 }
                 Spacer(Modifier.height(16.dp))
             }
 
-            // FILA DE BOTONES SECUNDARIOS
+            // ACCIONES SECUNDARIAS (ICONOS)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 // REINICIAR
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(60.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                        .clickable { onRestart() },
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = onRestart,
+                    modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))
                 ) {
-                    Icon(Icons.Default.Refresh, null, tint = Color.White)
+                    Icon(Icons.Default.Refresh, null, tint = Color.White.copy(alpha = 0.7f))
                 }
+
+                Spacer(Modifier.width(24.dp))
 
                 // SALIR
                 val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(60.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                        .clickable { onExit() },
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = onExit,
+                    modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))
                 ) {
-                    Icon(exitIcon, null, tint = Color.White)
+                    Icon(exitIcon, null, tint = Color.White.copy(alpha = 0.7f))
                 }
             }
 
-            // BOTONES ESPECIALES (CANJEAR / ANUNCIOS)
+            // BOTONES DE RECOMPENSA MINIMALISTAS
             if (!isPause) {
-                onRedeemCoins?.let { action ->
-                    Spacer(Modifier.height(16.dp))
-                    TextButton(onClick = action) {
-                        Text("CANJEAR PUNTOS", color = Color(0xFFFFD700), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                }
-
-                onShowAd?.let { adAction ->
-                    val adLabel = if (isAdventure && !isWin) "RECUPERAR INTENTO" else "BONUS +50 🪙"
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = adAction,
-                        modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                onShowAd?.let { adAction -> 
+                    val adLabel = if (isAdventure && !isWin) "REVIVE" else "BONUS +50"
+                    Spacer(Modifier.height(32.dp))
+                    TextButton(onClick = adAction) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        }
                     }
                 }
             }
