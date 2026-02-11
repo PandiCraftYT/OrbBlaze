@@ -97,8 +97,22 @@ fun LevelScreen(
     val tutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
     var showTutorial by remember { mutableStateOf(false) }
 
-    // ✅ LÓGICA DE FONDO DINÁMICO
+    // ✅ LÓGICA DE FONDO DINÁMICO Y ANIMADO
     val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
+    
+    val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
+    
+    // Animación de desplazamiento suave para el fondo (nubes o auroras)
+    val backgroundOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(40000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "bg_scroll"
+    )
+
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
         when {
             currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7)) // Azul (Original)
@@ -131,7 +145,6 @@ fun LevelScreen(
         }
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
     val dangerAlpha by infiniteTransition.animateFloat(
         initialValue = 0.2f, targetValue = 0.8f, 
         animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger"
@@ -193,12 +206,52 @@ fun LevelScreen(
             }
     ) {
         val totalWidth = constraints.maxWidth.toFloat()
+        val totalHeight = constraints.maxHeight.toFloat()
         val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
+
+        // ✅ CAPA DE FONDO ANIMADO (Solo para Modos No-Aventura)
+        if (currentGameMode != GameMode.ADVENTURE) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                // Dibujar "nubes" o elementos decorativos que se mueven
+                val color1 = Color.White.copy(alpha = 0.15f)
+                val color2 = Color.White.copy(alpha = 0.05f)
+                
+                // Elemento 1
+                drawCircle(
+                    color = color1,
+                    radius = 150.dp.toPx(),
+                    center = Offset(
+                        x = (backgroundOffset % (totalWidth + 400.dp.toPx())) - 200.dp.toPx(),
+                        y = 150.dp.toPx()
+                    )
+                )
+                
+                // Elemento 2 (más lento/diferente offset)
+                drawCircle(
+                    color = color2,
+                    radius = 250.dp.toPx(),
+                    center = Offset(
+                        x = ((backgroundOffset * 0.7f) % (totalWidth + 600.dp.toPx())) - 300.dp.toPx(),
+                        y = totalHeight * 0.4f
+                    )
+                )
+
+                // Elemento 3
+                drawCircle(
+                    color = color1,
+                    radius = 120.dp.toPx(),
+                    center = Offset(
+                        x = totalWidth - ((backgroundOffset * 1.2f) % (totalWidth + 300.dp.toPx())),
+                        y = totalHeight * 0.7f
+                    )
+                )
+            }
+        }
 
         LaunchedEffect(totalWidth, boardTopPaddingPx, columnsCount) {
             viewModel.setBoardMetrics(

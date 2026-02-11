@@ -8,6 +8,7 @@ object HexGridHelper {
 
     /**
      * Obtiene los vecinos de una posición considerando el desplazamiento hexagonal (row + offset).
+     * Mantiene tu lógica original de vecinos pares/impares.
      */
     fun getNeighbors(pos: GridPosition, rowOffset: Int): List<GridPosition> {
         val r = pos.row
@@ -30,24 +31,36 @@ object HexGridHelper {
 
     /**
      * Calcula el centro (X, Y) de una burbuja en píxeles.
+     * CORREGIDO: Se eliminó el desplazamiento extra. Ahora respeta estrictamente el padding.
      */
     fun getBubbleCenter(pos: GridPosition, metrics: BoardMetricsPx, rowOffset: Int): Pair<Float, Float> {
-        val xOffset = if ((pos.row + rowOffset) % 2 != 0) (metrics.bubbleDiameter / 2f) else 0f
-        val x = metrics.boardStartPadding + xOffset + (pos.col * metrics.horizontalSpacing)
+        // Calculamos si esta fila lleva desplazamiento (zigzag)
+        val isShiftedRow = (pos.row + rowOffset) % 2 != 0
+        val rowShift = if (isShiftedRow) (metrics.bubbleDiameter / 2f) else 0f
+
+        // X = Padding inicial + Desplazamiento por fila impar + (Columna * Ancho)
+        val x = metrics.boardStartPadding + rowShift + (pos.col * metrics.horizontalSpacing)
+
+        // Y = Padding superior + (Fila * Alto)
         val y = metrics.boardTopPadding + (pos.row * metrics.verticalSpacing)
+
         return x to y
     }
 
     /**
      * Estima la posición en la rejilla a partir de coordenadas táctiles/físicas.
-     * Se ha mejorado el redondeo para evitar problemas en los bordes.
+     * Inversa exacta de getBubbleCenter.
      */
     fun estimateGridPosition(x: Float, y: Float, metrics: BoardMetricsPx, rowOffset: Int, columnsCount: Int): GridPosition {
+        // 1. Calcular fila estimada
         val estimatedRow = ((y - metrics.boardTopPadding) / metrics.verticalSpacing).roundToInt().coerceAtLeast(0)
-        val xOffsetEst = if ((estimatedRow + rowOffset) % 2 != 0) (metrics.bubbleDiameter / 2f) else 0f
-        
-        // Calculamos la columna con un redondeo más preciso
-        val estimatedCol = ((x - (metrics.boardStartPadding + xOffsetEst)) / metrics.horizontalSpacing).roundToInt()
+
+        // 2. Calcular el desplazamiento que tendría esa fila
+        val isShiftedRow = (estimatedRow + rowOffset) % 2 != 0
+        val rowShift = if (isShiftedRow) (metrics.bubbleDiameter / 2f) else 0f
+
+        // 3. Calcular columna restando el padding y el shift antes de dividir
+        val estimatedCol = ((x - (metrics.boardStartPadding + rowShift)) / metrics.horizontalSpacing).roundToInt()
             .coerceIn(0, columnsCount - 1)
 
         return GridPosition(estimatedRow, estimatedCol)

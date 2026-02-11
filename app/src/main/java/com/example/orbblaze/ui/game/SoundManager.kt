@@ -89,12 +89,16 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 mediaPlayer?.let {
-                    if (it.isPlaying) {
-                        it.playbackParams = PlaybackParams().apply { this.speed = speed }
-                    }
+                    // Permitimos cambiar la velocidad incluso si está pausado
+                    it.playbackParams = it.playbackParams.setSpeed(speed)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                // Si falla por estado (ej. no inicializado), intentamos con un objeto nuevo
+                try {
+                    mediaPlayer?.playbackParams = PlaybackParams().apply { this.speed = speed }
+                } catch (e2: Exception) {
+                    e2.printStackTrace()
+                }
             }
         }
     }
