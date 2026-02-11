@@ -231,7 +231,7 @@ fun LevelScreen(
                 // Dibujar "nubes" o elementos decorativos que se mueven
                 val color1 = Color.White.copy(alpha = 0.15f)
                 val color2 = Color.White.copy(alpha = 0.05f)
-                
+
                 // Elemento 1
                 drawCircle(
                     color = color1,
@@ -241,7 +241,7 @@ fun LevelScreen(
                         y = 150.dp.toPx()
                     )
                 )
-                
+
                 // Elemento 2 (más lento/diferente offset)
                 drawCircle(
                     color = color2,
@@ -302,14 +302,14 @@ fun LevelScreen(
                 while (remaining > 0f) {
                     val bounceX = if (dirX > 0f) size.width else 0f
                     val tToWall = (bounceX - current.x) / dirX
-                    
+
                     val segmentLength = if (tToWall <= 0 || tToWall >= remaining) remaining else tToWall
-                    
+
                     // Efecto de puntos que fluyen
                     var segmentTraversed = (aimPulse * dotSpacing) % dotSpacing
                     while (segmentTraversed < segmentLength) {
                         val dotPos = Offset(current.x + dirX * segmentTraversed, current.y + dirY * segmentTraversed)
-                        
+
                         val progress = (totalTraversed + segmentTraversed) / totalAimLength
                         val alpha = (0.7f - progress * 0.5f).coerceIn(0.1f, 0.7f)
                         val radius = baseDotRadius * (1f - progress * 0.3f)
@@ -324,19 +324,19 @@ fun LevelScreen(
                             radius = radius * 3f,
                             center = dotPos
                         )
-                        
+
                         // Núcleo del punto
                         drawCircle(
                             color = Color.White.copy(alpha = (alpha + 0.2f).coerceAtMost(1f)),
                             radius = radius,
                             center = dotPos
                         )
-                        
+
                         segmentTraversed += dotSpacing
                     }
 
                     if (tToWall <= 0 || tToWall >= remaining) break
-                    
+
                     totalTraversed += segmentLength
                     val hit = Offset(current.x + dirX * tToWall, current.y + dirY * tToWall)
                     remaining -= tToWall
@@ -348,13 +348,13 @@ fun LevelScreen(
             // LÍNEA ROJA ESTÁTICA
             val redLineY = boardTopPaddingPx + verticalSpacingPx * 13
             drawLine(
-                color = Color.Red.copy(alpha = dangerAlpha), 
-                start = Offset(0f, redLineY), 
-                end = Offset(size.width, redLineY), 
-                strokeWidth = 8f, 
+                color = Color.Red.copy(alpha = dangerAlpha),
+                start = Offset(0f, redLineY),
+                end = Offset(size.width, redLineY),
+                strokeWidth = 8f,
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
             )
-            
+
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint().apply { textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = android.graphics.Color.WHITE }
@@ -408,11 +408,11 @@ fun LevelScreen(
                 shotTick = viewModel.shotTick,
                 joyTick = viewModel.joyTick,
                 rainbowRotation = masterRainbowRotation,
-                onShopClick = { 
+                onShopClick = {
                     if (currentGameMode == GameMode.ADVENTURE) {
                         Toast.makeText(context, "Tienda no disponible en modo Aventura.", Toast.LENGTH_SHORT).show()
                     } else {
-                        showQuickShop = true 
+                        showQuickShop = true
                     }
                 },
                 isShopEnabled = currentGameMode != GameMode.ADVENTURE,
@@ -454,29 +454,29 @@ fun LevelScreen(
                 }
             } else {
                 Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, 
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {},
                     contentAlignment = Alignment.Center
                 ) {
                     val isTimeAttack = viewModel.gameMode == GameMode.TIME_ATTACK
                     val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
-                    
+
                     Surface(
-                        modifier = Modifier.width(340.dp).padding(16.dp), 
-                        shape = RoundedCornerShape(32.dp), 
-                        color = Color(0xFF0F1444), 
+                        modifier = Modifier.width(340.dp).padding(16.dp),
+                        shape = RoundedCornerShape(32.dp),
+                        color = Color(0xFF0F1444),
                         border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))),
                         shadowElevation = 24.dp
                     ) {
                         Column(modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = if (isTimeAttack) "TIME ATTACK" else "MODO CLÁSICO", 
+                                text = if (isTimeAttack) "TIME ATTACK" else "MODO CLÁSICO",
                                 style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center)
                             )
-                            
+
                             Spacer(Modifier.height(16.dp))
-                            
+
                             Text(
-                                text = if (isTimeAttack) "¡Sé el más rápido y explota todas las burbujas!" else "No dejes que las burbujas toquen la línea roja. ¡Sobrevive todo lo que puedas!", 
+                                text = if (isTimeAttack) "¡Sé el más rápido y explota todas las burbujas!" else "No dejes que las burbujas toquen la línea roja. ¡Sobrevive todo lo que puedas!",
                                 color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp
                             )
 
@@ -491,16 +491,16 @@ fun LevelScreen(
                                     Text("RÉCORD: $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                             }
-                            
+
                             Spacer(Modifier.height(40.dp))
-                            
+
                             Button(
-                                onClick = { viewModel.startGame() }, 
+                                onClick = { viewModel.startGame() },
                                 modifier = Modifier.fillMaxWidth().height(64.dp),
                                 shape = RoundedCornerShape(20.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)
-                            ) { 
+                            ) {
                                 Text("¡JUGAR AHORA!", color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp)
                             }
                         }
@@ -509,34 +509,47 @@ fun LevelScreen(
             }
         }
 
-        // ✅ OCULTAR MENÚ DE PAUSA SI LA ALERTA DE REVIVIR ESTÁ ACTIVA
+        // ✅ MENÚ DE PAUSA REDISEÑADO
         if (isPaused && gameState == GameState.PLAYING && !isReviveAlertActive) {
             OverlayMenu(
-                title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, 
-                onExit = { soundManager.startMusic(); onMenuClick() }, 
-                showVolume = true, volume = volumeSlider, 
-                onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() }
+                title = "PAUSA",
+                onContinue = { viewModel.togglePause() },
+                onRestart = { viewModel.restartGame() }, 
+                onExit = { soundManager.startMusic(); onMenuClick() },
+                showVolume = true,
+                volume = volumeSlider, 
+                onVolumeChange = { newVal ->
+                    volumeSlider = newVal
+                    viewModel.setSfxVolume(newVal)
+                    soundManager.refreshSettings()
+                },
+                score = score,
+                isAdventure = viewModel.gameMode == GameMode.ADVENTURE
             )
         }
-        
+
         if (gameState == GameState.WON || gameState == GameState.LOST) {
             OverlayMenu(
-                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() }, 
+                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER",
+                onContinue = null,
+                onRestart = { viewModel.restartGame() },
                 onExit = { onMenuClick() },
-                score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
+                score = score,
+                isWin = gameState == GameState.WON,
+                isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
                 onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) {
-                    { 
-                        if (score >= 100) { 
+                    {
+                        if (score >= 100) {
                             viewModel.addCoins(score / 100)
                             hasRedeemedCoins = true
-                            Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() 
-                        } 
-                    } 
+                            Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 } else null,
-                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { 
-                    { 
-                        onShowAd { _ -> 
+                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else {
+                    {
+                        onShowAd { _ ->
                             if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) {
                                 (viewModel as? AdventureViewModel)?.reviveWithAd()
                             } else {
@@ -589,9 +602,9 @@ fun LevelScreen(
                         )
                         Spacer(Modifier.height(32.dp))
                         Button(
-                            onClick = { 
-                                viewModel.showReviveAlert = false 
-                                viewModel.togglePause() 
+                            onClick = {
+                                viewModel.showReviveAlert = false
+                                viewModel.togglePause()
                             },
                             modifier = Modifier.fillMaxWidth().height(56.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)),
@@ -632,53 +645,154 @@ fun OverlayMenu(
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
     currentLevelId: Int = 0
 ) {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-            Text(text = title, style = TextStyle(fontSize = 56.sp, fontWeight = FontWeight.Black, color = if (isWin) Color(0xFFFFD700) else if (title == "PAUSA") Color.White else Color(0xFFFF4D4D), letterSpacing = 2.sp, shadow = Shadow(color = Color.Black, offset = Offset(4f, 4f), blurRadius = 12f)))
+    val isPause = title == "PAUSA"
+    val accentColor = if (isPause) Color(0xFF64FFDA) else if (isWin) Color(0xFFFFD700) else Color(0xFFFF5252)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.9f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally, 
+            modifier = Modifier
+                .width(320.dp)
+                .clip(RoundedCornerShape(32.dp))
+                .background(Color(0xFF0F1444))
+                .border(2.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
+                .padding(32.dp)
+        ) {
+            // TÍTULO CON ESTILO
+            Text(
+                text = title, 
+                style = TextStyle(
+                    fontSize = 42.sp,
+                    fontWeight = FontWeight.Black,
+                    color = accentColor, 
+                    letterSpacing = 2.sp,
+                    shadow = Shadow(color = accentColor.copy(alpha = 0.5f), blurRadius = 20f)
+                )
+            )
             
-            if (isAdventure && isWin && currentLevelId > 30) {
-                Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(24.dp))
+
+            // CONTENIDO ESPECÍFICO DE PAUSA (VOLUMEN)
+            if (showVolume) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("VOLUMEN", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Notifications, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
+                        Slider(
+                            value = volume,
+                            onValueChange = onVolumeChange,
+                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                            colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor)
+                        )
+                        Icon(Icons.Default.Notifications, null, tint = accentColor, modifier = Modifier.size(20.dp))
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+
+            // ESTRELLAS PARA ADVENTURA/WIN
+            if (isAdventure && isWin) {
                 Row(horizontalArrangement = Arrangement.Center) {
                     repeat(3) { i ->
                         val animScale = remember { Animatable(0f) }
-                        LaunchedEffect(Unit) { delay(i * 300L); animScale.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 200f)) }
-                        Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.2f), modifier = Modifier.size(48.dp).graphicsLayer { scaleX = animScale.value; scaleY = animScale.value })
+                        LaunchedEffect(Unit) { delay(i * 200L); animScale.animateTo(1f, spring(0.5f, 200f)) }
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.1f),
+                            modifier = Modifier.size(48.dp).graphicsLayer { scaleX = animScale.value; scaleY = animScale.value }
+                        )
                     }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // SCORE
+            if (score != null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("PUNTUACIÓN", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("$score", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black)
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+
+            // BOTÓN CONTINUAR (Principal)
+            onContinue?.let { action -> 
+                Button(
+                    onClick = action,
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                ) {
+                    Text("CONTINUAR", color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp)
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // FILA DE BOTONES SECUNDARIOS
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // REINICIAR
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(60.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                        .clickable { onRestart() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Refresh, null, tint = Color.White)
+                }
+
+                // SALIR
+                val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(60.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                        .clickable { onExit() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(exitIcon, null, tint = Color.White)
                 }
             }
 
-            if (score != null) {
-                Spacer(Modifier.height(8.dp)); Text(text = "PUNTUACIÓN FINAL: $score", style = TextStyle(fontSize = 20.sp, color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.ExtraBold))
-                
-                onRedeemCoins?.let { action -> 
+            // BOTONES ESPECIALES (CANJEAR / ANUNCIOS)
+            if (!isPause) {
+                onRedeemCoins?.let { action ->
                     Spacer(Modifier.height(16.dp))
-                    Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFFFFD700).copy(alpha = 0.2f)).border(1.dp, Color(0xFFFFD700), RoundedCornerShape(12.dp)).clickable { action() }.padding(horizontal = 16.dp, vertical = 8.dp)) { 
-                        Text("CANJEAR PUNTOS POR MONEDAS", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold) 
-                    } 
+                    TextButton(onClick = action) {
+                        Text("CANJEAR PUNTOS", color = Color(0xFFFFD700), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
                 }
-                
-                onShowAd?.let { adAction -> 
-                    val adLabel = if (isAdventure && !isWin) "RECUPERAR INTENTO" else "VER ANUNCIO (+50 🪙)"
-                    val adColor = if (isAdventure && !isWin) Color(0xFFFF5252) else Color(0xFF64FFDA)
-                    
-                    Spacer(Modifier.height(12.dp))
-                    Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(adColor.copy(alpha = 0.2f)).border(1.dp, adColor, RoundedCornerShape(12.dp)).clickable { adAction() }.padding(horizontal = 16.dp, vertical = 8.dp)) { 
-                        Row(verticalAlignment = Alignment.CenterVertically) { 
-                            Icon(Icons.Default.PlayArrow, null, tint = adColor, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(adLabel, color = adColor, fontSize = 12.sp, fontWeight = FontWeight.Bold) 
-                        } 
-                    } 
+
+                onShowAd?.let { adAction ->
+                    val adLabel = if (isAdventure && !isWin) "RECUPERAR INTENTO" else "BONUS +50 🪙"
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = adAction,
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
-            }
-            Spacer(Modifier.height(50.dp))
-            onContinue?.let { action -> Box(modifier = Modifier.width(260.dp).height(64.dp).clip(RoundedCornerShape(50)).background(Color(0xFF64FFDA)).clickable { action() }, contentAlignment = Alignment.Center) { Text("CONTINUAR", style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E))) }; Spacer(Modifier.height(24.dp)) }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).border(2.dp, Color.White, CircleShape).clickable { onRestart() }, contentAlignment = Alignment.Center) { Icon(Icons.Default.Refresh, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
-                Spacer(Modifier.width(40.dp))
-                val exitBgColor = if (isAdventure) Color(0xFF64FFDA).copy(alpha = 0.2f) else Color.Red.copy(alpha = 0.2f)
-                val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
-                Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(exitBgColor).border(2.dp, Color.White, CircleShape).clickable { onExit() }, contentAlignment = Alignment.Center) { Icon(exitIcon, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
             }
         }
     }
