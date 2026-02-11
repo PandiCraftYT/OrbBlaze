@@ -25,68 +25,43 @@ fun VisualBubble(
     isRainbow: Boolean = false,
     rainbowRotation: Float = 0f,
     isActive: Boolean = false,
-    isMatchingTarget: Boolean = false // Si es true, la burbuja tendrá un indicador fuerte
+    isMatchingTarget: Boolean = false
 ) {
+    // --- LÓGICA DE ANIMACIÓN (INTACTA) ---
     val infiniteTransition = rememberInfiniteTransition(label = "jewel_pro_fx")
 
-    // 1. Respiración sutil
     val scale by infiniteTransition.animateFloat(
-        initialValue = 0.985f,
-        targetValue = 1.015f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
+        initialValue = 0.985f, targetValue = 1.015f,
+        animationSpec = infiniteRepeatable(animation = tween(2500, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
         label = "soft_breath"
     )
 
-    // 2. Luz interna
     val lightTime by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(animation = tween(4000, easing = LinearEasing), repeatMode = RepeatMode.Restart),
         label = "light_move"
     )
 
-    // 3. Sparkle
     val sparkleScale by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+        initialValue = 0f, targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = 5000
-                0f at 0
-                0f at 3000
-                1f at 3200
-                0f at 3400
-                0f at 5000
-            },
+            animation = keyframes { durationMillis = 5000; 0f at 0; 0f at 3000; 1f at 3200; 0f at 3400; 0f at 5000 },
             repeatMode = RepeatMode.Restart
-        ),
-        label = "sparkle"
+        ), label = "sparkle"
     )
 
-    // 4. ANIMACIÓN DEL INDICADOR (Más rápida y visible)
     val indicatorAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f, // No baja a 0 para que siempre se vea algo
-        targetValue = 1.0f,  // Brillo máximo
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing), // Rápido (0.6s)
-            repeatMode = RepeatMode.Reverse
-        ),
+        initialValue = 0.3f, targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
         label = "indicator_pulse"
     )
 
-    val goldDark = Color(0xFFB8860B)
-    val goldLight = Color(0xFFFFD700)
+    // Colores del borde (Oro sutil)
+    val goldDark = Color(0xFFC5A059) // Oro mate
+    val goldLight = Color(0xFFFFE5B4) // Champagne
+
     val rainbowColors = remember {
-        listOf(
-            Color.Red, Color(0xFFFF7F00), Color.Yellow,
-            Color.Green, Color.Blue, Color(0xFF4B0082), Color(0xFF8B00FF)
-        )
+        listOf(Color.Red, Color(0xFFFF7F00), Color.Yellow, Color.Green, Color.Blue, Color(0xFF4B0082), Color(0xFF8B00FF))
     }
 
     Spacer(
@@ -100,121 +75,117 @@ fun VisualBubble(
                 val radius = size.minDimension / 2f
                 val center = Offset(size.width / 2, size.height / 2)
 
+                // Movimiento ligero del brillo (lógica original)
                 val rad = Math.toRadians(lightTime.toDouble())
-                val lightOffsetX = (sin(rad) * radius * 0.1f).toFloat()
-                val lightOffsetY = (cos(rad) * radius * 0.1f).toFloat()
+                val lightOffsetX = (sin(rad) * radius * 0.05f).toFloat()
+                val lightOffsetY = (cos(rad) * radius * 0.05f).toFloat()
 
                 onDrawBehind {
-                    // 1. RESPLANDOR EXTERIOR BASE
+                    // Radio un poco más pequeño para dejar espacio al borde
+                    val bubbleRadius = radius * 0.92f
+
+                    // --- 1. SOMBRA SUAVE (Profundidad) ---
                     drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(color.copy(alpha = 0.25f), Color.Transparent),
-                            center = center,
-                            radius = radius * 1.3f
-                        )
+                        color = Color.Black.copy(alpha = 0.2f),
+                        radius = radius * 0.95f,
+                        center = center.copy(y = center.y + 2.dp.toPx())
                     )
 
-                    // 2. ENGARCE ORO
+                    // --- 2. BORDE (Anillo fino y elegante) ---
                     drawCircle(
-                        brush = Brush.sweepGradient(
-                            colors = listOf(goldDark, goldLight, goldDark),
-                            center = center
+                        brush = Brush.linearGradient(
+                            colors = listOf(goldLight, goldDark),
+                            start = Offset(center.x - radius, center.y - radius),
+                            end = Offset(center.x + radius, center.y + radius)
                         ),
-                        radius = radius - 1.5f,
-                        center = center,
-                        style = Stroke(width = 3.5f)
+                        radius = radius,
+                        center = center
                     )
 
-                    // 3. GEMA
+                    // --- 3. RELLENO DE COLOR (Vibrante) ---
                     if (isRainbow) {
                         rotate(rainbowRotation, center) {
                             drawCircle(
                                 brush = Brush.sweepGradient(rainbowColors, center),
-                                radius = radius * 0.88f,
-                                center = center
+                                radius = bubbleRadius, center = center
                             )
                         }
                     } else {
+                        // Gradiente Radial Offset: Simula luz 3D pero limpia
                         drawCircle(
                             brush = Brush.radialGradient(
-                                colorStops = arrayOf(
-                                    0.0f to color.copy(alpha = 0.95f),
-                                    0.6f to color.copy(alpha = 0.8f),
-                                    1.0f to color.copy(red = color.red * 0.3f, green = color.green * 0.3f, blue = color.blue * 0.3f)
+                                colors = listOf(
+                                    color.copy(alpha = 0.9f).compositeOver(Color.White), // Centro luminoso
+                                    color, // Color puro
+                                    color.copy(red=color.red*0.4f, green=color.green*0.4f, blue=color.blue*0.4f) // Sombra borde
                                 ),
-                                center = center.copy(
-                                    x = center.x + lightOffsetX,
-                                    y = center.y + lightOffsetY - radius * 0.1f
-                                ),
-                                radius = radius * 1.1f
+                                center = center.copy(x = center.x - radius * 0.2f, y = center.y - radius * 0.2f),
+                                radius = bubbleRadius * 1.3f
                             ),
-                            radius = radius * 0.88f,
+                            radius = bubbleRadius,
                             center = center
                         )
                     }
 
-                    // 4. REFLEJO
-                    drawOval(
-                        color = Color.White.copy(alpha = 0.45f),
-                        topLeft = Offset(
-                            center.x - radius * 0.35f + lightOffsetX * 1.5f,
-                            center.y - radius * 0.65f + lightOffsetY * 1.5f
-                        ),
-                        size = Size(radius * 0.45f, radius * 0.25f)
-                    )
-
-                    // 5. DESTELLO (Sparkle)
-                    if (isActive && sparkleScale > 0f) {
-                        val sSize = radius * 0.4f * sparkleScale
-                        val sPos = Offset(center.x + radius * 0.4f, center.y - radius * 0.4f)
-                        drawLine(
-                            color = Color.White.copy(alpha = sparkleScale),
-                            start = sPos.copy(y = sPos.y - sSize),
-                            end = sPos.copy(y = sPos.y + sSize),
-                            strokeWidth = 2.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                        drawLine(
-                            color = Color.White.copy(alpha = sparkleScale),
-                            start = sPos.copy(x = sPos.x - sSize),
-                            end = sPos.copy(x = sPos.x + sSize),
-                            strokeWidth = 2.dp.toPx(),
-                            cap = StrokeCap.Round
+                    // --- 4. BRILLO "WET LOOK" (Efecto cristal húmedo) ---
+                    // Este es el secreto de las burbujas modernas: un brillo blanco ovalado y suave
+                    rotate(-45f, center) {
+                        drawOval(
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.8f), Color.White.copy(alpha = 0.05f)),
+                                start = Offset(center.x, center.y - bubbleRadius),
+                                end = Offset(center.x, center.y)
+                            ),
+                            topLeft = Offset(center.x - bubbleRadius * 0.5f, center.y - bubbleRadius * 0.85f),
+                            size = Size(bubbleRadius, bubbleRadius * 0.5f)
                         )
                     }
 
-                    // 6. SOMBRA
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.2f)),
-                            center = center,
-                            radius = radius * 0.9f
+                    // --- 5. REFLEJO INFERIOR (Rim Light sutil) ---
+                    // Da volumen sin ensuciar el diseño
+                    drawArc(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.35f)),
+                            startY = center.y, endY = center.y + bubbleRadius
                         ),
-                        radius = radius * 0.88f,
-                        center = center
+                        startAngle = 45f, sweepAngle = 90f, useCenter = false,
+                        topLeft = Offset(center.x - bubbleRadius * 0.8f, center.y - bubbleRadius * 0.8f),
+                        size = Size(bubbleRadius * 1.6f, bubbleRadius * 1.6f),
+                        style = Stroke(width = bubbleRadius * 0.08f, cap = StrokeCap.Round)
                     )
 
-                    // --- NUEVO: INDICADOR VISUAL POTENTE ---
-                    // Se dibuja AL FINAL para quedar ENCIMA de todo.
+                    // Pequeño punto de luz (Hotspot) - Movible
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.9f),
+                        radius = bubbleRadius * 0.1f,
+                        center = Offset(center.x - bubbleRadius * 0.35f + lightOffsetX, center.y - bubbleRadius * 0.35f + lightOffsetY)
+                    )
+
+                    // --- 6. DESTELLO (Sparkle) ---
+                    if (isActive && sparkleScale > 0f) {
+                        val sPos = Offset(center.x + radius * 0.35f, center.y - radius * 0.35f)
+                        val sSize = radius * 0.6f * sparkleScale
+
+                        drawLine(
+                            brush = Brush.radialGradient(listOf(Color.White, Color.Transparent)),
+                            start = sPos.copy(y = sPos.y - sSize), end = sPos.copy(y = sPos.y + sSize),
+                            strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round
+                        )
+                        drawLine(
+                            brush = Brush.radialGradient(listOf(Color.White, Color.Transparent)),
+                            start = sPos.copy(x = sPos.x - sSize), end = sPos.copy(x = sPos.x + sSize),
+                            strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round
+                        )
+                        drawCircle(Color.White, radius = radius * 0.15f * sparkleScale, center = sPos)
+                    }
+
+                    // --- 7. INDICADOR DE OBJETIVO ---
                     if (isMatchingTarget) {
-                        // Aro blanco intenso alrededor
                         drawCircle(
                             color = Color.White.copy(alpha = indicatorAlpha),
-                            radius = radius * 0.95f, // Casi al borde
+                            radius = radius, // Coincide con el borde exterior
                             center = center,
-                            style = Stroke(width = 6.dp.toPx()) // Borde grueso
-                        )
-
-                        // Resplandor interior adicional
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = indicatorAlpha * 0.5f),
-                                    Color.Transparent
-                                ),
-                                center = center,
-                                radius = radius * 0.8f
-                            )
+                            style = Stroke(width = 3.dp.toPx())
                         )
                     }
                 }
