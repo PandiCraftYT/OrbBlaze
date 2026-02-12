@@ -36,11 +36,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             OrbBlazeTheme {
                 val context = LocalContext.current
+                val application = context.applicationContext as android.app.Application
 
-                // Inicializar managers
+                // Inicializar managers (Singletons durante la vida de la Activity)
                 val settingsManager = remember { SettingsManager(context) }
                 val globalSoundManager = remember { SoundManager(context, settingsManager) }
                 val adsManager = remember { AdsManager(context) }
+                
+                // Factory para inyectar dependencias en los ViewModels
+                val factory = remember { OrbBlazeViewModelFactory(settingsManager, application) }
 
                 val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -49,30 +53,23 @@ class MainActivity : ComponentActivity() {
                         when (event) {
                             Lifecycle.Event.ON_RESUME -> globalSoundManager.startMusic()
                             Lifecycle.Event.ON_PAUSE -> globalSoundManager.pauseMusic()
-                            Lifecycle.Event.ON_DESTROY -> globalSoundManager.release()
                             else -> {}
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
                     onDispose {
                         lifecycleOwner.lifecycle.removeObserver(observer)
+                        globalSoundManager.release() // Limpieza total al destruir el efecto
                     }
                 }
 
-                // ✅ DISEÑO ULTRA-MINIMALISTA Y SEAMLESS
-                // Usamos un Box para que el contenido del juego ocupe TODA la pantalla (incluso detrás del banner)
                 Box(modifier = Modifier.fillMaxSize()) {
+                    AppNavigation(factory, globalSoundManager, adsManager, settingsManager)
 
-                    // 1. Capa de Navegación (Fondo y Juego)
-                    AppNavigation(globalSoundManager, adsManager, settingsManager)
-
-                    // 2. Capa del Banner (Flotando sin barras de fondo)
-                    // Al no tener Spacer ni Column, el fondo que ves a los lados del banner
-                    // será el mismo fondo azul de tu menú o el de tus niveles.
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .safeDrawingPadding() // Evita que el banner toque los botones del sistema
+                            .safeDrawingPadding()
                             .padding(bottom = 4.dp)
                     ) {
                         adsManager.BannerAd()
@@ -85,6 +82,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppNavigation(
+    factory: OrbBlazeViewModelFactory,
     soundManager: SoundManager,
     adsManager: AdsManager,
     settingsManager: SettingsManager
@@ -93,17 +91,11 @@ fun AppNavigation(
     val context = LocalContext.current
     val activity = context as? Activity
 
-    val classicVm: ClassicViewModel = viewModel()
-    val timeAttackVm: TimeAttackViewModel = viewModel()
-    val adventureVm: AdventureViewModel = viewModel()
-    val sharedViewModel: GameViewModel = viewModel()
-
-    LaunchedEffect(settingsManager) {
-        classicVm.initManager(settingsManager)
-        timeAttackVm.initManager(settingsManager)
-        adventureVm.initManager(settingsManager)
-        sharedViewModel.initManager(settingsManager)
-    }
+    // ViewModels creados con Factory (Persistentes y Seguros)
+    val classicVm: ClassicViewModel = viewModel(factory = factory)
+    val timeAttackVm: TimeAttackViewModel = viewModel(factory = factory)
+    val adventureVm: AdventureViewModel = viewModel(factory = factory)
+    val sharedViewModel: GameViewModel = viewModel(factory = factory)
 
     LaunchedEffect(navController.currentBackStackEntry) {
         soundManager.refreshSettings()

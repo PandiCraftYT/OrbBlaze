@@ -1,5 +1,6 @@
 package com.example.orbblaze.ui.components
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -12,8 +13,10 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.launch
@@ -37,10 +40,35 @@ fun PandaShooter(
     onCannonPositioned: (Rect) -> Unit = {},
     onNextBubblePositioned: (Rect) -> Unit = {}
 ) {
+    val haptic = LocalHapticFeedback.current
     val recoilAnim = remember { Animatable(0f) }
     val flashAlpha = remember { Animatable(0f) }
     val joyAnim = remember { Animatable(0f) }
     val infiniteTransition = rememberInfiniteTransition(label = "panda_fx")
+
+    val bombColor = Color(0xFF212121)
+    val isCurrentBomb = currentBubbleColor == bombColor
+    val isNextBomb = nextBubbleColor == bombColor
+
+    // ✅ LÓGICA DE VIBRACIÓN
+    var lastVibratedAngle by remember { mutableFloatStateOf(angle) }
+    LaunchedEffect(angle) {
+        if (kotlin.math.abs(angle - lastVibratedAngle) >= 3f) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            lastVibratedAngle = angle
+        }
+    }
+
+    // ✅ ANIMACIÓN DE INTERCAMBIO
+    val swapAnim = remember { Animatable(0f) }
+    var lastShotTick by remember { mutableIntStateOf(shotTick) }
+    LaunchedEffect(currentBubbleColor) {
+        if (shotTick == lastShotTick) { 
+            swapAnim.snapTo(1f)
+            swapAnim.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 400f))
+        }
+        lastShotTick = shotTick
+    }
 
     val breatheScale by infiniteTransition.animateFloat(
         initialValue = 1f, targetValue = 1.03f,
@@ -75,21 +103,15 @@ fun PandaShooter(
         }
     }
 
-    val recoilOffset = recoilAnim.value * 40f
+    val recoilOffset = recoilAnim.value * 45f
     val joyJump = joyAnim.value * -20f
-
-    // Identificar si la burbuja es una bomba (Color negro)
-    val bombColor = Color(0xFF212121)
-    val isCurrentBomb = currentBubbleColor == bombColor
-    val isNextBomb = nextBubbleColor == bombColor
-
     val rainbowColors = listOf(Color.Red, Color(0xFFFF7F00), Color.Yellow, Color.Green, Color.Blue, Color(0xFF4B0082), Color(0xFF8B00FF))
 
     Box(
-        modifier = modifier.fillMaxWidth().height(320.dp),
+        modifier = modifier.fillMaxWidth().height(340.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
-        // 1. NUBES DE FONDO
+        // 1. NUBES
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cloudColor = Color.White
             drawCloud(Offset(size.width / 2, size.height - 125.dp.toPx()), 260f, cloudColor)
@@ -105,13 +127,10 @@ fun PandaShooter(
                 .graphicsLayer { alpha = if (isShopEnabled) 1f else 0.4f }
                 .onGloballyPositioned { onShopPositioned(it.boundsInRoot()) }
         ) {
-            ShopButton(
-                onClick = onShopClick,
-                isEnabled = isShopEnabled
-            )
+            ShopButton(onClick = onShopClick, isEnabled = isShopEnabled)
         }
 
-        // 3. PANDA ASISTENTE
+        // 3. PANDA
         Canvas(
             modifier = Modifier
                 .size(180.dp)
@@ -123,7 +142,6 @@ fun PandaShooter(
             val pBlack = Color(0xFF1A1A1A)
             val pWhite = Color.White
             val headCy = cy - 40f
-
             withTransform({
                 scale(breatheScale, breatheScale, Offset(cx, cy + 40f))
                 if (joyAnim.value > 0.1f) rotate(joyAnim.value * 10f, Offset(cx, cy))
@@ -151,6 +169,11 @@ fun PandaShooter(
                 .align(Alignment.BottomEnd)
                 .offset(x = (-35).dp, y = (-112).dp + joyJump.dp)
                 .onGloballyPositioned { onNextBubblePositioned(it.boundsInRoot()) }
+                .graphicsLayer {
+                    scaleX = 0.5f + (1f - swapAnim.value) * 0.5f
+                    scaleY = 0.5f + (1f - swapAnim.value) * 0.5f
+                    alpha = 1f - swapAnim.value * 0.5f
+                }
         ) {
             VisualBubble(
                 color = nextBubbleColor, 
@@ -161,93 +184,91 @@ fun PandaShooter(
             )
         }
 
-        // 5. CAÑÓN SUPREMO
+        // 5. CAÑÓN REDISEÑADO
         Box(
             modifier = Modifier
-                .size(260.dp)
+                .size(300.dp)
                 .align(Alignment.BottomCenter)
-                .offset(y = (-50).dp)
+                .offset(y = (-40).dp)
                 .onGloballyPositioned { onCannonPositioned(it.boundsInRoot()) }
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = center.x
                 val cy = center.y
-                val steelDark = Color(0xFF0F171E)
-                val steelMid = Color(0xFF2C3E50)
-                val steelLight = Color(0xFF7F8C8D)
-                val goldColor = Color(0xFFFFD700)
-                val pivot = Offset(cx, cy + 50f)
+                val steelDark = Color(0xFF121212)
+                val steelMid = Color(0xFF2C2C2C)
+                val steelLight = Color(0xFF4A4A4A)
+                val accentGold = Color(0xFFFFD700)
+                val pivot = Offset(cx, cy + 80f)
 
-                val baseBrush = Brush.verticalGradient(listOf(steelMid, steelDark))
-                drawRoundRect(baseBrush, Offset(cx - 75f, cy + 25f), Size(150f, 65f), CornerRadius(15f))
+                // Base Estática
+                drawRoundRect(
+                    brush = Brush.verticalGradient(listOf(steelMid, Color.Black)),
+                    topLeft = Offset(cx - 90f, cy + 60f),
+                    size = Size(180f, 50f),
+                    cornerRadius = CornerRadius(15f)
+                )
 
-                // Adornos laterales - Muestran el color/estado de la burbuja actual
-                listOf(-70f, 70f).forEach { xOff ->
-                    val circleCenter = Offset(cx + xOff, cy + 55f)
-                    drawCircle(steelDark, 32f, circleCenter)
-                    
+                // Engranajes Laterales
+                listOf(-85f, 85f).forEach { xOff ->
+                    val gearCenter = Offset(cx + xOff, cy + 80f)
+                    drawCircle(Color.Black, 38f, gearCenter)
+                    rotate(angle * 1.5f, gearCenter) {
+                        drawCircle(accentGold, 32f, gearCenter, style = Stroke(5f))
+                        repeat(8) { i ->
+                            rotate(i * 45f, gearCenter) {
+                                drawRect(accentGold, Offset(gearCenter.x - 5f, gearCenter.y - 38f), Size(10f, 12f))
+                            }
+                        }
+                    }
+                    // Color indicador en engranajes
                     if (isCurrentRainbow) {
-                        rotate(rainbowRotation, circleCenter) {
-                            drawCircle(
-                                brush = Brush.sweepGradient(rainbowColors, circleCenter),
-                                radius = 28f,
-                                center = circleCenter,
-                                style = Stroke(5f)
-                            )
-                            drawCircle(
-                                brush = Brush.sweepGradient(rainbowColors, circleCenter),
-                                radius = 14f,
-                                center = circleCenter
-                            )
+                        rotate(rainbowRotation, gearCenter) {
+                            drawCircle(brush = Brush.sweepGradient(rainbowColors, gearCenter), radius = 14f, center = gearCenter)
                         }
                     } else if (isCurrentBomb) {
-                        drawCircle(Color.Black, radius = 28f, center = circleCenter, style = Stroke(5f))
-                        drawCircle(Color(0xFF424242), radius = 14f, center = circleCenter)
+                        drawCircle(Color.Black, radius = 14f, center = gearCenter)
+                        drawCircle(Color.White.copy(0.4f), radius = 4f, center = gearCenter - Offset(4f, 4f))
                     } else {
-                        drawCircle(currentBubbleColor.copy(alpha = 0.4f), 28f, circleCenter, style = Stroke(5f))
-                        drawCircle(currentBubbleColor, 14f, circleCenter)
+                        drawCircle(currentBubbleColor, 14f, gearCenter)
                     }
-                    drawCircle(Color.White.copy(0.6f), 4f, Offset(cx + xOff - 6f, cy + 50f))
                 }
 
                 withTransform({
                     rotate(angle, pivot)
                     translate(0f, recoilOffset)
                 }) {
-                    val barrelW = 110f
-                    val barrelH = 185f
-                    val metalGradient = Brush.horizontalGradient(
-                        0.0f to steelDark, 0.15f to steelMid, 0.5f to steelLight, 0.85f to steelMid, 1.0f to steelDark
+                    val barrelW = 105f
+                    val barrelH = 190f
+                    val barrelGradient = Brush.horizontalGradient(
+                        0.0f to steelDark, 0.2f to steelMid, 0.5f to steelLight, 0.8f to steelMid, 1.0f to steelDark
                     )
 
-                    val path = Path().apply {
-                        moveTo(cx - barrelW/2, cy + 55f); lineTo(cx + barrelW/2, cy + 55f)
-                        lineTo(cx + barrelW*0.42f, cy - barrelH + 30f); lineTo(cx - barrelW*0.42f, cy - barrelH + 30f)
-                        close()
-                    }
-                    drawPath(path, metalGradient)
-                    
-                    drawRect(
-                        brush = Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(0.2f), Color.Transparent)),
-                        topLeft = Offset(cx - 10f, cy - barrelH + 30f),
-                        size = Size(20f, barrelH + 25f)
+                    drawCircle(steelMid, 55f, Offset(cx, cy + 80f))
+
+                    // Cuerpo del Cañón
+                    drawRoundRect(
+                        brush = barrelGradient,
+                        topLeft = Offset(cx - barrelW/2, cy - barrelH + 80f),
+                        size = Size(barrelW, barrelH),
+                        cornerRadius = CornerRadius(12f)
                     )
 
-                    drawRoundRect(Color(0xFF8B6B00), Offset(cx - barrelW/2 - 4f, cy + 10f), Size(barrelW + 6f, 22f), CornerRadius(5f))
-                    drawRoundRect(goldColor, Offset(cx - barrelW/2 - 2f, cy + 10f), Size(barrelW + 4f, 18f), CornerRadius(4f))
-                    drawRect(goldColor, Offset(cx - barrelW*0.38f, cy - 100f), Size(barrelW*0.76f, 10f))
+                    // Anillos de Refuerzo
+                    drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy + 10f), Size(barrelW + 10f, 18f), CornerRadius(5f))
+                    drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy - 60f), Size(barrelW + 10f, 18f), CornerRadius(5f))
 
-                    // Boca del cañón
-                    drawOval(metalGradient, Offset(cx - barrelW*0.45f, cy - barrelH), Size(barrelW*0.9f, 45f))
-                    drawOval(Color.Black, Offset(cx - barrelW*0.45f + 16f, cy - barrelH + 10f), Size(barrelW*0.9f - 32f, 25f))
+                    // Boca del Cañón (Hueca y profunda, sin burbuja interna visible)
+                    val mouthY = cy - barrelH + 80f
+                    drawOval(steelMid, Offset(cx - barrelW/2, mouthY - 22f), Size(barrelW, 44f))
+                    drawOval(Color.Black, Offset(cx - barrelW/2 + 12f, mouthY - 16f), Size(barrelW - 24f, 32f))
 
-                    drawCircle(Brush.radialGradient(listOf(steelLight, steelDark)), 32f, Offset(cx, cy + 65f))
-
+                    // Flash de Disparo
                     if (flashAlpha.value > 0f) {
                         drawCircle(
-                            brush = Brush.radialGradient(listOf(Color.White, goldColor, Color.Transparent)),
-                            radius = 150f * flashAlpha.value,
-                            center = Offset(cx, cy - barrelH + 10f)
+                            brush = Brush.radialGradient(listOf(Color.White, accentGold, Color.Transparent)),
+                            radius = 200f * flashAlpha.value,
+                            center = Offset(cx, mouthY - 10f)
                         )
                     }
                 }

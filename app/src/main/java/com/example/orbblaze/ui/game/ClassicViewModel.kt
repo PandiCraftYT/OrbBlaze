@@ -1,20 +1,20 @@
 package com.example.orbblaze.ui.game
 
 import android.app.Application
+import com.example.orbblaze.data.SettingsManager
 
-class ClassicViewModel(application: Application) : GameViewModel(application) {
+class ClassicViewModel(
+    application: Application,
+    settingsManager: SettingsManager
+) : GameViewModel(application, settingsManager) {
 
     init {
         changeGameMode(GameMode.CLASSIC)
-        loadLevel(5) // Iniciamos con 6 filas de burbujas
+        loadLevel(5) 
     }
 
     override fun onPostSnap() {
         shotsFiredCount++
-        
-        // --- MODO LIBRE ---
-        // Eliminamos la lógica de addRows.
-        // Ahora el jugador puede disparar infinitamente sin que bajen nuevas filas.
         metrics?.let { checkGameConditions(it) }
     }
 }

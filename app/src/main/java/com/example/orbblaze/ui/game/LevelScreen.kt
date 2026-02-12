@@ -2,6 +2,7 @@ package com.example.orbblaze.ui.game
 
 import android.annotation.SuppressLint
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -98,12 +99,14 @@ fun LevelScreen(
     val tutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
     var showTutorial by remember { mutableStateOf(false) }
 
-    // ✅ LÓGICA DE FONDO DINÁMICO Y ANIMADO
-    val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
+    // ✅ CONTROL DE BOTÓN ATRÁS (PAUSA)
+    BackHandler(enabled = gameState == GameState.PLAYING && !isPaused) {
+        viewModel.togglePause()
+    }
 
+    val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
     
-    // Animación de desplazamiento suave para el fondo (nubes o auroras)
     val backgroundOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 2000f,
@@ -114,7 +117,6 @@ fun LevelScreen(
         label = "bg_scroll"
     )
 
-    // ✅ ANIMACIÓN PARA LA LÍNEA DE TIRO (Marching Dots)
     val aimPulse by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -142,7 +144,6 @@ fun LevelScreen(
 
     val isReviveAlertActive = (viewModel as? AdventureViewModel)?.showReviveAlert == true
 
-    // CONTROL DE MÚSICA REFORZADO
     LaunchedEffect(gameState, isPaused, isReviveAlertActive) {
         if (gameState == GameState.PLAYING && !isPaused && !isReviveAlertActive) {
             soundManager.startMusic()
@@ -189,7 +190,7 @@ fun LevelScreen(
                 if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(); val startPos = down.position
-                    val centerX = size.width / 2; val pandaTopY = size.height - 280.dp.toPx() // Ajustado por el banner
+                    val centerX = size.width / 2; val pandaTopY = size.height - 280.dp.toPx() 
                     val isPandaClick = startPos.x >= (centerX - 120.dp.toPx()) && startPos.x <= (centerX + 120.dp.toPx()) && startPos.y >= pandaTopY
 
                     if (isPandaClick) {
@@ -208,7 +209,7 @@ fun LevelScreen(
                         isAiming = false
                         
                         val barrelLengthPx = 95.dp.toPx()
-                        val pivotHeightPx = 220.dp.toPx() // Elevado por el banner
+                        val pivotHeightPx = 220.dp.toPx() 
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                         val pivotX = size.width / 2f
                         val pivotY = size.height - pivotHeightPx
@@ -226,65 +227,25 @@ fun LevelScreen(
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 104.dp.toPx() } 
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
 
-        // ✅ CAPA DE FONDO ANIMADO (Solo para Modos No-Aventura)
         if (currentGameMode != GameMode.ADVENTURE) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                // Dibujar "nubes" o elementos decorativos que se mueven
                 val color1 = Color.White.copy(alpha = 0.15f)
                 val color2 = Color.White.copy(alpha = 0.05f)
-
-                // Elemento 1
-                drawCircle(
-                    color = color1,
-                    radius = 150.dp.toPx(),
-                    center = Offset(
-                        x = (backgroundOffset % (totalWidth + 400.dp.toPx())) - 200.dp.toPx(),
-                        y = 150.dp.toPx()
-                    )
-                )
-
-                // Elemento 2 (más lento/diferente offset)
-                drawCircle(
-                    color = color2,
-                    radius = 250.dp.toPx(),
-                    center = Offset(
-                        x = ((backgroundOffset * 0.7f) % (totalWidth + 600.dp.toPx())) - 300.dp.toPx(),
-                        y = totalHeight * 0.4f
-                    )
-                )
-
-                // Elemento 3
-                drawCircle(
-                    color = color1,
-                    radius = 120.dp.toPx(),
-                    center = Offset(
-                        x = totalWidth - ((backgroundOffset * 1.2f) % (totalWidth + 300.dp.toPx())),
-                        y = totalHeight * 0.7f
-                    )
-                )
+                drawCircle(color = color1, radius = 150.dp.toPx(), center = Offset(x = (backgroundOffset % (totalWidth + 400.dp.toPx())) - 200.dp.toPx(), y = 150.dp.toPx()))
+                drawCircle(color = color2, radius = 250.dp.toPx(), center = Offset(x = ((backgroundOffset * 0.7f) % (totalWidth + 600.dp.toPx())) - 300.dp.toPx(), y = totalHeight * 0.4f))
+                drawCircle(color = color1, radius = 120.dp.toPx(), center = Offset(x = totalWidth - ((backgroundOffset * 1.2f) % (totalWidth + 300.dp.toPx())), y = totalHeight * 0.7f))
             }
         }
 
         LaunchedEffect(totalWidth, boardTopPaddingPx, columnsCount) {
-            viewModel.setBoardMetrics(
-                BoardMetricsPx(
-                    horizontalSpacing = horizontalSpacingPx,
-                    bubbleDiameter = bubbleDiameterPx,
-                    verticalSpacing = verticalSpacingPx,
-                    boardTopPadding = boardTopPaddingPx,
-                    boardStartPadding = boardStartPadding,
-                    ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f),
-                    screenWidth = totalWidth
-                )
-            )
+            viewModel.setBoardMetrics(BoardMetricsPx(horizontalSpacing = horizontalSpacingPx, bubbleDiameter = bubbleDiameterPx, verticalSpacing = verticalSpacingPx, boardTopPadding = boardTopPaddingPx, boardStartPadding = boardStartPadding, ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f), screenWidth = totalWidth))
         }
 
         Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha), size = size)
             val pivotX = size.width / 2f
-            val pivotY = size.height - 220.dp.toPx() // Elevado por el banner
+            val pivotY = size.height - 220.dp.toPx() 
 
-            // ✅ MEJORA DE DISEÑO: LÍNEA DE TIRO PROFESIONAL
             if (isAiming) {
                 val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                 var dirX = sin(angleRad).toFloat()
@@ -293,51 +254,25 @@ fun LevelScreen(
                 var current = Offset(pivotX + dirX * barrelLength, pivotY + dirY * barrelLength)
                 val totalAimLength = size.height * 0.85f
                 var remaining = totalAimLength
-                
                 val dotSpacing = 24.dp.toPx()
                 val baseDotRadius = 4.dp.toPx()
                 val bubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor)
-                
                 var totalTraversed = 0f
-
                 while (remaining > 0f) {
                     val bounceX = if (dirX > 0f) size.width else 0f
                     val tToWall = (bounceX - current.x) / dirX
-
                     val segmentLength = if (tToWall <= 0 || tToWall >= remaining) remaining else tToWall
-
-                    // Efecto de puntos que fluyen
                     var segmentTraversed = (aimPulse * dotSpacing) % dotSpacing
                     while (segmentTraversed < segmentLength) {
                         val dotPos = Offset(current.x + dirX * segmentTraversed, current.y + dirY * segmentTraversed)
-
                         val progress = (totalTraversed + segmentTraversed) / totalAimLength
                         val alpha = (0.7f - progress * 0.5f).coerceIn(0.1f, 0.7f)
                         val radius = baseDotRadius * (1f - progress * 0.3f)
-
-                        // Resplandor del punto
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(bubbleColor.copy(alpha = alpha), Color.Transparent),
-                                center = dotPos,
-                                radius = radius * 3f
-                            ),
-                            radius = radius * 3f,
-                            center = dotPos
-                        )
-
-                        // Núcleo del punto
-                        drawCircle(
-                            color = Color.White.copy(alpha = (alpha + 0.2f).coerceAtMost(1f)),
-                            radius = radius,
-                            center = dotPos
-                        )
-
+                        drawCircle(brush = Brush.radialGradient(colors = listOf(bubbleColor.copy(alpha = alpha), Color.Transparent), center = dotPos, radius = radius * 3f), radius = radius * 3f, center = dotPos)
+                        drawCircle(color = Color.White.copy(alpha = (alpha + 0.2f).coerceAtMost(1f)), radius = radius, center = dotPos)
                         segmentTraversed += dotSpacing
                     }
-
                     if (tToWall <= 0 || tToWall >= remaining) break
-
                     totalTraversed += segmentLength
                     val hit = Offset(current.x + dirX * tToWall, current.y + dirY * tToWall)
                     remaining -= tToWall
@@ -346,16 +281,8 @@ fun LevelScreen(
                 }
             }
 
-            // LÍNEA ROJA ESTÁTICA
             val redLineY = boardTopPaddingPx + verticalSpacingPx * 13
-            drawLine(
-                color = Color.Red.copy(alpha = dangerAlpha),
-                start = Offset(0f, redLineY),
-                end = Offset(size.width, redLineY),
-                strokeWidth = 8f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
-            )
-
+            drawLine(color = Color.Red.copy(alpha = dangerAlpha), start = Offset(0f, redLineY), end = Offset(size.width, redLineY), strokeWidth = 8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f)))
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint().apply { textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = android.graphics.Color.WHITE }
@@ -366,71 +293,20 @@ fun LevelScreen(
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
             bubbles.forEach { (pos, bubble) ->
                 val (x, y) = viewModel.getBubbleCenter(pos)
-                VisualBubble(
-                    color = mapBubbleColor(bubble.color),
-                    isRainbow = bubble.color == BubbleColor.RAINBOW,
-                    isBomb = bubble.color == BubbleColor.BOMB,
-                    rainbowRotation = masterRainbowRotation,
-                    modifier = Modifier
-                        .size(with(density) { bubbleDiameterPx.toDp() })
-                        .graphicsLayer {
-                            translationX = x - (bubbleDiameterPx / 2)
-                            translationY = y - (bubbleDiameterPx / 2)
-                        }
-                )
+                VisualBubble(color = mapBubbleColor(bubble.color), isRainbow = bubble.color == BubbleColor.RAINBOW, isBomb = bubble.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { bubbleDiameterPx.toDp() }).graphicsLayer { translationX = x - (bubbleDiameterPx / 2); translationY = y - (bubbleDiameterPx / 2) })
             }
-
             activeProjectile?.let { p ->
                 val scaleFactor = if(p.isFireball) 0.7f else 1f
                 val sizePx = bubbleDiameterPx * scaleFactor
-                VisualBubble(
-                    color = mapBubbleColor(p.color),
-                    isRainbow = p.color == BubbleColor.RAINBOW,
-                    isBomb = p.color == BubbleColor.BOMB,
-                    rainbowRotation = masterRainbowRotation,
-                    modifier = Modifier
-                        .size(with(density) { sizePx.toDp() })
-                        .graphicsLayer {
-                            translationX = p.x - (sizePx / 2)
-                            translationY = p.y - (sizePx / 2)
-                            if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f
-                        }
-                )
+                VisualBubble(color = mapBubbleColor(p.color), isRainbow = p.color == BubbleColor.RAINBOW, isBomb = p.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2); if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f })
             }
         }
 
-        // ✅ SECCIÓN DEL CAÑÓN ELEVADA PARA EL BANNER
         Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp)) {
-            PandaShooter(
-                angle = viewModel.shooterAngle,
-                currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor),
-                isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW && !isFireballQueued,
-                nextBubbleColor = mapBubbleColor(previewBubbleColor),
-                isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW,
-                shotTick = viewModel.shotTick,
-                joyTick = viewModel.joyTick,
-                rainbowRotation = masterRainbowRotation,
-                onShopClick = {
-                    if (currentGameMode == GameMode.ADVENTURE) {
-                        Toast.makeText(context, "Tienda no disponible en modo Aventura.", Toast.LENGTH_SHORT).show()
-                    } else {
-                        showQuickShop = true
-                    }
-                },
-                isShopEnabled = currentGameMode != GameMode.ADVENTURE,
-                onShopPositioned = { shopRect = it },
-                onCannonPositioned = { cannonRect = it },
-                onNextBubblePositioned = { nextBubbleRect = it }
-            )
+            PandaShooter(angle = viewModel.shooterAngle, currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor), isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW && !isFireballQueued, nextBubbleColor = mapBubbleColor(previewBubbleColor), isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, shotTick = viewModel.shotTick, joyTick = viewModel.joyTick, rainbowRotation = masterRainbowRotation, onShopClick = { if (currentGameMode == GameMode.ADVENTURE) { Toast.makeText(context, "Tienda no disponible en modo Aventura.", Toast.LENGTH_SHORT).show() } else { showQuickShop = true } }, isShopEnabled = currentGameMode != GameMode.ADVENTURE, onShopPositioned = { shopRect = it }, onCannonPositioned = { cannonRect = it }, onNextBubblePositioned = { nextBubbleRect = it })
         }
 
-        GameTopBar(
-            score = score, bestScore = highScore, coins = coins, 
-            timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null,
-            shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null,
-            onSettingsClick = { viewModel.togglePause() }, 
-            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
-        )
+        GameTopBar(score = score, bestScore = highScore, coins = coins, timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null, onSettingsClick = { viewModel.togglePause() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() })
 
         if (showQuickShop) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
@@ -451,168 +327,58 @@ fun LevelScreen(
             if (viewModel.gameMode == GameMode.ADVENTURE) {
                 val advViewModel = viewModel as? AdventureViewModel
                 val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
-                if (currentLevel != null) {
-                    AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { viewModel.startGame() })
-                }
+                if (currentLevel != null) { AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { viewModel.startGame() }) }
             } else {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {},
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
                     val isTimeAttack = viewModel.gameMode == GameMode.TIME_ATTACK
                     val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
-
-                    Surface(
-                        modifier = Modifier.width(340.dp).padding(16.dp),
-                        shape = RoundedCornerShape(32.dp),
-                        color = Color(0xFF0F1444),
-                        border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))),
-                        shadowElevation = 24.dp
-                    ) {
+                    Surface(modifier = Modifier.width(340.dp).padding(16.dp), shape = RoundedCornerShape(32.dp), color = Color(0xFF0F1444), border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))), shadowElevation = 24.dp) {
                         Column(modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = if (isTimeAttack) "TIME ATTACK" else "MODO CLÁSICO",
-                                style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center)
-                            )
-
+                            Text(text = if (isTimeAttack) "TIME ATTACK" else "MODO CLÁSICO", style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center))
                             Spacer(Modifier.height(16.dp))
-
-                            Text(
-                                text = if (isTimeAttack) "¡Sé el más rápido y explota todas las burbujas!" else "No dejes que las burbujas toquen la línea roja. ¡Sobrevive todo lo que puedas!",
-                                color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp
-                            )
-
+                            Text(text = if (isTimeAttack) "¡Sé el más rápido y explota todas las burbujas!" else "No dejes que las burbujas toquen la línea roja. ¡Sobrevive todo lo que puedas!", color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp)
                             if (highScore > 0) {
                                 Spacer(Modifier.height(24.dp))
-                                Row(
-                                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 20.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Row(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("RÉCORD: $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                             }
-
                             Spacer(Modifier.height(40.dp))
-
-                            Button(
-                                onClick = { viewModel.startGame() },
-                                modifier = Modifier.fillMaxWidth().height(64.dp),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)
-                            ) {
-                                Text("¡JUGAR AHORA!", color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp)
-                            }
+                            Button(onClick = { viewModel.startGame() }, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor), elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)) { Text("¡JUGAR AHORA!", color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp) }
                         }
                     }
                 }
             }
         }
 
-        // ✅ OCULTAR MENÚ DE PAUSA SI LA ALERTA DE REVIVIR ESTÁ ACTIVA
         if (isPaused && gameState == GameState.PLAYING && !isReviveAlertActive) {
-            OverlayMenu(
-                title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() },
-                onExit = { soundManager.startMusic(); onMenuClick() }, 
-                showVolume = true, volume = volumeSlider,
-                onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() }
-            )
+            OverlayMenu(title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, onExit = { soundManager.startMusic(); onMenuClick() }, showVolume = true, volume = volumeSlider, onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() })
         }
 
         if (gameState == GameState.WON || gameState == GameState.LOST) {
-            OverlayMenu(
-                title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() },
-                onExit = { onMenuClick() },
-                score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
-                stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
-                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) {
-                    {
-                        if (score >= 100) {
-                            viewModel.addCoins(score / 100)
-                            hasRedeemedCoins = true
-                            Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } else null,
-                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else {
-                    {
-                        onShowAd { _ ->
-                            if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) {
-                                (viewModel as? AdventureViewModel)?.reviveWithAd()
-                            } else {
-                                viewModel.addCoins(50)
-                                Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                },
-                currentLevelId = currentLevelId
-            )
+            OverlayMenu(title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() }, onExit = { onMenuClick() }, score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE, stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0, onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null, onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } }, currentLevelId = currentLevelId)
         }
 
-        // ✅ MEJORA DE DISEÑO DE ALERTA DE INTENTO RECUPERADO
         if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-                Surface(
-                    modifier = Modifier.width(320.dp).padding(16.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    color = Color(0xFF1A237E),
-                    tonalElevation = 8.dp,
-                    shadowElevation = 12.dp,
-                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.15f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF64FFDA),
-                            modifier = Modifier.size(64.dp)
-                        )
+                Surface(modifier = Modifier.width(320.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), tonalElevation = 8.dp, shadowElevation = 12.dp, border = BorderStroke(2.dp, Color.White.copy(alpha = 0.15f))) {
+                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF64FFDA), modifier = Modifier.size(64.dp))
                         Spacer(Modifier.height(16.dp))
-                        Text(
-                            text = "¡INTENTO RECUPERADO!",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            textAlign = TextAlign.Center
-                        )
+                        Text(text = "¡INTENTO RECUPERADO!", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
                         Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = "Se han eliminado 6 líneas y tienes 15 tiros extra. ¡Dale duro!",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
-                        )
+                        Text(text = "Se han eliminado 6 líneas y tienes 15 tiros extra. ¡Dale duro!", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
                         Spacer(Modifier.height(32.dp))
-                        Button(
-                            onClick = {
-                                viewModel.showReviveAlert = false
-                                viewModel.togglePause()
-                            },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Text("¡LISTO!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp)
-                        }
+                        Button(onClick = { viewModel.showReviveAlert = false; viewModel.togglePause() }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text("¡LISTO!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
                     }
                 }
             }
         }
 
         if (showTutorial) {
-            TutorialDialog(shopRect = shopRect, cannonRect = cannonRect, nextBubbleRect = nextBubbleRect, scoreRect = scoreRect,
-                onComplete = {
-                    showTutorial = false
-                    coroutineScope.launch { settingsManager.setTutorialCompleted(true); viewModel.startGame() }
-                }
-            )
+            TutorialDialog(shopRect = shopRect, cannonRect = cannonRect, nextBubbleRect = nextBubbleRect, scoreRect = scoreRect, onComplete = { showTutorial = false; coroutineScope.launch { settingsManager.setTutorialCompleted(true); viewModel.startGame() } })
         }
     }
 }
@@ -649,116 +415,48 @@ fun OverlayMenu(
                 .background(Color(0xFF080B25).copy(alpha = 0.95f))
                 .padding(vertical = 40.dp, horizontal = 24.dp)
         ) {
-            // TÍTULO LIMPIO
-            Text(
-                text = title, 
-                style = TextStyle(
-                    fontSize = 32.sp, 
-                    fontWeight = FontWeight.ExtraBold, 
-                    color = accentColor, 
-                    letterSpacing = 1.sp,
-                    textAlign = TextAlign.Center
-                )
-            )
-            
+            Text(text = title, style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = accentColor, letterSpacing = 1.sp, textAlign = TextAlign.Center))
             Spacer(Modifier.height(32.dp))
-
-            // SCORE MINIMALISTA
             if (score != null) {
                 Text("SCORE", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Text("$score", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Light)
                 Spacer(Modifier.height(32.dp))
             }
-
-            // ESTRELLAS MINIMALISTAS
             if (isAdventure && isWin) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(3) { i ->
                         val scale = remember { Animatable(0f) }
                         LaunchedEffect(Unit) { delay(i * 150L); scale.animateTo(1f, spring(0.6f, 300f)) }
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.05f),
-                            modifier = Modifier.size(32.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }
-                        )
+                        Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.05f), modifier = Modifier.size(32.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value })
                     }
                 }
                 Spacer(Modifier.height(32.dp))
             }
-
-            // VOLUMEN SLIM
             if (showVolume) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("SOUND", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         Text("${(volume * 100).toInt()}%", color = accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
-                    Slider(
-                        value = volume,
-                        onValueChange = onVolumeChange,
-                        colors = SliderDefaults.colors(
-                            thumbColor = accentColor,
-                            activeTrackColor = accentColor,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.1f)
-                        ),
-                        modifier = Modifier.height(32.dp)
-                    )
+                    Slider(value = volume, onValueChange = onVolumeChange, colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor, inactiveTrackColor = Color.White.copy(alpha = 0.1f)), modifier = Modifier.height(32.dp))
                 }
                 Spacer(Modifier.height(32.dp))
             }
-
-            // BOTÓN PRINCIPAL
             onContinue?.let { action ->
-                Button(
-                    onClick = action,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = accentColor)
-                ) {
-                    Text("RESUME", color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp)
-                }
+                Button(onClick = action, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor)) { Text("RESUME", color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp) }
                 Spacer(Modifier.height(16.dp))
             }
-
-            // ACCIONES SECUNDARIAS (ICONOS)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // REINICIAR
-                IconButton(
-                    onClick = onRestart,
-                    modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))
-                ) {
-                    Icon(Icons.Default.Refresh, null, tint = Color.White.copy(alpha = 0.7f))
-                }
-
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onRestart, modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))) { Icon(Icons.Default.Refresh, null, tint = Color.White.copy(alpha = 0.7f)) }
                 Spacer(Modifier.width(24.dp))
-
-                // SALIR
                 val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
-                IconButton(
-                    onClick = onExit,
-                    modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))
-                ) {
-                    Icon(exitIcon, null, tint = Color.White.copy(alpha = 0.7f))
-                }
+                IconButton(onClick = onExit, modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))) { Icon(exitIcon, null, tint = Color.White.copy(alpha = 0.7f)) }
             }
-
-            // BOTONES DE RECOMPENSA MINIMALISTAS
             if (!isPause) {
                 onShowAd?.let { adAction -> 
                     val adLabel = if (isAdventure && !isWin) "REVIVE" else "BONUS +50"
                     Spacer(Modifier.height(32.dp))
-                    TextButton(onClick = adAction) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                        }
-                    }
+                    TextButton(onClick = adAction) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) } }
                 }
             }
         }

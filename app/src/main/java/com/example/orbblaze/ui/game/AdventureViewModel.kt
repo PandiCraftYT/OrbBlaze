@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
-import com.example.orbblaze.domain.engine.HexGridHelper
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class AdventureViewModel(application: Application) : GameViewModel(application) {
+class AdventureViewModel(
+    application: Application,
+    settingsManager: SettingsManager
+) : GameViewModel(application, settingsManager) {
     
     var currentLevelId by mutableIntStateOf(1)
         private set
@@ -25,10 +28,8 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     var starsEarned by mutableIntStateOf(0)
         private set
 
-    // ✅ Estado para la alerta de recompensa
     var showReviveAlert by mutableStateOf(false)
 
-    private var shotsTakenInLevel = 0
     private var currentLevelObj: Level? = null
     private var cascadeJob: Job? = null
 
@@ -79,8 +80,8 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         rowsDroppedCount = 0
         visualScrollOffset = 0f
         
-        nextBubbleColor = generateSmartColor()
-        previewBubbleColor = generateSmartColor()
+        nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
         cascadeJob?.cancel()
     }
 
@@ -98,12 +99,17 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
     private fun startCascadeLoop() {
         cascadeJob?.cancel()
         cascadeJob = viewModelScope.launch {
+            var lastTime = System.currentTimeMillis()
             while (isActive) {
-                // ✅ Bloqueo total si hay alerta o pausa
+                val currentTime = System.currentTimeMillis()
+                val deltaTime = (currentTime - lastTime) / 1000f
+                lastTime = currentTime
+
                 if (gameState == GameState.PLAYING && !isPaused && !showReviveAlert) {
                     val m = metrics
                     if (m != null) {
-                        visualScrollOffset += 3.50f
+                        // ✅ VELOCIDAD REDUCIDA: De 220f a 80f píxeles por segundo
+                        visualScrollOffset += 80f * deltaTime
                         checkAdventureDefeat(m)
                         if (visualScrollOffset >= m.verticalSpacing && gameState == GameState.PLAYING) {
                             anchorVisualOffset(m.verticalSpacing)
@@ -150,26 +156,10 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         visualScrollOffset -= rowHeight
     }
 
-    private fun generateSmartColor(): BubbleColor {
-        val currentBubbles = bubblesByPosition
-        if (currentBubbles.isEmpty()) return BubbleColor.RED
-        val maxRow = currentBubbles.keys.maxOfOrNull { it.row } ?: 0
-        val targetEntries = currentBubbles.entries.filter { it.key.row >= maxRow - 2 }
-        val colorsWithPairs = mutableListOf<BubbleColor>()
-        for (entry in targetEntries) {
-            val pos = entry.key; val color = entry.value.color
-            if (color == BubbleColor.BOMB || color == BubbleColor.RAINBOW) continue
-            val neighbors = HexGridHelper.getNeighbors(pos, rowsDroppedCount)
-            if (neighbors.any { currentBubbles[it]?.color == color }) colorsWithPairs.add(color)
-        }
-        return if (colorsWithPairs.isNotEmpty()) colorsWithPairs.distinct().random()
-        else currentBubbles.values.map { it.color }.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
-    }
-
     override fun onShoot(spawnX: Float, spawnY: Float) {
         if (showReviveAlert || isPaused) return
         super.onShoot(spawnX, spawnY)
-        previewBubbleColor = generateSmartColor()
+        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
     }
 
     override fun onPostSnap() {
@@ -184,7 +174,7 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
                 saveProgress()
             } else {
                 if (!bubblesByPosition.values.any { it.color == nextBubbleColor }) {
-                    nextBubbleColor = generateSmartColor()
+                    nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
                 }
             }
         }
@@ -262,7 +252,6 @@ class AdventureViewModel(application: Application) : GameViewModel(application) 
         bubblesByPosition = currentBubbles
         removeFloatingBubbles(currentBubbles)
         
-        // ✅ CRUCIAL: Mantener pausa activa y activar la alerta
         gameState = GameState.PLAYING
         isPaused = true 
         showReviveAlert = true

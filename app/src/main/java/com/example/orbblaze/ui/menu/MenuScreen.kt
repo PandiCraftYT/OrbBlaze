@@ -1,5 +1,6 @@
 package com.example.orbblaze.ui.menu
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -10,10 +11,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.ui.game.SoundManager
@@ -49,6 +49,12 @@ fun MenuScreen(
     onSecretClick: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    // ✅ CONTROL DE BOTÓN ATRÁS (ANDROID) - Mantiene la funcionalidad de salir
+    BackHandler {
+        showExitDialog = true
+    }
     
     val titleScale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -174,7 +180,6 @@ fun MenuScreen(
 
                 Spacer(modifier = Modifier.height(50.dp))
 
-                // BOTONES PRINCIPALES
                 MenuButton(text = "JUGAR", onClick = onPlayClick)
                 Spacer(modifier = Modifier.height(14.dp))
                 MenuButton(text = "MODOS DE JUEGO", onClick = onModesClick)
@@ -183,7 +188,6 @@ fun MenuScreen(
                 
                 Spacer(modifier = Modifier.height(20.dp))
                 
-                // LOGROS (Botón Dorado)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
@@ -207,7 +211,7 @@ fun MenuScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // BOTONES CIRCULARES (Configuración y Salir)
+                // ✅ SOLO BOTÓN DE CONFIGURACIÓN CENTRADO
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
@@ -217,12 +221,6 @@ fun MenuScreen(
                         icon = Icons.Default.Settings,
                         onClick = onSettingsClick,
                         color = Color.White.copy(alpha = 0.2f)
-                    )
-                    Spacer(modifier = Modifier.width(32.dp))
-                    CircleIconButton(
-                        icon = Icons.AutoMirrored.Filled.ExitToApp,
-                        onClick = onExitClick,
-                        color = Color.Red.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -234,6 +232,34 @@ fun MenuScreen(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp),
                 fontSize = 12.sp
+            )
+        }
+
+        // ✅ DIÁLOGO DE SALIDA PERSONALIZADO (Se activa con el botón atrás del móvil)
+        if (showExitDialog) {
+            AlertDialog(
+                onDismissRequest = { showExitDialog = false },
+                confirmButton = {
+                    Button(
+                        onClick = onExitClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) {
+                        Text("SALIR", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showExitDialog = false }) {
+                        Text("CANCELAR", color = Color(0xFF1A237E), fontWeight = FontWeight.Bold)
+                    }
+                },
+                title = {
+                    Text("¿CERRAR JUEGO?", fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                },
+                text = {
+                    Text("¿Estás seguro de que quieres salir de OrbBlaze?", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                },
+                shape = RoundedCornerShape(28.dp),
+                containerColor = Color.White
             )
         }
     }

@@ -25,13 +25,13 @@ enum class GameState { IDLE, PLAYING, WON, LOST }
 enum class GameMode { CLASSIC, TIME_ATTACK, ADVENTURE } 
 enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP }
 
-open class GameViewModel(application: Application) : AndroidViewModel(application) {
+open class GameViewModel(
+    application: Application,
+    protected val settingsManager: SettingsManager
+) : AndroidViewModel(application) {
 
     protected val engine = LevelEngine()
     protected val matchFinder = MatchFinder()
-    
-    protected var _settingsManager: SettingsManager? = null
-    protected val settingsManager: SettingsManager get() = _settingsManager!!
 
     var bubblesByPosition by mutableStateOf<Map<GridPosition, Bubble>>(emptyMap())
         protected set
@@ -112,9 +112,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     protected val bubbleRadius: Float get() = (metrics?.bubbleDiameter ?: 44f) / 2f
 
-    fun initManager(manager: SettingsManager) {
-        if (_settingsManager != null) return
-        _settingsManager = manager
+    init {
         setupAchievements()
         observeData()
         startParticleLoop()
@@ -165,9 +163,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     open fun changeGameMode(mode: GameMode) { this.gameMode = mode }
     open fun startGame() { 
         gameState = GameState.PLAYING
-        // Inicializar colores basados en el tablero cargado
-        nextBubbleColor = generateProjectileColor()
-        previewBubbleColor = generateProjectileColor()
+        nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
         startTimer() 
     }
 
@@ -177,7 +174,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         val cleanGrid = engine.gridState.toMutableMap()
         cleanGrid.forEach { (pos, bubble) ->
             if (bubble.color == BubbleColor.RAINBOW || bubble.color == BubbleColor.BOMB) {
-                cleanGrid[pos] = bubble.copy(color = generateBoardBubbleColor())
+                cleanGrid[pos] = bubble.copy(color = engine.generateBaseColor())
             }
         }
         bubblesByPosition = cleanGrid
@@ -233,31 +230,12 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             if (settingsManager.vibrationEnabledFlow.first()) vibrationEvent = true
         }
         val angleRad = Math.toRadians(shooterAngle.toDouble())
-        val speed = 75f 
+        val speed = GameConstants.PROJECTILE_SPEED // ✅ AHORA SÍ USA LA CONSTANTE
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
-        isFireballQueued = false; nextBubbleColor = previewBubbleColor; previewBubbleColor = generateProjectileColor()
-        startPhysicsLoop(0f)
-    }
-
-    protected fun generateBoardBubbleColor() = BubbleColor.entries.filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }.random()
-    
-    // ✅ GENERACIÓN DE COLOR INTELIGENTE: Solo genera colores que existen en el tablero
-    protected fun generateProjectileColor(): BubbleColor {
-        val rand = Math.random()
-        // Probabilidades de ítems especiales
-        if (rand < 0.025) return BubbleColor.RAINBOW
-        if (rand < 0.08) return BubbleColor.BOMB
-
-        // Obtener colores únicos presentes en el tablero actual
-        val colorsInBoard = bubblesByPosition.values.map { it.color }.distinct()
-            .filter { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB }
-
-        return if (colorsInBoard.isNotEmpty()) {
-            colorsInBoard.random()
-        } else {
-            // Si el tablero está vacío, generar cualquier color base
-            generateBoardBubbleColor()
-        }
+        isFireballQueued = false
+        nextBubbleColor = previewBubbleColor
+        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+        startPhysicsLoop()
     }
 
     protected open fun updateHighScore() {
@@ -274,43 +252,66 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    protected fun startPhysicsLoop(ignoredWidth: Float) {
+    protected fun startPhysicsLoop() {
         viewModelScope.launch {
-            val physicsSteps = 20 
+            var lastTime = System.currentTimeMillis()
             while (activeProjectile != null) {
-                if (isPaused) { delay(100); continue }
+                if (isPaused) { 
+                    delay(100)
+                    lastTime = System.currentTimeMillis()
+                    continue 
+                }
                 val m = metrics ?: break
-                
+                val currentTime = System.currentTimeMillis()
+                val deltaTime = (currentTime - lastTime) / 1000f
+                lastTime = currentTime
+
                 val leftWall = m.boardStartPadding - bubbleRadius
                 val rightWall = m.screenWidth - (m.boardStartPadding - bubbleRadius)
                 
                 var currentP = activeProjectile ?: break
                 var collisionDetected = false
 
-                repeat(physicsSteps) {
+                val subSteps = GameConstants.PHYSICS_STEPS
+                val stepDelta = deltaTime / subSteps
+
+                repeat(subSteps) {
                     if (collisionDetected) return@repeat
-                    val stepVx = currentP.velocityX / physicsSteps.toFloat()
-                    val stepVy = currentP.velocityY / physicsSteps.toFloat()
-                    var nextX = currentP.x + stepVx; var nextY = currentP.y + stepVy; var nextVx = currentP.velocityX
+                    
+                    var nextX = currentP.x + currentP.velocityX * stepDelta
+                    var nextY = currentP.y + currentP.velocityY * stepDelta
+                    var nextVx = currentP.velocityX
                     
                     if (nextX - bubbleRadius <= leftWall || nextX + bubbleRadius >= rightWall) {
-                        if (currentP.isFireball) { activeProjectile = null; spawnExplosion(nextX, nextY, BubbleColor.RED); return@repeat }
+                        if (currentP.isFireball) { 
+                            activeProjectile = null
+                            spawnExplosion(nextX, nextY, BubbleColor.RED)
+                            collisionDetected = true
+                            return@repeat 
+                        }
                         nextX = if (nextX - bubbleRadius <= leftWall) leftWall + bubbleRadius else rightWall - bubbleRadius
                         nextVx = -currentP.velocityX
                     }
 
                     if (currentP.isFireball) {
                         checkFireballDestruction(nextX, nextY)
-                        if (nextY < -bubbleRadius * 2) { activeProjectile = null; return@repeat }
+                        if (nextY < -bubbleRadius * 2) { 
+                            activeProjectile = null
+                            collisionDetected = true
+                            return@repeat 
+                        }
                     } else {
                         val ceiling = m.ceilingY + if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
                         if (nextY - bubbleRadius <= ceiling || checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
-                            snapToGrid(nextX, nextY, currentP.color); collisionDetected = true
+                            snapToGrid(nextX, nextY, currentP.color)
+                            collisionDetected = true
                         }
                     }
-                    if (!collisionDetected && activeProjectile != null) currentP = currentP.copy(x = nextX, y = nextY, velocityX = nextVx)
+                    if (!collisionDetected) {
+                        currentP = currentP.copy(x = nextX, y = nextY, velocityX = nextVx)
+                    }
                 }
-                if (!collisionDetected && activeProjectile != null) activeProjectile = currentP
+                if (!collisionDetected) activeProjectile = currentP else activeProjectile = null
                 delay(8) 
             }
         }
@@ -331,9 +332,13 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun startParticleLoop() {
         viewModelScope.launch {
+            var lastTime = System.currentTimeMillis()
             while (isActive) {
+                val currentTime = System.currentTimeMillis()
+                val deltaTime = (currentTime - lastTime) / 1000f
+                lastTime = currentTime
+
                 if (!isPaused) {
-                    // Optimización: Solo iterar una vez y remover al final
                     val toRemoveParticles = mutableListOf<Int>()
                     for (i in particles.indices) {
                         val p = particles[i]
@@ -341,9 +346,9 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                             toRemoveParticles.add(i)
                         } else {
                             particles[i] = p.copy(
-                                x = p.x + p.vx,
-                                y = p.y + p.vy + 1.5f,
-                                life = p.life - 0.04f
+                                x = p.x + p.vx * deltaTime * 60f,
+                                y = p.y + (p.vy + GameConstants.PARTICLE_GRAVITY * deltaTime) * deltaTime * 60f,
+                                life = p.life - GameConstants.PARTICLE_LIFE_DECAY * deltaTime
                             )
                         }
                     }
@@ -360,8 +365,8 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
                             toRemoveTexts.add(i)
                         } else {
                             floatingTexts[i] = t.copy(
-                                y = t.y - 2.0f,
-                                life = t.life - 0.02f
+                                y = t.y - GameConstants.TEXT_FLOAT_SPEED * deltaTime,
+                                life = t.life - GameConstants.TEXT_LIFE_DECAY * deltaTime
                             )
                         }
                     }
@@ -382,7 +387,10 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             while (gameState == GameState.PLAYING) {
                 delay(1000)
                 if (!isPaused && gameMode == GameMode.TIME_ATTACK) {
-                    timeLeft--; if (timeLeft <= 0) { addRows(3); timeLeft = 90 }
+                    timeLeft--; if (timeLeft <= 0) { 
+                        addRows(GameConstants.TIME_ATTACK_PENALTY_ROWS)
+                        timeLeft = GameConstants.TIME_ATTACK_INITIAL 
+                    }
                 }
             }
         }
@@ -391,7 +399,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     protected fun addRows(count: Int) {
         rowsDroppedCount += count; val newGrid = mutableMapOf<GridPosition, Bubble>()
         bubblesByPosition.forEach { (pos, bubble) -> newGrid[GridPosition(pos.row + count, pos.col)] = bubble }
-        for (r in 0 until count) for (c in 0 until columnsCount) newGrid[GridPosition(r, c)] = Bubble(color = generateBoardBubbleColor())
+        for (r in 0 until count) for (c in 0 until columnsCount) newGrid[GridPosition(r, c)] = Bubble(color = engine.generateBaseColor())
         bubblesByPosition = newGrid; soundEvent = SoundType.STICK; removeFloatingBubbles(newGrid); metrics?.let { checkGameConditions(it) }
     }
 
@@ -404,7 +412,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         
         val candidates = mutableListOf<GridPosition>()
         for (r in (estRow - 1)..(estRow + 1)) {
-            if (r < -1) continue // Permitir fila -1 en aventura
+            if (r < -1) continue 
             for (c in 0 until columnsCount + 1) { 
                 val p = GridPosition(r, c)
                 if (!newGrid.containsKey(p)) candidates.add(p)
@@ -417,7 +425,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
             val (cx, cy) = getBubbleCenter(pos)
             val dx = x - cx
             val dy = y - cy
-            val magneticBias = if (dy > 0) 0.25f else 5.0f
+            val magneticBias = if (dy > 0) GameConstants.MAGNETIC_BIAS_LOW else GameConstants.MAGNETIC_BIAS_HIGH
             dx * dx + (dy * dy * magneticBias)
         }!!
 
@@ -434,7 +442,31 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         bubblesByPosition = newGrid; activeProjectile = null; onPostSnap()
     }
 
-    protected open fun onPostSnap() {}
+    /**
+     * ✅ MEJORA: LA BURBUJA DE LA SUERTE
+     * Verifica que los colores de los proyectiles todavía existan en el tablero.
+     */
+    protected open fun onPostSnap() {
+        validateProjectileColors()
+    }
+
+    protected fun validateProjectileColors() {
+        if (bubblesByPosition.isEmpty()) return
+        
+        val boardColors = bubblesByPosition.values.map { it.color }.distinct()
+            .filter { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB }
+        
+        if (boardColors.isNotEmpty()) {
+            // Si el color actual ya no está en el tablero, lo cambiamos
+            if (nextBubbleColor !in boardColors && nextBubbleColor != BubbleColor.RAINBOW && nextBubbleColor != BubbleColor.BOMB) {
+                nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+            }
+            // Si el color de previsualización ya no está, también lo cambiamos
+            if (previewBubbleColor !in boardColors && previewBubbleColor != BubbleColor.RAINBOW && previewBubbleColor != BubbleColor.BOMB) {
+                previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+            }
+        }
+    }
 
     private fun processMatches(matches: Set<GridPosition>, grid: MutableMap<GridPosition, Bubble>, x: Float, y: Float, visualColor: BubbleColor) {
         soundEvent = SoundType.POP; val count = matches.size
@@ -447,7 +479,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float) {
         val adjacentColors = HexGridHelper.getNeighbors(pos, rowsDroppedCount).mapNotNull { grid[it]?.color }.distinct().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
-        if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = generateBoardBubbleColor()); return }
+        if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = engine.generateBaseColor()); return }
         val toPop = mutableSetOf<GridPosition>().apply { add(pos) }
         adjacentColors.forEach { c -> grid[pos] = Bubble(color = c); toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount)) }
         if (toPop.size >= 2) { joyTick++; unlockAchievement("rainbow_power"); processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW) }
@@ -462,13 +494,15 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
-        val visited = mutableSetOf<GridPosition>(); val queue = ArrayDeque<GridPosition>()
-        val ceiling = grid.keys.filter { it.row <= 0 }; queue.addAll(ceiling); visited.addAll(ceiling)
-        while (queue.isNotEmpty()) {
-            val current = queue.removeFirst()
-            HexGridHelper.getNeighbors(current, rowsDroppedCount).filter { grid.containsKey(it) && it !in visited }.forEach { visited.add(it); queue.add(it) }
+        val floating = engine.findFloatingBubbles(grid, rowsDroppedCount)
+        floating.forEach { pos -> 
+            val b = grid[pos]
+            grid.remove(pos)
+            val (bx, by) = getBubbleCenter(pos)
+            spawnExplosion(bx, by, b?.color ?: BubbleColor.BLUE)
+            addCoins(1)
+            score += 20 
         }
-        grid.keys.filter { it !in visited }.forEach { pos -> val b = grid[pos]; grid.remove(pos); val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, b?.color ?: BubbleColor.BLUE); addCoins(1); score += 20 }
     }
 
     protected fun checkGameConditions(m: BoardMetricsPx) {
@@ -485,7 +519,7 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         val m = metrics ?: return false
         return bubblesByPosition.keys.any { pos -> 
             val (cx, cy) = getBubbleCenter(pos)
-            distancePointToSegment(cx, cy, x1, y1, x2, y2) <= m.bubbleDiameter * 0.82f
+            distancePointToSegment(cx, cy, x1, y1, x2, y2) <= m.bubbleDiameter * GameConstants.BUBBLE_COLLISION_SCALE
         }
     }
 
