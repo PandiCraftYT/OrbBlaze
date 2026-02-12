@@ -23,8 +23,8 @@
     <string name="mode_play_now">¡JUGAR AHORA!</string>
 
     <!-- Pantalla de Juego -->
-    <string name="game_score_label">SCORE</string>
-    <string name="game_best_label">BEST</string>
+    <string name="game_score">SCORE</string>
+    <string name="game_best">BEST</string>
     <string name="game_coins">MONEDAS</string>
     <string name="game_shots">TIROS</string>
     <string name="game_time">TIEMPO</string>

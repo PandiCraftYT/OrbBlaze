@@ -25,11 +25,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.R
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
@@ -51,7 +53,6 @@ fun MenuScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
     var showExitDialog by remember { mutableStateOf(false) }
 
-    // ✅ CONTROL DE BOTÓN ATRÁS (ANDROID) - Mantiene la funcionalidad de salir
     BackHandler {
         showExitDialog = true
     }
@@ -164,7 +165,7 @@ fun MenuScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "ORBBLAZE",
+                    text = stringResource(id = R.string.app_name).uppercase(),
                     style = TextStyle(
                         fontSize = 58.sp,
                         fontWeight = FontWeight.Black,
@@ -180,11 +181,11 @@ fun MenuScreen(
 
                 Spacer(modifier = Modifier.height(50.dp))
 
-                MenuButton(text = "JUGAR", onClick = onPlayClick)
+                MenuButton(text = stringResource(id = R.string.menu_play), onClick = onPlayClick)
                 Spacer(modifier = Modifier.height(14.dp))
-                MenuButton(text = "MODOS DE JUEGO", onClick = onModesClick)
+                MenuButton(text = stringResource(id = R.string.menu_modes), onClick = onModesClick)
                 Spacer(modifier = Modifier.height(14.dp))
-                MenuButton(text = "RECORD", onClick = onScoreClick)
+                MenuButton(text = stringResource(id = R.string.menu_record), onClick = onScoreClick)
                 
                 Spacer(modifier = Modifier.height(20.dp))
                 
@@ -199,7 +200,7 @@ fun MenuScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "LOGROS",
+                        text = stringResource(id = R.string.menu_achievements),
                         style = TextStyle(
                             fontSize = 24.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -211,7 +212,6 @@ fun MenuScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // ✅ SOLO BOTÓN DE CONFIGURACIÓN CENTRADO
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
@@ -226,7 +226,7 @@ fun MenuScreen(
             }
 
             Text(
-                text = "v1.0 - OrbBlaze",
+                text = stringResource(id = R.string.menu_version),
                 color = Color.White.copy(alpha = 0.4f),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -235,7 +235,6 @@ fun MenuScreen(
             )
         }
 
-        // ✅ DIÁLOGO DE SALIDA PERSONALIZADO (Se activa con el botón atrás del móvil)
         if (showExitDialog) {
             AlertDialog(
                 onDismissRequest = { showExitDialog = false },
@@ -244,19 +243,19 @@ fun MenuScreen(
                         onClick = onExitClick,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
                     ) {
-                        Text("SALIR", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(stringResource(id = R.string.dialog_exit_confirm), color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showExitDialog = false }) {
-                        Text("CANCELAR", color = Color(0xFF1A237E), fontWeight = FontWeight.Bold)
+                        Text(stringResource(id = R.string.dialog_exit_cancel), color = Color(0xFF1A237E), fontWeight = FontWeight.Bold)
                     }
                 },
                 title = {
-                    Text("¿CERRAR JUEGO?", fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(stringResource(id = R.string.dialog_exit_title), fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 },
                 text = {
-                    Text("¿Estás seguro de que quieres salir de OrbBlaze?", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(stringResource(id = R.string.dialog_exit_desc), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 },
                 shape = RoundedCornerShape(28.dp),
                 containerColor = Color.White

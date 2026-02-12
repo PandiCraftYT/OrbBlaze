@@ -36,11 +36,13 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.*
 import com.example.orbblaze.ui.components.*
@@ -99,7 +101,6 @@ fun LevelScreen(
     val tutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
     var showTutorial by remember { mutableStateOf(false) }
 
-    // ✅ CONTROL DE BOTÓN ATRÁS (PAUSA)
     BackHandler(enabled = gameState == GameState.PLAYING && !isPaused) {
         viewModel.togglePause()
     }
@@ -108,32 +109,24 @@ fun LevelScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
     
     val backgroundOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(40000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
+        initialValue = 0f, targetValue = 2000f,
+        animationSpec = infiniteRepeatable(tween(40000, easing = LinearEasing), RepeatMode.Restart),
         label = "bg_scroll"
     )
 
     val aimPulse by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart),
         label = "aim_pulse"
     )
 
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
         when {
-            currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7)) // Azul (Original)
-            currentLevelId <= 50 -> listOf(Color(0xFF3E2723), Color(0xFFBF360C)) // Marrón/Rojo (Núcleo)
-            currentLevelId <= 70 -> listOf(Color(0xFF1B5E20), Color(0xFF4DB6AC)) // Verde (Superficie)
-            currentLevelId <= 90 -> listOf(Color(0xFF0277BD), Color(0xFFE1F5FE)) // Celeste (Atmósfera)
-            else -> listOf(Color(0xFF0D47A1), Color(0xFF000000)) // Azul Oscuro/Negro (Galaxia)
+            currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7)) 
+            currentLevelId <= 50 -> listOf(Color(0xFF3E2723), Color(0xFFBF360C)) 
+            currentLevelId <= 70 -> listOf(Color(0xFF1B5E20), Color(0xFF4DB6AC)) 
+            currentLevelId <= 90 -> listOf(Color(0xFF0277BD), Color(0xFFE1F5FE)) 
+            else -> listOf(Color(0xFF0D47A1), Color(0xFF000000)) 
         }
     } else {
         listOf(BgTop, BgBottom)
@@ -158,18 +151,9 @@ fun LevelScreen(
         }
     }
 
-    val dangerAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f, targetValue = 0.8f, 
-        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger"
-    )
-    val masterRainbowRotation by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 360f, 
-        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "rotation"
-    )
-    val shakeOffset by infiniteTransition.animateFloat(
-        initialValue = -2f, targetValue = 2f, 
-        animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake"
-    )
+    val dangerAlpha by infiniteTransition.animateFloat(initialValue = 0.2f, targetValue = 0.8f, animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger")
+    val masterRainbowRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "rotation")
+    val shakeOffset by infiniteTransition.animateFloat(initialValue = -2f, targetValue = 2f, animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake")
 
     val dangerLineRow = 13
     val isEmergency = (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10) || bubbles.keys.any { it.row >= (dangerLineRow - 2) }
@@ -192,7 +176,6 @@ fun LevelScreen(
                     val down = awaitFirstDown(); val startPos = down.position
                     val centerX = size.width / 2; val pandaTopY = size.height - 280.dp.toPx() 
                     val isPandaClick = startPos.x >= (centerX - 120.dp.toPx()) && startPos.x <= (centerX + 120.dp.toPx()) && startPos.y >= pandaTopY
-
                     if (isPandaClick) {
                         do { val event = awaitPointerEvent() } while (event.changes.any { it.pressed })
                         viewModel.swapBubbles()
@@ -202,12 +185,9 @@ fun LevelScreen(
                         do {
                             val event = awaitPointerEvent()
                             val change = event.changes.find { it.id == down.id }
-                            if (change != null && change.pressed) {
-                                viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat())
-                            }
+                            if (change != null && change.pressed) { viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat()) }
                         } while (event.changes.any { it.pressed })
                         isAiming = false
-                        
                         val barrelLengthPx = 95.dp.toPx()
                         val pivotHeightPx = 220.dp.toPx() 
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
@@ -245,42 +225,31 @@ fun LevelScreen(
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha), size = size)
             val pivotX = size.width / 2f
             val pivotY = size.height - 220.dp.toPx() 
-
             if (isAiming) {
                 val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
-                var dirX = sin(angleRad).toFloat()
-                var dirY = -cos(angleRad).toFloat()
-                val barrelLength = 95.dp.toPx()
-                var current = Offset(pivotX + dirX * barrelLength, pivotY + dirY * barrelLength)
-                val totalAimLength = size.height * 0.85f
-                var remaining = totalAimLength
-                val dotSpacing = 24.dp.toPx()
-                val baseDotRadius = 4.dp.toPx()
+                var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
+                val barrelLength = 95.dp.toPx(); var current = Offset(pivotX + dirX * barrelLength, pivotY + dirY * barrelLength)
+                val totalAimLength = size.height * 0.85f; var remaining = totalAimLength
+                val dotSpacing = 24.dp.toPx(); val baseDotRadius = 4.dp.toPx()
                 val bubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor)
                 var totalTraversed = 0f
                 while (remaining > 0f) {
-                    val bounceX = if (dirX > 0f) size.width else 0f
-                    val tToWall = (bounceX - current.x) / dirX
+                    val bounceX = if (dirX > 0f) size.width else 0f; val tToWall = (bounceX - current.x) / dirX
                     val segmentLength = if (tToWall <= 0 || tToWall >= remaining) remaining else tToWall
                     var segmentTraversed = (aimPulse * dotSpacing) % dotSpacing
                     while (segmentTraversed < segmentLength) {
                         val dotPos = Offset(current.x + dirX * segmentTraversed, current.y + dirY * segmentTraversed)
                         val progress = (totalTraversed + segmentTraversed) / totalAimLength
-                        val alpha = (0.7f - progress * 0.5f).coerceIn(0.1f, 0.7f)
-                        val radius = baseDotRadius * (1f - progress * 0.3f)
+                        val alpha = (0.7f - progress * 0.5f).coerceIn(0.1f, 0.7f); val radius = baseDotRadius * (1f - progress * 0.3f)
                         drawCircle(brush = Brush.radialGradient(colors = listOf(bubbleColor.copy(alpha = alpha), Color.Transparent), center = dotPos, radius = radius * 3f), radius = radius * 3f, center = dotPos)
                         drawCircle(color = Color.White.copy(alpha = (alpha + 0.2f).coerceAtMost(1f)), radius = radius, center = dotPos)
                         segmentTraversed += dotSpacing
                     }
                     if (tToWall <= 0 || tToWall >= remaining) break
-                    totalTraversed += segmentLength
-                    val hit = Offset(current.x + dirX * tToWall, current.y + dirY * tToWall)
-                    remaining -= tToWall
-                    dirX *= -1f
-                    current = hit
+                    totalTraversed += segmentLength; val hit = Offset(current.x + dirX * tToWall, current.y + dirY * tToWall)
+                    remaining -= tToWall; dirX *= -1f; current = hit
                 }
             }
-
             val redLineY = boardTopPaddingPx + verticalSpacingPx * 13
             drawLine(color = Color.Red.copy(alpha = dangerAlpha), start = Offset(0f, redLineY), end = Offset(size.width, redLineY), strokeWidth = 8f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f)))
             particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
@@ -291,19 +260,12 @@ fun LevelScreen(
         }
 
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
-            bubbles.forEach { (pos, bubble) ->
-                val (x, y) = viewModel.getBubbleCenter(pos)
-                VisualBubble(color = mapBubbleColor(bubble.color), isRainbow = bubble.color == BubbleColor.RAINBOW, isBomb = bubble.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { bubbleDiameterPx.toDp() }).graphicsLayer { translationX = x - (bubbleDiameterPx / 2); translationY = y - (bubbleDiameterPx / 2) })
-            }
-            activeProjectile?.let { p ->
-                val scaleFactor = if(p.isFireball) 0.7f else 1f
-                val sizePx = bubbleDiameterPx * scaleFactor
-                VisualBubble(color = mapBubbleColor(p.color), isRainbow = p.color == BubbleColor.RAINBOW, isBomb = p.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2); if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f })
-            }
+            bubbles.forEach { (pos, bubble) -> val (x, y) = viewModel.getBubbleCenter(pos); VisualBubble(color = mapBubbleColor(bubble.color), isRainbow = bubble.color == BubbleColor.RAINBOW, isBomb = bubble.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { bubbleDiameterPx.toDp() }).graphicsLayer { translationX = x - (bubbleDiameterPx / 2); translationY = y - (bubbleDiameterPx / 2) }) }
+            activeProjectile?.let { p -> val scaleFactor = if(p.isFireball) 0.7f else 1f; val sizePx = bubbleDiameterPx * scaleFactor; VisualBubble(color = mapBubbleColor(p.color), isRainbow = p.color == BubbleColor.RAINBOW, isBomb = p.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2); if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f }) }
         }
 
         Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp)) {
-            PandaShooter(angle = viewModel.shooterAngle, currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor), isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW && !isFireballQueued, nextBubbleColor = mapBubbleColor(previewBubbleColor), isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, shotTick = viewModel.shotTick, joyTick = viewModel.joyTick, rainbowRotation = masterRainbowRotation, onShopClick = { if (currentGameMode == GameMode.ADVENTURE) { Toast.makeText(context, "Tienda no disponible en modo Aventura.", Toast.LENGTH_SHORT).show() } else { showQuickShop = true } }, isShopEnabled = currentGameMode != GameMode.ADVENTURE, onShopPositioned = { shopRect = it }, onCannonPositioned = { cannonRect = it }, onNextBubblePositioned = { nextBubbleRect = it })
+            PandaShooter(angle = viewModel.shooterAngle, currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor), isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW && !isFireballQueued, nextBubbleColor = mapBubbleColor(previewBubbleColor), isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, shotTick = viewModel.shotTick, joyTick = viewModel.joyTick, rainbowRotation = masterRainbowRotation, onShopClick = { if (currentGameMode == GameMode.ADVENTURE) { Toast.makeText(context, context.getString(R.string.shop_not_available_adventure), Toast.LENGTH_SHORT).show() } else { showQuickShop = true } }, isShopEnabled = currentGameMode != GameMode.ADVENTURE, onShopPositioned = { shopRect = it }, onCannonPositioned = { cannonRect = it }, onNextBubblePositioned = { nextBubbleRect = it })
         }
 
         GameTopBar(score = score, bestScore = highScore, coins = coins, timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null, onSettingsClick = { viewModel.togglePause() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() })
@@ -313,11 +275,11 @@ fun LevelScreen(
                 Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
                     val brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))
                     Column(modifier = Modifier.background(brush).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("OBJETOS TÁCTICOS", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
+                        Text(stringResource(id = R.string.shop_title), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
                         Spacer(Modifier.height(20.dp))
-                        ItemRow("BOLA DE FUEGO", "Atraviesa todo", 1000, "🔥") { viewModel.buyFireball(); showQuickShop = false }
+                        ItemRow(stringResource(id = R.string.shop_item_fireball), stringResource(id = R.string.shop_item_fireball), 1000, "🔥") { viewModel.buyFireball(); showQuickShop = false }
                         Spacer(Modifier.height(24.dp))
-                        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Color(0xFF1A237E)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) { Text("CERRAR", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp) }
+                        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Color(0xFF1A237E)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) { Text(stringResource(id = R.string.shop_close), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp) }
                     }
                 }
             }
@@ -325,28 +287,24 @@ fun LevelScreen(
 
         if (gameState == GameState.IDLE && !showTutorial) {
             if (viewModel.gameMode == GameMode.ADVENTURE) {
-                val advViewModel = viewModel as? AdventureViewModel
-                val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
+                val advViewModel = viewModel as? AdventureViewModel; val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
                 if (currentLevel != null) { AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { viewModel.startGame() }) }
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
-                    val isTimeAttack = viewModel.gameMode == GameMode.TIME_ATTACK
-                    val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
+                    val isTimeAttack = viewModel.gameMode == GameMode.TIME_ATTACK; val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
                     Surface(modifier = Modifier.width(340.dp).padding(16.dp), shape = RoundedCornerShape(32.dp), color = Color(0xFF0F1444), border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))), shadowElevation = 24.dp) {
                         Column(modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = if (isTimeAttack) "TIME ATTACK" else "MODO CLÁSICO", style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center))
+                            Text(text = if (isTimeAttack) stringResource(id = R.string.mode_time_attack) else stringResource(id = R.string.mode_classic), style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center))
                             Spacer(Modifier.height(16.dp))
-                            Text(text = if (isTimeAttack) "¡Sé el más rápido y explota todas las burbujas!" else "No dejes que las burbujas toquen la línea roja. ¡Sobrevive todo lo que puedas!", color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp)
+                            Text(text = if (isTimeAttack) stringResource(id = R.string.mode_desc_time) else stringResource(id = R.string.mode_desc_classic), color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp)
                             if (highScore > 0) {
                                 Spacer(Modifier.height(24.dp))
                                 Row(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("RÉCORD: $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                                    Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(id = R.string.game_best_label) + ": $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                             }
                             Spacer(Modifier.height(40.dp))
-                            Button(onClick = { viewModel.startGame() }, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor), elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)) { Text("¡JUGAR AHORA!", color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp) }
+                            Button(onClick = { viewModel.startGame() }, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor), elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)) { Text(stringResource(id = R.string.mode_play_now), color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp) }
                         }
                     }
                 }
@@ -354,11 +312,11 @@ fun LevelScreen(
         }
 
         if (isPaused && gameState == GameState.PLAYING && !isReviveAlertActive) {
-            OverlayMenu(title = "PAUSA", onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, onExit = { soundManager.startMusic(); onMenuClick() }, showVolume = true, volume = volumeSlider, onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() })
+            OverlayMenu(title = stringResource(id = R.string.game_pause), onContinue = { viewModel.togglePause() }, onRestart = { viewModel.restartGame() }, onExit = { soundManager.startMusic(); onMenuClick() }, showVolume = true, volume = volumeSlider, onVolumeChange = { newVal -> volumeSlider = newVal; viewModel.setSfxVolume(newVal); soundManager.refreshSettings() })
         }
 
         if (gameState == GameState.WON || gameState == GameState.LOST) {
-            OverlayMenu(title = if (gameState == GameState.WON) "¡VICTORIA!" else "GAME OVER", onContinue = null, onRestart = { viewModel.restartGame() }, onExit = { onMenuClick() }, score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE, stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0, onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, "¡Canjeado!", Toast.LENGTH_SHORT).show() } } } else null, onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } }, currentLevelId = currentLevelId)
+            OverlayMenu(title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over), onContinue = null, onRestart = { viewModel.restartGame() }, onExit = { onMenuClick() }, score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE, stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0, onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, context.getString(R.string.game_redeemed), Toast.LENGTH_SHORT).show() } } } else null, onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } }, currentLevelId = currentLevelId)
         }
 
         if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
@@ -367,11 +325,11 @@ fun LevelScreen(
                     Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF64FFDA), modifier = Modifier.size(64.dp))
                         Spacer(Modifier.height(16.dp))
-                        Text(text = "¡INTENTO RECUPERADO!", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                        Text(text = stringResource(id = R.string.adventure_revive_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
                         Spacer(Modifier.height(12.dp))
-                        Text(text = "Se han eliminado 6 líneas y tienes 15 tiros extra. ¡Dale duro!", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
+                        Text(text = stringResource(id = R.string.adventure_revive_desc), color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
                         Spacer(Modifier.height(32.dp))
-                        Button(onClick = { viewModel.showReviveAlert = false; viewModel.togglePause() }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text("¡LISTO!", color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
+                        Button(onClick = { viewModel.showReviveAlert = false; viewModel.togglePause() }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text(stringResource(id = R.string.adventure_ready), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
                     }
                 }
             }
@@ -396,11 +354,11 @@ fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> U
 fun OverlayMenu(
     title: String, onContinue: (() -> Unit)? = null, onRestart: () -> Unit, onExit: () -> Unit, 
     score: Int? = null, isWin: Boolean = false, showVolume: Boolean = false, volume: Float = 0f, 
-    onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null, 
+    onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null,
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
     currentLevelId: Int = 0
 ) {
-    val isPause = title == "PAUSA"
+    val isPause = title == stringResource(id = R.string.game_pause)
     val accentColor = if (isPause) Color(0xFF64FFDA) else if (isWin) Color(0xFFFFD700) else Color(0xFFFF5252)
 
     Box(
@@ -418,7 +376,7 @@ fun OverlayMenu(
             Text(text = title, style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = accentColor, letterSpacing = 1.sp, textAlign = TextAlign.Center))
             Spacer(Modifier.height(32.dp))
             if (score != null) {
-                Text("SCORE", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text(stringResource(id = R.string.game_score_label), color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Text("$score", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Light)
                 Spacer(Modifier.height(32.dp))
             }
@@ -443,7 +401,7 @@ fun OverlayMenu(
                 Spacer(Modifier.height(32.dp))
             }
             onContinue?.let { action ->
-                Button(onClick = action, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor)) { Text("RESUME", color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp) }
+                Button(onClick = action, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor)) { Text(stringResource(id = R.string.game_resume), color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp) }
                 Spacer(Modifier.height(16.dp))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -454,7 +412,7 @@ fun OverlayMenu(
             }
             if (!isPause) {
                 onShowAd?.let { adAction -> 
-                    val adLabel = if (isAdventure && !isWin) "REVIVE" else "BONUS +50"
+                    val adLabel = if (isAdventure && !isWin) stringResource(id = R.string.game_revive_ad) else stringResource(id = R.string.game_bonus_ad)
                     Spacer(Modifier.height(32.dp))
                     TextButton(onClick = adAction) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) } }
                 }
