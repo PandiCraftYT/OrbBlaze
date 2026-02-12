@@ -3,6 +3,7 @@ package com.example.orbblaze.ui.game
 import android.app.Activity
 import android.content.Context
 import android.util.DisplayMetrics
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,10 +29,9 @@ class AdsManager(private val context: Context) {
     private val interstitialId = "ca-app-pub-3395921255182308/1188517915"
 
     init {
-        MobileAds.initialize(context) {
-            loadRewardedInterstitialAd()
-            loadInterstitialAd()
-        }
+        // La inicialización global ahora está en OrbBlazeApplication
+        loadRewardedInterstitialAd()
+        loadInterstitialAd()
     }
 
     fun showRewardedAd(activity: Activity, onRewardEarned: (Int) -> Unit) {
@@ -40,7 +40,10 @@ class AdsManager(private val context: Context) {
                 onRewardEarned(rewardItem.amount)
                 loadRewardedInterstitialAd()
             }
-        } ?: loadRewardedInterstitialAd()
+        } ?: run {
+            Toast.makeText(context, "Anuncio no disponible. Reintentando...", Toast.LENGTH_SHORT).show()
+            loadRewardedInterstitialAd()
+        }
     }
 
     private fun loadRewardedInterstitialAd() {
@@ -91,7 +94,6 @@ class AdsManager(private val context: Context) {
                         val displayMetrics: DisplayMetrics = ctx.resources.displayMetrics
                         val density = displayMetrics.density
                         
-                        // ✅ Ancho al 100% para llegar a los bordes de cualquier dispositivo
                         val adWidthPixels = displayMetrics.widthPixels.toFloat()
                         val adWidth = (adWidthPixels / density).toInt()
                         

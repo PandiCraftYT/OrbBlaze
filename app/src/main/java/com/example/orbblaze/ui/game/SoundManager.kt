@@ -6,16 +6,18 @@ import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.media.SoundPool
 import android.os.Build
+import android.util.Log
 import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class SoundManager(val context: Context, private val settingsManager: SettingsManager) {
-    private val soundPool: SoundPool
+    private var soundPool: SoundPool? = null
     private val soundMap = mutableMapOf<SoundType, Int>()
     private var mediaPlayer: MediaPlayer? = null
     
@@ -42,16 +44,17 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     private fun loadSounds() {
+        val pool = soundPool ?: return
         try {
-            soundMap[SoundType.SHOOT] = soundPool.load(context, R.raw.sfx_shoot, 1)
-            soundMap[SoundType.POP] = soundPool.load(context, R.raw.sfx_pop, 1)
-            soundMap[SoundType.EXPLODE] = soundPool.load(context, R.raw.sfx_explode, 1)
-            soundMap[SoundType.SWAP] = soundPool.load(context, R.raw.sfx_swap, 1)
-            soundMap[SoundType.WIN] = soundPool.load(context, R.raw.sfx_win, 1)
-            soundMap[SoundType.LOSE] = soundPool.load(context, R.raw.sfx_lose, 1)
-            soundMap[SoundType.STICK] = soundPool.load(context, R.raw.sfx_stick, 1)
+            soundMap[SoundType.SHOOT] = pool.load(context, R.raw.sfx_shoot, 1)
+            soundMap[SoundType.POP] = pool.load(context, R.raw.sfx_pop, 1)
+            soundMap[SoundType.EXPLODE] = pool.load(context, R.raw.sfx_explode, 1)
+            soundMap[SoundType.SWAP] = pool.load(context, R.raw.sfx_swap, 1)
+            soundMap[SoundType.WIN] = pool.load(context, R.raw.sfx_win, 1)
+            soundMap[SoundType.LOSE] = pool.load(context, R.raw.sfx_lose, 1)
+            soundMap[SoundType.STICK] = pool.load(context, R.raw.sfx_stick, 1)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("SoundManager", "Error loading sounds", e)
         }
     }
 
@@ -81,7 +84,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
             }
             updateMusicVolume()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("SoundManager", "Error initializing music", e)
         }
     }
 
@@ -89,21 +92,14 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 mediaPlayer?.let {
-                    // Permitimos cambiar la velocidad incluso si está pausado
-                    it.playbackParams = it.playbackParams.setSpeed(speed)
+                    it.playbackParams = it.playbackParams.setSpeed(speed.coerceIn(0.5f, 2.0f))
                 }
             } catch (e: Exception) {
-                // Si falla por estado (ej. no inicializado), intentamos con un objeto nuevo
-                try {
-                    mediaPlayer?.playbackParams = PlaybackParams().apply { this.speed = speed }
-                } catch (e2: Exception) {
-                    e2.printStackTrace()
-                }
+                Log.e("SoundManager", "Error setting music speed", e)
             }
         }
     }
 
-    // Estos métodos ahora llaman a settingsManager (asíncrono)
     fun setMusicVol(vol: Float) {
         scope.launch { settingsManager.setMusicVolume(vol) }
     }
@@ -119,13 +115,13 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     fun isMusicMuted(): Boolean = isMusicMuted
 
     fun refreshSettings() {
-        // Con DataStore y flows, el refresh es automático, pero reseteamos velocidad
         setMusicSpeed(1.0f)
     }
 
     fun play(type: SoundType) {
+        val pool = soundPool ?: return
         val soundId = soundMap[type] ?: return
-        soundPool.play(soundId, sfxVolume, sfxVolume, 1, 0, 1f)
+        pool.play(soundId, sfxVolume, sfxVolume, 1, 0, 1f)
     }
 
     private fun updateMusicVolume() {
@@ -133,7 +129,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         try {
             mediaPlayer?.setVolume(finalVolume, finalVolume)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("SoundManager", "Error updating music volume", e)
         }
     }
 
@@ -144,7 +140,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
                 mediaPlayer?.start()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("SoundManager", "Error starting music", e)
         }
     }
 
@@ -154,20 +150,23 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
                 mediaPlayer?.pause()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("SoundManager", "Error pausing music", e)
         }
     }
 
     fun release() {
         try {
-            if (mediaPlayer?.isPlaying == true) {
-                mediaPlayer?.stop()
+            scope.cancel() // Cancelar corrutinas activas
+            mediaPlayer?.let {
+                if (it.isPlaying) it.stop()
+                it.release()
             }
-            mediaPlayer?.release()
             mediaPlayer = null
-            soundPool.release()
+            soundPool?.release()
+            soundPool = null
+            soundMap.clear()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("SoundManager", "Error releasing SoundManager", e)
         }
     }
 }

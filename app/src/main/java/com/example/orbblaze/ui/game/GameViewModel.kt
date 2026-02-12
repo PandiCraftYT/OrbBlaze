@@ -333,10 +333,43 @@ open class GameViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             while (isActive) {
                 if (!isPaused) {
-                    particles.removeAll { it.life <= 0f }
-                    for (i in particles.indices) particles[i] = particles[i].copy(x = particles[i].x + particles[i].vx, y = particles[i].y + particles[i].vy + 1.5f, life = particles[i].life - 0.04f)
-                    floatingTexts.removeAll { it.life <= 0f }
-                    for (i in floatingTexts.indices) floatingTexts[i] = floatingTexts[i].copy(y = floatingTexts[i].y - 2.0f, life = floatingTexts[i].life - 0.02f)
+                    // Optimización: Solo iterar una vez y remover al final
+                    val toRemoveParticles = mutableListOf<Int>()
+                    for (i in particles.indices) {
+                        val p = particles[i]
+                        if (p.life <= 0f) {
+                            toRemoveParticles.add(i)
+                        } else {
+                            particles[i] = p.copy(
+                                x = p.x + p.vx,
+                                y = p.y + p.vy + 1.5f,
+                                life = p.life - 0.04f
+                            )
+                        }
+                    }
+                    if (toRemoveParticles.isNotEmpty()) {
+                        for (index in toRemoveParticles.asReversed()) {
+                            particles.removeAt(index)
+                        }
+                    }
+
+                    val toRemoveTexts = mutableListOf<Int>()
+                    for (i in floatingTexts.indices) {
+                        val t = floatingTexts[i]
+                        if (t.life <= 0f) {
+                            toRemoveTexts.add(i)
+                        } else {
+                            floatingTexts[i] = t.copy(
+                                y = t.y - 2.0f,
+                                life = t.life - 0.02f
+                            )
+                        }
+                    }
+                    if (toRemoveTexts.isNotEmpty()) {
+                        for (index in toRemoveTexts.asReversed()) {
+                            floatingTexts.removeAt(index)
+                        }
+                    }
                 }
                 delay(16)
             }
