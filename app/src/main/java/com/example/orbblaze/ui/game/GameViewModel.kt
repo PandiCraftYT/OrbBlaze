@@ -81,6 +81,10 @@ open class GameViewModel(
     var vibrationEvent by mutableStateOf<Boolean>(false)
         protected set
 
+    // ✅ NUEVO: INTENSIDAD DE SACUDIDA
+    var shakeIntensity by mutableStateOf(0f)
+        protected set
+
     val achievements = mutableStateListOf<Achievement>()
 
     var activeAchievement by mutableStateOf<Achievement?>(null)
@@ -116,6 +120,7 @@ open class GameViewModel(
         setupAchievements()
         observeData()
         startParticleLoop()
+        startShakeDecayLoop()
     }
 
     private fun observeData() {
@@ -132,6 +137,21 @@ open class GameViewModel(
                         achievement.isUnlocked = unlocked
                     }
                 }
+            }
+        }
+    }
+
+    fun triggerShake(intensity: Float) {
+        shakeIntensity = (shakeIntensity + intensity).coerceAtMost(15f)
+    }
+
+    private fun startShakeDecayLoop() {
+        viewModelScope.launch {
+            while (isActive) {
+                if (shakeIntensity > 0) {
+                    shakeIntensity = (shakeIntensity - 0.8f).coerceAtLeast(0f)
+                }
+                delay(16)
             }
         }
     }
@@ -191,6 +211,7 @@ open class GameViewModel(
         shooterAngle = 0f
         shotTick = 0
         joyTick = 0
+        shakeIntensity = 0f
         
         particles.clear()
         floatingTexts.clear()
@@ -230,7 +251,7 @@ open class GameViewModel(
             if (settingsManager.vibrationEnabledFlow.first()) vibrationEvent = true
         }
         val angleRad = Math.toRadians(shooterAngle.toDouble())
-        val speed = GameConstants.PROJECTILE_SPEED // ✅ AHORA SÍ USA LA CONSTANTE
+        val speed = GameConstants.PROJECTILE_SPEED 
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
         isFireballQueued = false
         nextBubbleColor = previewBubbleColor
@@ -286,6 +307,7 @@ open class GameViewModel(
                         if (currentP.isFireball) { 
                             activeProjectile = null
                             spawnExplosion(nextX, nextY, BubbleColor.RED)
+                            triggerShake(10f) // Sacudida por bola de fuego
                             collisionDetected = true
                             return@repeat 
                         }
@@ -325,6 +347,7 @@ open class GameViewModel(
         }
         if (toRemove.isNotEmpty()) {
             soundEvent = SoundType.POP; score += (toRemove.size * 10)
+            triggerShake(toRemove.size * 0.5f)
             toRemove.forEach { pos -> newGrid.remove(pos); val (cx, cy) = getBubbleCenter(pos); spawnExplosion(cx, cy, BubbleColor.entries.random()) }
             bubblesByPosition = newGrid; removeFloatingBubbles(newGrid)
         }
@@ -430,22 +453,26 @@ open class GameViewModel(
         }!!
 
         when (color) {
-            BubbleColor.BOMB -> { unlockAchievement("bomb_squad"); explodeAt(finalPos, newGrid) }
+            BubbleColor.BOMB -> { 
+                unlockAchievement("bomb_squad")
+                explodeAt(finalPos, newGrid) 
+                triggerShake(8f) // Sacudida por bomba
+            }
             BubbleColor.RAINBOW -> handleRainbowAt(finalPos, newGrid, x, y)
             else -> {
                 newGrid[finalPos] = Bubble(color = color)
                 val matches = matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount)
-                if (matches.size >= 3) { joyTick++; processMatches(matches, newGrid, x, y, color) } else soundEvent = SoundType.STICK
+                if (matches.size >= 3) { 
+                    joyTick++
+                    if (matches.size >= 6) triggerShake(matches.size * 0.8f) // Sacudida por combo grande
+                    processMatches(matches, newGrid, x, y, color) 
+                } else soundEvent = SoundType.STICK
             }
         }
         
         bubblesByPosition = newGrid; activeProjectile = null; onPostSnap()
     }
 
-    /**
-     * ✅ MEJORA: LA BURBUJA DE LA SUERTE
-     * Verifica que los colores de los proyectiles todavía existan en el tablero.
-     */
     protected open fun onPostSnap() {
         validateProjectileColors()
     }
@@ -457,11 +484,9 @@ open class GameViewModel(
             .filter { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB }
         
         if (boardColors.isNotEmpty()) {
-            // Si el color actual ya no está en el tablero, lo cambiamos
             if (nextBubbleColor !in boardColors && nextBubbleColor != BubbleColor.RAINBOW && nextBubbleColor != BubbleColor.BOMB) {
                 nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
             }
-            // Si el color de previsualización ya no está, también lo cambiamos
             if (previewBubbleColor !in boardColors && previewBubbleColor != BubbleColor.RAINBOW && previewBubbleColor != BubbleColor.BOMB) {
                 previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
             }
@@ -482,7 +507,12 @@ open class GameViewModel(
         if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = engine.generateBaseColor()); return }
         val toPop = mutableSetOf<GridPosition>().apply { add(pos) }
         adjacentColors.forEach { c -> grid[pos] = Bubble(color = c); toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount)) }
-        if (toPop.size >= 2) { joyTick++; unlockAchievement("rainbow_power"); processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW) }
+        if (toPop.size >= 2) { 
+            joyTick++
+            if (toPop.size >= 6) triggerShake(toPop.size * 0.8f)
+            unlockAchievement("rainbow_power")
+            processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW) 
+        }
         else { grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK }
     }
 
@@ -495,6 +525,7 @@ open class GameViewModel(
 
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         val floating = engine.findFloatingBubbles(grid, rowsDroppedCount)
+        if (floating.size >= 10) triggerShake(floating.size * 0.3f) // Sacudida si caen muchas burbujas
         floating.forEach { pos -> 
             val b = grid[pos]
             grid.remove(pos)

@@ -86,6 +86,7 @@ fun LevelScreen(
     val isPaused = viewModel.isPaused
     val isFireballQueued = viewModel.isFireballQueued
     val currentGameMode = viewModel.gameMode
+    val shakeIntensity = viewModel.shakeIntensity
 
     var showQuickShop by remember { mutableStateOf(false) }
     var hasRedeemedCoins by remember { mutableStateOf(false) }
@@ -153,7 +154,13 @@ fun LevelScreen(
 
     val dangerAlpha by infiniteTransition.animateFloat(initialValue = 0.2f, targetValue = 0.8f, animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger")
     val masterRainbowRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "rotation")
-    val shakeOffset by infiniteTransition.animateFloat(initialValue = -2f, targetValue = 2f, animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake")
+    
+    // ✅ SACUDIDA MEJORADA (EMERGENCIA + IMPACTO)
+    val shakeOffset by infiniteTransition.animateFloat(
+        initialValue = -1f, targetValue = 1f, 
+        animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake"
+    )
+    val finalShake = (if (bubbles.keys.any { it.row >= 11 }) 2f else 0f) + shakeIntensity
 
     val dangerLineRow = 13
     val isEmergency = (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10) || bubbles.keys.any { it.row >= (dangerLineRow - 2) }
@@ -221,7 +228,7 @@ fun LevelScreen(
             viewModel.setBoardMetrics(BoardMetricsPx(horizontalSpacing = horizontalSpacingPx, bubbleDiameter = bubbleDiameterPx, verticalSpacing = verticalSpacingPx, boardTopPadding = boardTopPaddingPx, boardStartPadding = boardStartPadding, ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f), screenWidth = totalWidth))
         }
 
-        Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
+        Canvas(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = shakeOffset * finalShake; translationY = shakeOffset * finalShake }) {
             if (isEmergency) drawRect(color = Color.Red.copy(alpha = dangerAlpha), size = size)
             val pivotX = size.width / 2f
             val pivotY = size.height - 220.dp.toPx() 
@@ -259,7 +266,7 @@ fun LevelScreen(
             }
         }
 
-        Box(modifier = Modifier.fillMaxSize().graphicsLayer { if (isEmergency) { translationX = shakeOffset; translationY = shakeOffset } }) {
+        Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = shakeOffset * finalShake; translationY = shakeOffset * finalShake }) {
             bubbles.forEach { (pos, bubble) -> val (x, y) = viewModel.getBubbleCenter(pos); VisualBubble(color = mapBubbleColor(bubble.color), isRainbow = bubble.color == BubbleColor.RAINBOW, isBomb = bubble.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { bubbleDiameterPx.toDp() }).graphicsLayer { translationX = x - (bubbleDiameterPx / 2); translationY = y - (bubbleDiameterPx / 2) }) }
             activeProjectile?.let { p -> val scaleFactor = if(p.isFireball) 0.7f else 1f; val sizePx = bubbleDiameterPx * scaleFactor; VisualBubble(color = mapBubbleColor(p.color), isRainbow = p.color == BubbleColor.RAINBOW, isBomb = p.color == BubbleColor.BOMB, rainbowRotation = masterRainbowRotation, modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2); if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f }) }
         }
