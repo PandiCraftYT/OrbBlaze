@@ -11,10 +11,12 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import com.example.orbblaze.domain.model.BubbleColor
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -26,7 +28,9 @@ fun VisualBubble(
     isBomb: Boolean = false,
     rainbowRotation: Float = 0f,
     isActive: Boolean = false,
-    isMatchingTarget: Boolean = false
+    isMatchingTarget: Boolean = false,
+    isColorBlindMode: Boolean = false,
+    bubbleColorType: BubbleColor? = null
 ) {
     // --- LÓGICA DE ANIMACIÓN ---
     val infiniteTransition = rememberInfiniteTransition(label = "jewel_pro_fx")
@@ -92,7 +96,6 @@ fun VisualBubble(
 
                     if (isBomb) {
                         // --- DISEÑO DE BOMBA ---
-                        // 1. Mecha
                         val fusePath = Path().apply {
                             moveTo(center.x, center.y - bubbleRadius)
                             quadraticTo(
@@ -106,7 +109,6 @@ fun VisualBubble(
                             style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
                         )
 
-                        // 2. Chispas de la mecha
                         val sparkleAlpha = (sin(lightTime * 0.1f) * 0.5f + 0.5f)
                         drawCircle(
                             color = Color(0xFFFF9800).copy(alpha = sparkleAlpha),
@@ -119,7 +121,6 @@ fun VisualBubble(
                             center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f)
                         )
 
-                        // 3. Cuerpo de la bomba
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(Color(0xFF424242), Color.Black),
@@ -130,7 +131,6 @@ fun VisualBubble(
                             center = center
                         )
                         
-                        // 4. Detalle metálico
                         drawCircle(
                             color = Color.White.copy(alpha = 0.1f),
                             radius = bubbleRadius * 0.4f,
@@ -173,6 +173,11 @@ fun VisualBubble(
                         }
                     }
 
+                    // --- MODO DALTONISMO: FIGURAS ---
+                    if (isColorBlindMode && !isBomb && !isRainbow && bubbleColorType != null) {
+                        drawColorBlindIcon(bubbleColorType, center, bubbleRadius * 0.45f)
+                    }
+
                     // --- BRILLO COMÚN ---
                     rotate(-45f, center) {
                         drawOval(
@@ -186,14 +191,12 @@ fun VisualBubble(
                         )
                     }
 
-                    // Hotspot
                     drawCircle(
                         color = Color.White.copy(alpha = 0.8f),
                         radius = bubbleRadius * 0.08f,
                         center = Offset(center.x - bubbleRadius * 0.35f + lightOffsetX, center.y - bubbleRadius * 0.35f + lightOffsetY)
                     )
 
-                    // --- DESTELLO ---
                     if (isActive && sparkleScale > 0f) {
                         val sPos = Offset(center.x + radius * 0.35f, center.y - radius * 0.35f)
                         val sSize = radius * 0.6f * sparkleScale
@@ -209,7 +212,6 @@ fun VisualBubble(
                         )
                     }
 
-                    // --- INDICADOR DE OBJETIVO ---
                     if (isMatchingTarget) {
                         drawCircle(
                             color = Color.White.copy(alpha = indicatorAlpha),
@@ -221,4 +223,59 @@ fun VisualBubble(
                 }
             }
     )
+}
+
+private fun DrawScope.drawColorBlindIcon(type: BubbleColor, center: Offset, size: Float) {
+    val iconColor = Color.White.copy(alpha = 0.8f)
+    val strokeWidth = 2.5.dp.toPx()
+    
+    when (type) {
+        BubbleColor.RED -> {
+            drawCircle(iconColor, radius = size, center = center, style = Stroke(strokeWidth))
+        }
+        BubbleColor.BLUE -> {
+            drawRect(
+                iconColor, 
+                topLeft = Offset(center.x - size, center.y - size), 
+                size = Size(size * 2, size * 2), 
+                style = Stroke(strokeWidth)
+            )
+        }
+        BubbleColor.GREEN -> {
+            val path = Path().apply {
+                moveTo(center.x, center.y - size)
+                lineTo(center.x + size, center.y + size)
+                lineTo(center.x - size, center.y + size)
+                close()
+            }
+            drawPath(path, iconColor, style = Stroke(strokeWidth))
+        }
+        BubbleColor.YELLOW -> {
+            val path = Path().apply {
+                moveTo(center.x, center.y - size)
+                lineTo(center.x + size, center.y)
+                lineTo(center.x, center.y + size)
+                lineTo(center.x - size, center.y)
+                close()
+            }
+            drawPath(path, iconColor, style = Stroke(strokeWidth))
+        }
+        BubbleColor.PURPLE -> {
+            drawLine(iconColor, Offset(center.x - size, center.y), Offset(center.x + size, center.y), strokeWidth, StrokeCap.Round)
+            drawLine(iconColor, Offset(center.x, center.y - size), Offset(center.x, center.y + size), strokeWidth, StrokeCap.Round)
+        }
+        BubbleColor.CYAN -> {
+            val path = Path().apply {
+                for (i in 0..5) {
+                    val angle = i * Math.PI / 3
+                    val x = center.x + size * cos(angle).toFloat()
+                    val y = center.y + size * sin(angle).toFloat()
+                    if (i == 0) moveTo(x, y) else lineTo(x, y)
+                }
+                close()
+            }
+            drawPath(path, iconColor, style = Stroke(strokeWidth))
+        }
+        else -> {}
+    }
 }

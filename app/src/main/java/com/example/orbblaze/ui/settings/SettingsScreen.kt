@@ -60,6 +60,7 @@ fun SettingsScreen(
     val musicVolume by settingsManager.musicVolumeFlow.collectAsState(initial = 0.5f)
     val isVibrationEnabled by settingsManager.vibrationEnabledFlow.collectAsState(initial = true)
     val isMusicMuted by settingsManager.musicMutedFlow.collectAsState(initial = false)
+    val isColorBlindMode by settingsManager.colorBlindModeFlow.collectAsState(initial = false)
 
     BoxWithConstraints(
         modifier = Modifier
@@ -177,6 +178,9 @@ fun SettingsScreen(
                     }
                     SettingsRow("VIBRACIÓN", isVibrationEnabled) { 
                         scope.launch { settingsManager.setVibrationEnabled(it) }
+                    }
+                    SettingsRow("MODO DALTONISMO", isColorBlindMode) { 
+                        scope.launch { settingsManager.setColorBlindMode(it) }
                     }
                 }
 

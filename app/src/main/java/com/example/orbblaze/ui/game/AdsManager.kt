@@ -6,12 +6,9 @@ import android.util.DisplayMetrics
 import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.*
 import com.google.android.gms.ads.interstitial.InterstitialAd
@@ -29,7 +26,6 @@ class AdsManager(private val context: Context) {
     private val interstitialId = "ca-app-pub-3395921255182308/1188517915"
 
     init {
-        // La inicialización global ahora está en OrbBlazeApplication
         loadRewardedInterstitialAd()
         loadInterstitialAd()
     }
@@ -80,10 +76,9 @@ class AdsManager(private val context: Context) {
 
     @Composable
     fun BannerAd(modifier: Modifier = Modifier) {
+        // ✅ ELIMINADO PADDING PARA QUE QUEDE TOTALMENTE PEGADO
         Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(bottom = 4.dp), 
+            modifier = modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
             AndroidView(
@@ -93,7 +88,6 @@ class AdsManager(private val context: Context) {
                         adUnitId = bannerId
                         val displayMetrics: DisplayMetrics = ctx.resources.displayMetrics
                         val density = displayMetrics.density
-                        
                         val adWidthPixels = displayMetrics.widthPixels.toFloat()
                         val adWidth = (adWidthPixels / density).toInt()
                         

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -32,20 +33,19 @@ import com.example.orbblaze.ui.theme.OrbBlazeTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Habilitar modo pantalla completa de borde a borde
         enableEdgeToEdge()
+        
         setContent {
             OrbBlazeTheme {
                 val context = LocalContext.current
                 val application = context.applicationContext as android.app.Application
 
-                // Inicializar managers (Singletons durante la vida de la Activity)
                 val settingsManager = remember { SettingsManager(context) }
                 val globalSoundManager = remember { SoundManager(context, settingsManager) }
                 val adsManager = remember { AdsManager(context) }
-                
-                // Factory para inyectar dependencias en los ViewModels
                 val factory = remember { OrbBlazeViewModelFactory(settingsManager, application) }
-
                 val lifecycleOwner = LocalLifecycleOwner.current
 
                 DisposableEffect(lifecycleOwner) {
@@ -59,18 +59,20 @@ class MainActivity : ComponentActivity() {
                     lifecycleOwner.lifecycle.addObserver(observer)
                     onDispose {
                         lifecycleOwner.lifecycle.removeObserver(observer)
-                        globalSoundManager.release() // Limpieza total al destruir el efecto
+                        globalSoundManager.release()
                     }
                 }
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     AppNavigation(factory, globalSoundManager, adsManager, settingsManager)
 
+                    // ✅ AJUSTE DEFINITIVO DE POSICIÓN
+                    // Usamos navigationBarsPadding() para pegarlo al milímetro al centro de control
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .safeDrawingPadding()
-                            .padding(bottom = 4.dp)
+                            .navigationBarsPadding() // Se pega exactamente al borde de los botones/gestos
+                            .fillMaxWidth()
                     ) {
                         adsManager.BannerAd()
                     }
@@ -91,7 +93,6 @@ fun AppNavigation(
     val context = LocalContext.current
     val activity = context as? Activity
 
-    // ViewModels creados con Factory (Persistentes y Seguros)
     val classicVm: ClassicViewModel = viewModel(factory = factory)
     val timeAttackVm: TimeAttackViewModel = viewModel(factory = factory)
     val adventureVm: AdventureViewModel = viewModel(factory = factory)

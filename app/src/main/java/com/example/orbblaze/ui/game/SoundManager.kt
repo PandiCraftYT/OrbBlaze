@@ -119,6 +119,11 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     fun play(type: SoundType) {
+        // ✅ SI ES GANAR O PERDER, DETENEMOS LA MÚSICA DE FONDO ANTES
+        if (type == SoundType.WIN || type == SoundType.LOSE) {
+            pauseMusic()
+        }
+        
         val pool = soundPool ?: return
         val soundId = soundMap[type] ?: return
         pool.play(soundId, sfxVolume, sfxVolume, 1, 0, 1f)
@@ -156,7 +161,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
 
     fun release() {
         try {
-            scope.cancel() // Cancelar corrutinas activas
+            scope.cancel()
             mediaPlayer?.let {
                 if (it.isPlaying) it.stop()
                 it.release()

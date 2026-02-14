@@ -53,6 +53,11 @@ fun MenuScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
     var showExitDialog by remember { mutableStateOf(false) }
 
+    // ✅ ASEGURAR QUE LA MÚSICA VUELVA A SONAR AL ENTRAR AL MENÚ
+    LaunchedEffect(Unit) {
+        soundManager.startMusic()
+    }
+
     BackHandler {
         showExitDialog = true
     }
@@ -215,8 +220,7 @@ fun MenuScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    verticalAlignment = Alignment.CenterVertically) {
                     CircleIconButton(
                         icon = Icons.Default.Settings,
                         onClick = onSettingsClick,

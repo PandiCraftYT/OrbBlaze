@@ -21,6 +21,7 @@ class SettingsManager(private val context: Context) {
         val COINS = intPreferencesKey("coins")
         val ADVENTURE_PROGRESS = intPreferencesKey("adventure_progress")
         val TUTORIAL_COMPLETED = booleanPreferencesKey("tutorial_completed")
+        val COLOR_BLIND_MODE = booleanPreferencesKey("color_blind_mode")
     }
 
     // Obtener todas las estrellas de golpe para evitar lag
@@ -60,6 +61,11 @@ class SettingsManager(private val context: Context) {
     val vibrationEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[VIBRATION_ENABLED] ?: true }
     suspend fun setVibrationEnabled(enabled: Boolean) {
         context.dataStore.edit { it[VIBRATION_ENABLED] = enabled }
+    }
+
+    val colorBlindModeFlow: Flow<Boolean> = context.dataStore.data.map { it[COLOR_BLIND_MODE] ?: false }
+    suspend fun setColorBlindMode(enabled: Boolean) {
+        context.dataStore.edit { it[COLOR_BLIND_MODE] = enabled }
     }
 
     val highScoreFlow: Flow<Int> = context.dataStore.data.map { it[HIGH_SCORE] ?: 0 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.example.orbblaze.domain.model.BubbleColor
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlin.math.cos
@@ -27,14 +28,17 @@ import kotlin.math.sin
 fun PandaShooter(
     angle: Float,
     currentBubbleColor: Color,
+    currentBubbleType: BubbleColor? = null, // ✅ Añadido
     isCurrentRainbow: Boolean = false,
     nextBubbleColor: Color,
+    nextBubbleType: BubbleColor? = null, // ✅ Añadido
     isNextRainbow: Boolean = false,
     shotTick: Int,
     joyTick: Int = 0,
     rainbowRotation: Float,
     onShopClick: () -> Unit = {},
     isShopEnabled: Boolean = true,
+    isColorBlindMode: Boolean = false, // ✅ Añadido
     modifier: Modifier = Modifier,
     onShopPositioned: (Rect) -> Unit = {},
     onCannonPositioned: (Rect) -> Unit = {},
@@ -47,8 +51,8 @@ fun PandaShooter(
     val infiniteTransition = rememberInfiniteTransition(label = "panda_fx")
 
     val bombColor = Color(0xFF212121)
-    val isCurrentBomb = currentBubbleColor == bombColor
-    val isNextBomb = nextBubbleColor == bombColor
+    val isCurrentBomb = currentBubbleType == BubbleColor.BOMB
+    val isNextBomb = nextBubbleType == BubbleColor.BOMB
 
     // ✅ LÓGICA DE VIBRACIÓN
     var lastVibratedAngle by remember { mutableFloatStateOf(angle) }
@@ -180,6 +184,8 @@ fun PandaShooter(
                 isRainbow = isNextRainbow, 
                 isBomb = isNextBomb,
                 rainbowRotation = rainbowRotation, 
+                isColorBlindMode = isColorBlindMode, // ✅ Implementado
+                bubbleColorType = nextBubbleType, // ✅ Implementado
                 modifier = Modifier.size(34.dp)
             )
         }
@@ -209,7 +215,7 @@ fun PandaShooter(
                     cornerRadius = CornerRadius(15f)
                 )
 
-                // Engranajes Laterales
+                // Engranajes Laterales con Figuras de Daltonismo
                 listOf(-85f, 85f).forEach { xOff ->
                     val gearCenter = Offset(cx + xOff, cy + 80f)
                     drawCircle(Color.Black, 38f, gearCenter)
@@ -221,7 +227,8 @@ fun PandaShooter(
                             }
                         }
                     }
-                    // Color indicador en engranajes
+                    
+                    // Indicador de color y figura
                     if (isCurrentRainbow) {
                         rotate(rainbowRotation, gearCenter) {
                             drawCircle(brush = Brush.sweepGradient(rainbowColors, gearCenter), radius = 14f, center = gearCenter)
@@ -231,6 +238,10 @@ fun PandaShooter(
                         drawCircle(Color.White.copy(0.4f), radius = 4f, center = gearCenter - Offset(4f, 4f))
                     } else {
                         drawCircle(currentBubbleColor, 14f, gearCenter)
+                        // ✅ DIBUJAR FIGURA EN EL ENGRANAJE
+                        if (isColorBlindMode && currentBubbleType != null) {
+                            drawColorBlindIcon(currentBubbleType, gearCenter, 8f)
+                        }
                     }
                 }
 
@@ -258,7 +269,7 @@ fun PandaShooter(
                     drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy + 10f), Size(barrelW + 10f, 18f), CornerRadius(5f))
                     drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy - 60f), Size(barrelW + 10f, 18f), CornerRadius(5f))
 
-                    // Boca del Cañón (Hueca y profunda, sin burbuja interna visible)
+                    // Boca del Cañón
                     val mouthY = cy - barrelH + 80f
                     drawOval(steelMid, Offset(cx - barrelW/2, mouthY - 22f), Size(barrelW, 44f))
                     drawOval(Color.Black, Offset(cx - barrelW/2 + 12f, mouthY - 16f), Size(barrelW - 24f, 32f))
@@ -274,6 +285,46 @@ fun PandaShooter(
                 }
             }
         }
+    }
+}
+
+// ✅ IMPORTADO DESDE VISUALBUBBLE PARA CONSISTENCIA
+private fun DrawScope.drawColorBlindIcon(type: BubbleColor, center: Offset, size: Float) {
+    val iconColor = Color.White.copy(alpha = 0.8f)
+    val strokeWidth = 1.5.dp.toPx()
+    
+    when (type) {
+        BubbleColor.RED -> drawCircle(iconColor, radius = size, center = center, style = Stroke(strokeWidth))
+        BubbleColor.BLUE -> drawRect(iconColor, topLeft = Offset(center.x - size, center.y - size), size = Size(size * 2, size * 2), style = Stroke(strokeWidth))
+        BubbleColor.GREEN -> {
+            val path = Path().apply {
+                moveTo(center.x, center.y - size); lineTo(center.x + size, center.y + size); lineTo(center.x - size, center.y + size); close()
+            }
+            drawPath(path, iconColor, style = Stroke(strokeWidth))
+        }
+        BubbleColor.YELLOW -> {
+            val path = Path().apply {
+                moveTo(center.x, center.y - size); lineTo(center.x + size, center.y); lineTo(center.x, center.y + size); lineTo(center.x - size, center.y); close()
+            }
+            drawPath(path, iconColor, style = Stroke(strokeWidth))
+        }
+        BubbleColor.PURPLE -> {
+            drawLine(iconColor, Offset(center.x - size, center.y), Offset(center.x + size, center.y), strokeWidth, StrokeCap.Round)
+            drawLine(iconColor, Offset(center.x, center.y - size), Offset(center.x, center.y + size), strokeWidth, StrokeCap.Round)
+        }
+        BubbleColor.CYAN -> {
+            val path = Path().apply {
+                for (i in 0..5) {
+                    val angle = i * Math.PI / 3
+                    val x = center.x + size * kotlin.math.cos(angle).toFloat()
+                    val y = center.y + size * kotlin.math.sin(angle).toFloat()
+                    if (i == 0) moveTo(x, y) else lineTo(x, y)
+                }
+                close()
+            }
+            drawPath(path, iconColor, style = Stroke(strokeWidth))
+        }
+        else -> {}
     }
 }
 

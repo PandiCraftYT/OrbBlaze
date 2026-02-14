@@ -81,7 +81,6 @@ open class GameViewModel(
     var vibrationEvent by mutableStateOf<Boolean>(false)
         protected set
 
-    // ✅ NUEVO: INTENSIDAD DE SACUDIDA
     var shakeIntensity by mutableStateOf(0f)
         protected set
 
@@ -115,6 +114,9 @@ open class GameViewModel(
     private var textIdCounter = 0L
 
     protected val bubbleRadius: Float get() = (metrics?.bubbleDiameter ?: 44f) / 2f
+
+    // ✅ Fila de peligro dinámica sincronizada con la UI
+    var dynamicDangerRow by mutableIntStateOf(12)
 
     init {
         setupAchievements()
@@ -307,7 +309,7 @@ open class GameViewModel(
                         if (currentP.isFireball) { 
                             activeProjectile = null
                             spawnExplosion(nextX, nextY, BubbleColor.RED)
-                            triggerShake(10f) // Sacudida por bola de fuego
+                            triggerShake(10f)
                             collisionDetected = true
                             return@repeat 
                         }
@@ -456,7 +458,7 @@ open class GameViewModel(
             BubbleColor.BOMB -> { 
                 unlockAchievement("bomb_squad")
                 explodeAt(finalPos, newGrid) 
-                triggerShake(8f) // Sacudida por bomba
+                triggerShake(8f)
             }
             BubbleColor.RAINBOW -> handleRainbowAt(finalPos, newGrid, x, y)
             else -> {
@@ -464,7 +466,7 @@ open class GameViewModel(
                 val matches = matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount)
                 if (matches.size >= 3) { 
                     joyTick++
-                    if (matches.size >= 6) triggerShake(matches.size * 0.8f) // Sacudida por combo grande
+                    if (matches.size >= 6) triggerShake(matches.size * 0.8f)
                     processMatches(matches, newGrid, x, y, color) 
                 } else soundEvent = SoundType.STICK
             }
@@ -475,6 +477,7 @@ open class GameViewModel(
 
     protected open fun onPostSnap() {
         validateProjectileColors()
+        metrics?.let { checkGameConditions(it) }
     }
 
     protected fun validateProjectileColors() {
@@ -525,7 +528,7 @@ open class GameViewModel(
 
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         val floating = engine.findFloatingBubbles(grid, rowsDroppedCount)
-        if (floating.size >= 10) triggerShake(floating.size * 0.3f) // Sacudida si caen muchas burbujas
+        if (floating.size >= 10) triggerShake(floating.size * 0.3f)
         floating.forEach { pos -> 
             val b = grid[pos]
             grid.remove(pos)
@@ -537,10 +540,24 @@ open class GameViewModel(
     }
 
     protected fun checkGameConditions(m: BoardMetricsPx) {
-        if (bubblesByPosition.isEmpty()) { gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100) }
+        if (gameState != GameState.PLAYING) return
         
-        val dangerY = m.boardTopPadding + (m.verticalSpacing * 13)
-        if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { 
+        if (bubblesByPosition.isEmpty()) { 
+            gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100)
+            return
+        }
+        
+        // ✅ USAR LA FILA DINÁMICA DE PELIGRO COORDINADA CON LA UI
+        val dangerY = m.boardTopPadding + (m.verticalSpacing * dynamicDangerRow)
+        
+        // Se pierde si el borde inferior de la burbuja cruza la línea roja
+        val hasLost = bubblesByPosition.keys.any { pos ->
+            val center = getBubbleCenter(pos)
+            val bubbleBottomY = center.second + (m.bubbleDiameter / 2.2f)
+            bubbleBottomY >= dangerY
+        }
+
+        if (hasLost) {
             gameState = GameState.LOST 
             soundEvent = SoundType.LOSE 
         }
