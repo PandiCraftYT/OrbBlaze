@@ -19,7 +19,7 @@ class LevelEngine {
     }
 
     fun generateBaseColor() = BubbleColor.entries.filter { 
-        it != BubbleColor.BOMB && it != BubbleColor.RAINBOW 
+        it != BubbleColor.BOMB && it != BubbleColor.RAINBOW
     }.random()
 
     /**
@@ -56,8 +56,8 @@ class LevelEngine {
      */
     fun getSmartProjectileColor(grid: Map<GridPosition, Bubble>): BubbleColor {
         val rand = Math.random()
-        if (rand < 0.025) return BubbleColor.RAINBOW
-        if (rand < 0.08) return BubbleColor.BOMB
+        if (rand < 0.02) return BubbleColor.RAINBOW
+        if (rand < 0.05) return BubbleColor.BOMB
 
         val currentColors = grid.values.map { it.color }.distinct()
             .filter { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB }

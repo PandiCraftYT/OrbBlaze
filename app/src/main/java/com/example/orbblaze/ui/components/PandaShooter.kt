@@ -24,21 +24,25 @@ import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
 
+enum class PandaExpression { NEUTRAL, WORRIED, SCARED, HAPPY }
+
 @Composable
 fun PandaShooter(
     angle: Float,
     currentBubbleColor: Color,
-    currentBubbleType: BubbleColor? = null, // ✅ Añadido
+    currentBubbleType: BubbleColor? = null,
     isCurrentRainbow: Boolean = false,
     nextBubbleColor: Color,
-    nextBubbleType: BubbleColor? = null, // ✅ Añadido
+    nextBubbleType: BubbleColor? = null,
     isNextRainbow: Boolean = false,
     shotTick: Int,
     joyTick: Int = 0,
     rainbowRotation: Float,
     onShopClick: () -> Unit = {},
     isShopEnabled: Boolean = true,
-    isColorBlindMode: Boolean = false, // ✅ Añadido
+    isColorBlindMode: Boolean = false,
+    shakeIntensity: Float = 0f, // ✅ Añadido
+    isDanger: Boolean = false, // ✅ Añadido
     modifier: Modifier = Modifier,
     onShopPositioned: (Rect) -> Unit = {},
     onCannonPositioned: (Rect) -> Unit = {},
@@ -50,11 +54,18 @@ fun PandaShooter(
     val joyAnim = remember { Animatable(0f) }
     val infiniteTransition = rememberInfiniteTransition(label = "panda_fx")
 
+    // ✅ DETERMINAR EXPRESIÓN
+    val expression = when {
+        joyTick > 0 || joyAnim.value > 0.1f -> PandaExpression.HAPPY
+        shakeIntensity > 5f -> PandaExpression.SCARED
+        isDanger -> PandaExpression.WORRIED
+        else -> PandaExpression.NEUTRAL
+    }
+
     val bombColor = Color(0xFF212121)
     val isCurrentBomb = currentBubbleType == BubbleColor.BOMB
     val isNextBomb = nextBubbleType == BubbleColor.BOMB
 
-    // ✅ LÓGICA DE VIBRACIÓN
     var lastVibratedAngle by remember { mutableFloatStateOf(angle) }
     LaunchedEffect(angle) {
         if (kotlin.math.abs(angle - lastVibratedAngle) >= 3f) {
@@ -63,7 +74,6 @@ fun PandaShooter(
         }
     }
 
-    // ✅ ANIMACIÓN DE INTERCAMBIO
     val swapAnim = remember { Animatable(0f) }
     var lastShotTick by remember { mutableIntStateOf(shotTick) }
     LaunchedEffect(currentBubbleColor) {
@@ -102,20 +112,19 @@ fun PandaShooter(
 
     LaunchedEffect(joyTick) {
         if (joyTick > 0) {
-            joyAnim.animateTo(1f, tween(300, easing = FastOutSlowInEasing))
-            joyAnim.animateTo(0f, spring(dampingRatio = 0.6f, stiffness = 200f))
+            joyAnim.animateTo(1f, tween(1000, easing = FastOutSlowInEasing))
+            joyAnim.animateTo(0f, spring(dampingRatio = 0.6f, stiffness = 100f))
         }
     }
 
     val recoilOffset = recoilAnim.value * 45f
-    val joyJump = joyAnim.value * -20f
+    val joyJump = joyAnim.value * -25f
     val rainbowColors = listOf(Color.Red, Color(0xFFFF7F00), Color.Yellow, Color.Green, Color.Blue, Color(0xFF4B0082), Color(0xFF8B00FF))
 
     Box(
         modifier = modifier.fillMaxWidth().height(340.dp),
         contentAlignment = Alignment.BottomCenter
     ) {
-        // 1. NUBES
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cloudColor = Color.White
             drawCloud(Offset(size.width / 2, size.height - 125.dp.toPx()), 260f, cloudColor)
@@ -123,7 +132,6 @@ fun PandaShooter(
             drawCloud(Offset(85.dp.toPx(), size.height - 90.dp.toPx()), 180f, cloudColor)
         }
 
-        // 2. BOTÓN TIENDA
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -134,7 +142,7 @@ fun PandaShooter(
             ShopButton(onClick = onShopClick, isEnabled = isShopEnabled)
         }
 
-        // 3. PANDA
+        // 🐼 DIBUJO DEL PANDA CON EXPRESIONES
         Canvas(
             modifier = Modifier
                 .size(180.dp)
@@ -146,28 +154,61 @@ fun PandaShooter(
             val pBlack = Color(0xFF1A1A1A)
             val pWhite = Color.White
             val headCy = cy - 40f
+            
             withTransform({
                 scale(breatheScale, breatheScale, Offset(cx, cy + 40f))
-                if (joyAnim.value > 0.1f) rotate(joyAnim.value * 10f, Offset(cx, cy))
+                if (expression == PandaExpression.HAPPY) rotate(sin(joyAnim.value * 10f) * 5f, Offset(cx, cy))
             }) {
+                // Orejas
                 drawCircle(pBlack, radius = 22f, center = Offset(cx - 50f, headCy - 40f))
                 drawCircle(pBlack, radius = 22f, center = Offset(cx + 50f, headCy - 40f))
+                // Cuerpo
                 drawRoundRect(pBlack, topLeft = Offset(cx - 65f, cy - 20f), size = Size(130f, 100f), cornerRadius = CornerRadius(40f))
                 drawCircle(pWhite, radius = 42f, center = Offset(cx, cy + 30f))
+                // Cabeza
                 drawRoundRect(pWhite, topLeft = Offset(cx - 65f, headCy - 55f), size = Size(130f, 100f), cornerRadius = CornerRadius(50f))
+                
+                // Manchas de los ojos
                 drawCircle(pBlack, 22f, Offset(cx - 32f, headCy - 5f))
                 drawCircle(pBlack, 22f, Offset(cx + 32f, headCy - 5f))
-                drawCircle(Color.White, radius = 4f * blinkScaleY, center = Offset(cx - 32f, headCy - 5f))
-                drawCircle(Color.White, radius = 4f * blinkScaleY, center = Offset(cx + 32f, headCy - 5f))
+
+                // OJOS DINÁMICOS
+                when (expression) {
+                    PandaExpression.HAPPY -> {
+                        // Ojos cerrados felices (U invertida)
+                        drawArc(Color.White, -180f, 180f, false, Offset(cx - 42f, headCy - 12f), Size(20f, 15f), style = Stroke(4f))
+                        drawArc(Color.White, -180f, 180f, false, Offset(cx + 22f, headCy - 12f), Size(20f, 15f), style = Stroke(4f))
+                    }
+                    PandaExpression.WORRIED -> {
+                        // Ojos redondos pequeños preocupados
+                        drawCircle(Color.White, 6f, Offset(cx - 32f, headCy - 5f))
+                        drawCircle(Color.White, 6f, Offset(cx + 32f, headCy - 5f))
+                    }
+                    PandaExpression.SCARED -> {
+                        // Ojos bien abiertos asustados
+                        drawCircle(Color.White, 10f, Offset(cx - 32f, headCy - 5f))
+                        drawCircle(Color.White, 10f, Offset(cx + 32f, headCy - 5f))
+                        drawCircle(Color.Black, 4f, Offset(cx - 32f, headCy - 5f))
+                        drawCircle(Color.Black, 4f, Offset(cx + 32f, headCy - 5f))
+                    }
+                    else -> {
+                        // Ojos normales con parpadeo
+                        drawCircle(Color.White, radius = 4f * blinkScaleY, center = Offset(cx - 32f, headCy - 5f))
+                        drawCircle(Color.White, radius = 4f * blinkScaleY, center = Offset(cx + 32f, headCy - 5f))
+                    }
+                }
+
+                // Nariz
                 drawCircle(pBlack, 6f, Offset(cx, headCy + 15f))
-                val armAngleL = if (joyAnim.value > 0.1f) -60f else 20f
-                val armAngleR = if (joyAnim.value > 0.1f) 60f else -20f
+                
+                // Brazos
+                val armAngleL = if (expression == PandaExpression.HAPPY) -60f else 20f
+                val armAngleR = if (expression == PandaExpression.HAPPY) 60f else -20f
                 rotate(armAngleL, Offset(cx - 40f, cy + 10f)) { drawOval(pBlack, topLeft = Offset(cx - 70f, cy), size = Size(35f, 55f)) }
                 rotate(armAngleR, Offset(cx + 40f, cy + 10f)) { drawOval(pBlack, topLeft = Offset(cx + 35f, cy), size = Size(35f, 55f)) }
             }
         }
 
-        // 4. BURBUJA NEXT
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -184,13 +225,12 @@ fun PandaShooter(
                 isRainbow = isNextRainbow, 
                 isBomb = isNextBomb,
                 rainbowRotation = rainbowRotation, 
-                isColorBlindMode = isColorBlindMode, // ✅ Implementado
-                bubbleColorType = nextBubbleType, // ✅ Implementado
+                isColorBlindMode = isColorBlindMode,
+                bubbleColorType = nextBubbleType,
                 modifier = Modifier.size(34.dp)
             )
         }
 
-        // 5. CAÑÓN REDISEÑADO
         Box(
             modifier = Modifier
                 .size(300.dp)
@@ -207,7 +247,6 @@ fun PandaShooter(
                 val accentGold = Color(0xFFFFD700)
                 val pivot = Offset(cx, cy + 80f)
 
-                // Base Estática
                 drawRoundRect(
                     brush = Brush.verticalGradient(listOf(steelMid, Color.Black)),
                     topLeft = Offset(cx - 90f, cy + 60f),
@@ -215,7 +254,6 @@ fun PandaShooter(
                     cornerRadius = CornerRadius(15f)
                 )
 
-                // Engranajes Laterales con Figuras de Daltonismo
                 listOf(-85f, 85f).forEach { xOff ->
                     val gearCenter = Offset(cx + xOff, cy + 80f)
                     drawCircle(Color.Black, 38f, gearCenter)
@@ -227,8 +265,6 @@ fun PandaShooter(
                             }
                         }
                     }
-                    
-                    // Indicador de color y figura
                     if (isCurrentRainbow) {
                         rotate(rainbowRotation, gearCenter) {
                             drawCircle(brush = Brush.sweepGradient(rainbowColors, gearCenter), radius = 14f, center = gearCenter)
@@ -238,7 +274,6 @@ fun PandaShooter(
                         drawCircle(Color.White.copy(0.4f), radius = 4f, center = gearCenter - Offset(4f, 4f))
                     } else {
                         drawCircle(currentBubbleColor, 14f, gearCenter)
-                        // ✅ DIBUJAR FIGURA EN EL ENGRANAJE
                         if (isColorBlindMode && currentBubbleType != null) {
                             drawColorBlindIcon(currentBubbleType, gearCenter, 8f)
                         }
@@ -254,33 +289,15 @@ fun PandaShooter(
                     val barrelGradient = Brush.horizontalGradient(
                         0.0f to steelDark, 0.2f to steelMid, 0.5f to steelLight, 0.8f to steelMid, 1.0f to steelDark
                     )
-
                     drawCircle(steelMid, 55f, Offset(cx, cy + 80f))
-
-                    // Cuerpo del Cañón
-                    drawRoundRect(
-                        brush = barrelGradient,
-                        topLeft = Offset(cx - barrelW/2, cy - barrelH + 80f),
-                        size = Size(barrelW, barrelH),
-                        cornerRadius = CornerRadius(12f)
-                    )
-
-                    // Anillos de Refuerzo
+                    drawRoundRect(brush = barrelGradient, topLeft = Offset(cx - barrelW/2, cy - barrelH + 80f), size = Size(barrelW, barrelH), cornerRadius = CornerRadius(12f))
                     drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy + 10f), Size(barrelW + 10f, 18f), CornerRadius(5f))
                     drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy - 60f), Size(barrelW + 10f, 18f), CornerRadius(5f))
-
-                    // Boca del Cañón
                     val mouthY = cy - barrelH + 80f
                     drawOval(steelMid, Offset(cx - barrelW/2, mouthY - 22f), Size(barrelW, 44f))
                     drawOval(Color.Black, Offset(cx - barrelW/2 + 12f, mouthY - 16f), Size(barrelW - 24f, 32f))
-
-                    // Flash de Disparo
                     if (flashAlpha.value > 0f) {
-                        drawCircle(
-                            brush = Brush.radialGradient(listOf(Color.White, accentGold, Color.Transparent)),
-                            radius = 200f * flashAlpha.value,
-                            center = Offset(cx, mouthY - 10f)
-                        )
+                        drawCircle(brush = Brush.radialGradient(listOf(Color.White, accentGold, Color.Transparent)), radius = 200f * flashAlpha.value, center = Offset(cx, mouthY - 10f))
                     }
                 }
             }
@@ -288,24 +305,18 @@ fun PandaShooter(
     }
 }
 
-// ✅ IMPORTADO DESDE VISUALBUBBLE PARA CONSISTENCIA
 private fun DrawScope.drawColorBlindIcon(type: BubbleColor, center: Offset, size: Float) {
     val iconColor = Color.White.copy(alpha = 0.8f)
     val strokeWidth = 1.5.dp.toPx()
-    
     when (type) {
         BubbleColor.RED -> drawCircle(iconColor, radius = size, center = center, style = Stroke(strokeWidth))
         BubbleColor.BLUE -> drawRect(iconColor, topLeft = Offset(center.x - size, center.y - size), size = Size(size * 2, size * 2), style = Stroke(strokeWidth))
         BubbleColor.GREEN -> {
-            val path = Path().apply {
-                moveTo(center.x, center.y - size); lineTo(center.x + size, center.y + size); lineTo(center.x - size, center.y + size); close()
-            }
+            val path = Path().apply { moveTo(center.x, center.y - size); lineTo(center.x + size, center.y + size); lineTo(center.x - size, center.y + size); close() }
             drawPath(path, iconColor, style = Stroke(strokeWidth))
         }
         BubbleColor.YELLOW -> {
-            val path = Path().apply {
-                moveTo(center.x, center.y - size); lineTo(center.x + size, center.y); lineTo(center.x, center.y + size); lineTo(center.x - size, center.y); close()
-            }
+            val path = Path().apply { moveTo(center.x, center.y - size); lineTo(center.x + size, center.y); lineTo(center.x, center.y + size); lineTo(center.x - size, center.y); close() }
             drawPath(path, iconColor, style = Stroke(strokeWidth))
         }
         BubbleColor.PURPLE -> {

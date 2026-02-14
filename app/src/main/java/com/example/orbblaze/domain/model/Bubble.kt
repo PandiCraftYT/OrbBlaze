@@ -17,7 +17,6 @@ data class Bubble(
     val state: BubbleState = BubbleState.STATIONARY
 )
 
-// Centralizamos todos los modelos de juego aquí
 data class Projectile(
     val x: Float,
     val y: Float,
@@ -53,5 +52,5 @@ data class BoardMetricsPx(
     val boardTopPadding: Float,
     val boardStartPadding: Float,
     val ceilingY: Float,
-    val screenWidth: Float = 1080f // ✅ Añadido para rebotes precisos
+    val screenWidth: Float = 1080f
 )

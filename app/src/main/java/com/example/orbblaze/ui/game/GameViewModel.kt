@@ -115,8 +115,11 @@ open class GameViewModel(
 
     protected val bubbleRadius: Float get() = (metrics?.bubbleDiameter ?: 44f) / 2f
 
-    // ✅ Fila de peligro dinámica sincronizada con la UI
     var dynamicDangerRow by mutableIntStateOf(12)
+
+    // ✅ NUEVO: Contador de combos consecutivos
+    var comboMultiplier by mutableIntStateOf(1)
+        protected set
 
     init {
         setupAchievements()
@@ -185,6 +188,7 @@ open class GameViewModel(
     open fun changeGameMode(mode: GameMode) { this.gameMode = mode }
     open fun startGame() { 
         gameState = GameState.PLAYING
+        comboMultiplier = 1
         nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
         startTimer() 
@@ -202,6 +206,7 @@ open class GameViewModel(
         bubblesByPosition = cleanGrid
         
         score = 0
+        comboMultiplier = 1
         gameState = GameState.IDLE
         isPaused = false
         shotsFiredCount = 0
@@ -348,7 +353,10 @@ open class GameViewModel(
             if (hypot(x - bx, y - by) < bubbleRadius * 1.1f) toRemove.add(pos)
         }
         if (toRemove.isNotEmpty()) {
-            soundEvent = SoundType.POP; score += (toRemove.size * 10)
+            soundEvent = SoundType.POP; 
+            // Puntos por fireball también afectados por combo
+            val pts = (toRemove.size * 10) * comboMultiplier
+            score += pts
             triggerShake(toRemove.size * 0.5f)
             toRemove.forEach { pos -> newGrid.remove(pos); val (cx, cy) = getBubbleCenter(pos); spawnExplosion(cx, cy, BubbleColor.entries.random()) }
             bubblesByPosition = newGrid; removeFloatingBubbles(newGrid)
@@ -454,22 +462,36 @@ open class GameViewModel(
             dx * dx + (dy * dy * magneticBias)
         }!!
 
+        var matched = false
         when (color) {
             BubbleColor.BOMB -> { 
                 unlockAchievement("bomb_squad")
                 explodeAt(finalPos, newGrid) 
                 triggerShake(8f)
+                matched = true
             }
-            BubbleColor.RAINBOW -> handleRainbowAt(finalPos, newGrid, x, y)
+            BubbleColor.RAINBOW -> {
+                matched = handleRainbowAt(finalPos, newGrid, x, y)
+            }
             else -> {
                 newGrid[finalPos] = Bubble(color = color)
                 val matches = matchFinder.findMatches(finalPos, newGrid, rowsDroppedCount)
                 if (matches.size >= 3) { 
+                    matched = true
                     joyTick++
                     if (matches.size >= 6) triggerShake(matches.size * 0.8f)
                     processMatches(matches, newGrid, x, y, color) 
-                } else soundEvent = SoundType.STICK
+                } else {
+                    soundEvent = SoundType.STICK
+                }
             }
+        }
+        
+        // ✅ LÓGICA DE COMBO
+        if (matched) {
+            comboMultiplier++
+        } else {
+            comboMultiplier = 1
         }
         
         bubblesByPosition = newGrid; activeProjectile = null; onPostSnap()
@@ -499,31 +521,53 @@ open class GameViewModel(
     private fun processMatches(matches: Set<GridPosition>, grid: MutableMap<GridPosition, Bubble>, x: Float, y: Float, visualColor: BubbleColor) {
         soundEvent = SoundType.POP; val count = matches.size
         if (count >= 6) unlockAchievement("combo_master")
-        val points = (count * 10) + ((count - 3) * 20); score += points; if (count >= 5) addCoins(count / 2)
-        spawnFloatingText(x, y, "+$points"); updateHighScore()
+        
+        // ✅ Puntos multiplicados por el combo actual
+        val basePoints = (count * 10) + ((count - 3) * 20)
+        val points = basePoints * comboMultiplier
+        
+        score += points
+        if (count >= 5) addCoins(count / 2)
+        
+        // Mostrar "x2", "x3", etc si hay combo
+        val comboText = if (comboMultiplier > 1) " COMBO x$comboMultiplier!" else ""
+        spawnFloatingText(x, y, "+$points$comboText")
+        
+        updateHighScore()
         matches.forEach { pos -> val color = grid[pos]?.color ?: visualColor; grid.remove(pos); val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, color) }
         removeFloatingBubbles(grid)
     }
 
-    private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float) {
+    private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float): Boolean {
         val adjacentColors = HexGridHelper.getNeighbors(pos, rowsDroppedCount).mapNotNull { grid[it]?.color }.distinct().filter { it != BubbleColor.BOMB && it != BubbleColor.RAINBOW }
-        if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = engine.generateBaseColor()); return }
+        if (adjacentColors.isEmpty()) { grid[pos] = Bubble(color = engine.generateBaseColor()); return false }
         val toPop = mutableSetOf<GridPosition>().apply { add(pos) }
         adjacentColors.forEach { c -> grid[pos] = Bubble(color = c); toPop.addAll(matchFinder.findMatches(pos, grid, rowsDroppedCount)) }
-        if (toPop.size >= 2) { 
+        return if (toPop.size >= 2) { 
             joyTick++
             if (toPop.size >= 6) triggerShake(toPop.size * 0.8f)
             unlockAchievement("rainbow_power")
             processMatches(toPop, grid, fx, fy, BubbleColor.RAINBOW) 
+            true
         }
-        else { grid[pos] = Bubble(color = adjacentColors.first()); soundEvent = SoundType.STICK }
+        else { 
+            grid[pos] = Bubble(color = adjacentColors.first())
+            soundEvent = SoundType.STICK
+            false
+        }
     }
 
     private fun explodeAt(center: GridPosition, grid: MutableMap<GridPosition, Bubble>) {
         soundEvent = SoundType.EXPLODE; val affected = HexGridHelper.getNeighbors(center, rowsDroppedCount).filter { grid.containsKey(it) } + center
         val (cx, cy) = getBubbleCenter(center)
         affected.forEach { pos -> grid[pos]?.let { spawnExplosion(getBubbleCenter(pos).first, getBubbleCenter(pos).second, it.color); grid.remove(pos) } }
-        score += affected.size * 50; spawnFloatingText(cx, cy, "+${affected.size * 50}"); updateHighScore(); joyTick++; removeFloatingBubbles(grid)
+        
+        val points = (affected.size * 50) * comboMultiplier
+        score += points
+        spawnFloatingText(cx, cy, "+$points")
+        updateHighScore()
+        joyTick++
+        removeFloatingBubbles(grid)
     }
 
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
@@ -535,7 +579,7 @@ open class GameViewModel(
             val (bx, by) = getBubbleCenter(pos)
             spawnExplosion(bx, by, b?.color ?: BubbleColor.BLUE)
             addCoins(1)
-            score += 20 
+            score += (20 * comboMultiplier) // Caídas también aprovechan el combo
         }
     }
 
@@ -547,10 +591,8 @@ open class GameViewModel(
             return
         }
         
-        // ✅ USAR LA FILA DINÁMICA DE PELIGRO COORDINADA CON LA UI
         val dangerY = m.boardTopPadding + (m.verticalSpacing * dynamicDangerRow)
         
-        // Se pierde si el borde inferior de la burbuja cruza la línea roja
         val hasLost = bubblesByPosition.keys.any { pos ->
             val center = getBubbleCenter(pos)
             val bubbleBottomY = center.second + (m.bubbleDiameter / 2.2f)

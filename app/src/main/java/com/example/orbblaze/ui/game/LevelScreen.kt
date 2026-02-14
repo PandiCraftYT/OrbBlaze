@@ -139,7 +139,6 @@ fun LevelScreen(
         if (gameState == GameState.PLAYING && !isPaused && !isReviveAlertActive) {
             soundManager.startMusic()
         } else if (gameState == GameState.LOST || gameState == GameState.WON || isPaused) {
-            // ✅ SILENCIAR MÚSICA SI PIERDES O GANAS
             soundManager.pauseMusic()
         }
     }
@@ -204,7 +203,7 @@ fun LevelScreen(
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 90.dp.toPx() } 
 
-        // ✅ LÍNEA DE PELIGRO: 360dp desde el fondo (Sobre el cañón)
+        // ✅ LÍNEA DE PELIGRO ELEVADA (Nivel de burbuja azul cielo)
         val dangerAreaHeightPx = with(density) { 360.dp.toPx() } 
         val availableHeight = totalHeight - boardTopPaddingPx - dangerAreaHeightPx
         val finalDangerRow = (availableHeight / verticalSpacingPx).toInt()
@@ -326,7 +325,9 @@ fun LevelScreen(
                     isShopEnabled = currentGameMode != GameMode.ADVENTURE, 
                     onShopPositioned = { shopRect = it }, 
                     onCannonPositioned = { cannonRect = it }, 
-                    onNextBubblePositioned = { nextBubbleRect = it }
+                    onNextBubblePositioned = { nextBubbleRect = it },
+                    shakeIntensity = finalShakeIntensity, // ✅ Sincronizado para reacciones
+                    isDanger = isDangerActive // ✅ Sincronizado para reacciones
                 )
             }
         }
@@ -334,18 +335,7 @@ fun LevelScreen(
         GameTopBar(score = score, bestScore = highScore, coins = coins, timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null, onSettingsClick = { viewModel.togglePause() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() })
 
         if (showQuickShop) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) {
-                Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
-                    val brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))
-                    Column(modifier = Modifier.background(brush).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(id = R.string.shop_title), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
-                        Spacer(Modifier.height(20.dp))
-                        ItemRow(stringResource(id = R.string.shop_item_fireball), stringResource(id = R.string.shop_item_fireball), 1000, "🔥") { viewModel.buyFireball(); showQuickShop = false }
-                        Spacer(Modifier.height(24.dp))
-                        Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Color(0xFF1A237E)).clickable { showQuickShop = false }, contentAlignment = Alignment.Center) { Text(stringResource(id = R.string.shop_close), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp) }
-                    }
-                }
-            }
+            QuickShopOverlay(onDismiss = { showQuickShop = false }, onBuyFireball = { viewModel.buyFireball() })
         }
 
         if (gameState == GameState.IDLE) {
@@ -353,24 +343,7 @@ fun LevelScreen(
                 val advViewModel = viewModel as? AdventureViewModel; val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
                 if (currentLevel != null) { AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { viewModel.startGame() }) }
             } else {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
-                    val isTimeAttack = viewModel.gameMode == GameMode.TIME_ATTACK; val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
-                    Surface(modifier = Modifier.width(340.dp).padding(16.dp), shape = RoundedCornerShape(32.dp), color = Color(0xFF0F1444), border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))), shadowElevation = 24.dp) {
-                        Column(modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = if (isTimeAttack) stringResource(id = R.string.mode_time_attack) else stringResource(id = R.string.mode_classic), style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center))
-                            Spacer(Modifier.height(16.dp))
-                            Text(text = if (isTimeAttack) stringResource(id = R.string.mode_desc_time) else stringResource(id = R.string.mode_desc_classic), color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp)
-                            if (highScore > 0) {
-                                Spacer(Modifier.height(24.dp))
-                                Row(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(id = R.string.game_best_label) + ": $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                                }
-                            }
-                            Spacer(Modifier.height(40.dp))
-                            Button(onClick = { viewModel.startGame() }, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor), elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)) { Text(stringResource(id = R.string.mode_play_now), color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp) }
-                        }
-                    }
-                }
+                ModeStartOverlay(gameMode = viewModel.gameMode, highScore = highScore, onStart = { viewModel.startGame() })
             }
         }
 
@@ -387,22 +360,65 @@ fun LevelScreen(
         }
 
         if (gameState == GameState.WON || gameState == GameState.LOST) {
-            OverlayMenu(title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over), onContinue = null, onRestart = { viewModel.restartGame() }, onExit = { onMenuClick() }, score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE, stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0, onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, context.getString(R.string.game_redeemed), Toast.LENGTH_SHORT).show() } } } else null, onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } }, currentLevelId = currentLevelId)
+            OverlayMenu(title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over), onContinue = null, onRestart = { viewModel.restartGame() }, onExit = { onMenuClick() }, score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE, stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0, currentLevelId = currentLevelId, onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, context.getString(R.string.game_redeemed), Toast.LENGTH_SHORT).show() } } } else null, onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } })
         }
 
         if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-                Surface(modifier = Modifier.width(320.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), tonalElevation = 8.dp, shadowElevation = 12.dp, border = BorderStroke(2.dp, Color.White.copy(alpha = 0.15f))) {
-                    Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF64FFDA), modifier = Modifier.size(64.dp))
-                        Spacer(Modifier.height(16.dp))
-                        Text(text = stringResource(id = R.string.adventure_revive_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(12.dp))
-                        Text(text = stringResource(id = R.string.adventure_revive_desc), color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
-                        Spacer(Modifier.height(32.dp))
-                        Button(onClick = { viewModel.showReviveAlert = false; viewModel.togglePause() }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text(stringResource(id = R.string.adventure_ready), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
+            ReviveAlertOverlay(onDismiss = { (viewModel as AdventureViewModel).showReviveAlert = false; viewModel.togglePause() })
+        }
+    }
+}
+
+@Composable
+fun QuickShopOverlay(onDismiss: () -> Unit, onBuyFireball: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { onDismiss() }, contentAlignment = Alignment.Center) {
+        Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
+            val brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))
+            Column(modifier = Modifier.background(brush).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stringResource(id = R.string.shop_title), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
+                Spacer(Modifier.height(20.dp))
+                ItemRow(stringResource(id = R.string.shop_item_fireball), stringResource(id = R.string.shop_item_fireball), 1000, "🔥") { onBuyFireball(); onDismiss() }
+                Spacer(Modifier.height(24.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Color(0xFF1A237E)).clickable { onDismiss() }, contentAlignment = Alignment.Center) { Text(stringResource(id = R.string.shop_close), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ModeStartOverlay(gameMode: GameMode, highScore: Int, onStart: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
+        val isTimeAttack = gameMode == GameMode.TIME_ATTACK; val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
+        Surface(modifier = Modifier.width(340.dp).padding(16.dp), shape = RoundedCornerShape(32.dp), color = Color(0xFF0F1444), border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))), shadowElevation = 24.dp) {
+            Column(modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = if (isTimeAttack) stringResource(id = R.string.mode_time_attack) else stringResource(id = R.string.mode_classic), style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center))
+                Spacer(Modifier.height(16.dp))
+                Text(text = if (isTimeAttack) stringResource(id = R.string.mode_desc_time) else stringResource(id = R.string.mode_desc_classic), color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp)
+                if (highScore > 0) {
+                    Spacer(Modifier.height(24.dp))
+                    Row(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(id = R.string.game_best_label) + ": $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
+                Spacer(Modifier.height(40.dp))
+                Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor), elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)) { Text(stringResource(id = R.string.mode_play_now), color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReviveAlertOverlay(onDismiss: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+        Surface(modifier = Modifier.width(320.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), tonalElevation = 8.dp, shadowElevation = 12.dp, border = BorderStroke(2.dp, Color.White.copy(alpha = 0.15f))) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF64FFDA), modifier = Modifier.size(64.dp))
+                Spacer(Modifier.height(16.dp))
+                Text(text = stringResource(id = R.string.adventure_revive_title), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                Text(text = stringResource(id = R.string.adventure_revive_desc), color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
+                Spacer(Modifier.height(32.dp))
+                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text(stringResource(id = R.string.adventure_ready), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
             }
         }
     }
@@ -451,7 +467,7 @@ fun OverlayMenu(
                 Spacer(Modifier.height(24.dp))
             }
 
-            if (isAdventure && isWin) {
+            if (isAdventure && isWin && currentLevelId > 30) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(3) { i ->
                         val scale = remember { Animatable(0f) }
@@ -511,6 +527,10 @@ fun OverlayMenu(
 
 fun mapBubbleColor(type: BubbleColor): Color = when (type) {
     BubbleColor.RED -> BubbleRed; BubbleColor.BLUE -> BubbleBlue; BubbleColor.GREEN -> BubbleGreen; BubbleColor.PURPLE -> BubblePurple; BubbleColor.YELLOW -> BubbleYellow; BubbleColor.CYAN -> BubbleCyan; BubbleColor.BOMB -> Color(0xFF212121); BubbleColor.RAINBOW -> Color.White
+}
+
+private fun highScore(viewModel: GameViewModel): Int {
+    return viewModel.highScore
 }
 
 @Composable
