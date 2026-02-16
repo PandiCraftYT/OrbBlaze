@@ -27,7 +27,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     private var musicVolume: Float = 0.5f
     private var isMusicMuted: Boolean = false
     
-    // ✅ NUEVO: Control de intención para evitar música superpuesta o indebida
+    // Control de intención para evitar música superpuesta o indebida
     private var shouldPlayMusic: Boolean = true
 
     init {
@@ -122,9 +122,8 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     fun play(type: SoundType) {
-        // ✅ Si ganamos o perdemos, la intención de la música de fondo cambia a FALSE
+        // Al sonar WIN o LOSE, pausamos la música de fondo
         if (type == SoundType.WIN || type == SoundType.LOSE) {
-            shouldPlayMusic = false
             pauseMusic()
         }
         
@@ -143,9 +142,8 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     fun startMusic() {
-        // ✅ Solo iniciamos si el contexto actual lo permite (shouldPlayMusic)
-        if (!shouldPlayMusic) return
-        
+        // ✅ Aseguramos que la música siempre pueda reanudarse si se llama a este método
+        shouldPlayMusic = true
         try {
             if (mediaPlayer == null) initMusic()
             if (mediaPlayer?.isPlaying == false) {
@@ -156,7 +154,6 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         }
     }
     
-    // ✅ Nuevo: Fuerza el inicio de la música (para cuando volvemos a jugar)
     fun forceStartMusic() {
         shouldPlayMusic = true
         startMusic()
@@ -172,7 +169,6 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         }
     }
 
-    // ✅ Nuevo: Pausa la música y marca que no debería sonar hasta nueva orden
     fun stopMusicIntentional() {
         shouldPlayMusic = false
         pauseMusic()
