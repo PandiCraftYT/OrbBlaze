@@ -26,6 +26,9 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     private var sfxVolume: Float = 1.0f
     private var musicVolume: Float = 0.5f
     private var isMusicMuted: Boolean = false
+    
+    // ✅ NUEVO: Control de intención para evitar música superpuesta o indebida
+    private var shouldPlayMusic: Boolean = true
 
     init {
         val audioAttributes = AudioAttributes.Builder()
@@ -119,8 +122,9 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     fun play(type: SoundType) {
-        // ✅ SI ES GANAR O PERDER, DETENEMOS LA MÚSICA DE FONDO ANTES
+        // ✅ Si ganamos o perdemos, la intención de la música de fondo cambia a FALSE
         if (type == SoundType.WIN || type == SoundType.LOSE) {
+            shouldPlayMusic = false
             pauseMusic()
         }
         
@@ -139,6 +143,9 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     fun startMusic() {
+        // ✅ Solo iniciamos si el contexto actual lo permite (shouldPlayMusic)
+        if (!shouldPlayMusic) return
+        
         try {
             if (mediaPlayer == null) initMusic()
             if (mediaPlayer?.isPlaying == false) {
@@ -147,6 +154,12 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         } catch (e: Exception) {
             Log.e("SoundManager", "Error starting music", e)
         }
+    }
+    
+    // ✅ Nuevo: Fuerza el inicio de la música (para cuando volvemos a jugar)
+    fun forceStartMusic() {
+        shouldPlayMusic = true
+        startMusic()
     }
 
     fun pauseMusic() {
@@ -157,6 +170,12 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         } catch (e: Exception) {
             Log.e("SoundManager", "Error pausing music", e)
         }
+    }
+
+    // ✅ Nuevo: Pausa la música y marca que no debería sonar hasta nueva orden
+    fun stopMusicIntentional() {
+        shouldPlayMusic = false
+        pauseMusic()
     }
 
     fun release() {

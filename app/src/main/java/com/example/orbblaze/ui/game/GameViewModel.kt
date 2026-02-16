@@ -60,6 +60,7 @@ open class GameViewModel(
         protected set
 
     protected var timerJob: Job? = null
+    private var physicsJob: Job? = null
 
     var shotsFiredCount by mutableIntStateOf(0)
         protected set
@@ -117,7 +118,6 @@ open class GameViewModel(
 
     var dynamicDangerRow by mutableIntStateOf(12)
 
-    // ✅ NUEVO: Contador de combos consecutivos
     var comboMultiplier by mutableIntStateOf(1)
         protected set
 
@@ -214,6 +214,7 @@ open class GameViewModel(
         visualScrollOffset = 0f
         timeLeft = 90 
         isFireballQueued = false
+        physicsJob?.cancel()
         activeProjectile = null
         shooterAngle = 0f
         shotTick = 0
@@ -281,9 +282,10 @@ open class GameViewModel(
     }
 
     protected fun startPhysicsLoop() {
-        viewModelScope.launch {
+        physicsJob?.cancel()
+        physicsJob = viewModelScope.launch {
             var lastTime = System.currentTimeMillis()
-            while (activeProjectile != null) {
+            while (isActive && activeProjectile != null) {
                 if (isPaused) { 
                     delay(100)
                     lastTime = System.currentTimeMillis()
@@ -304,7 +306,7 @@ open class GameViewModel(
                 val stepDelta = deltaTime / subSteps
 
                 repeat(subSteps) {
-                    if (collisionDetected) return@repeat
+                    if (collisionDetected || !isActive) return@repeat
                     
                     var nextX = currentP.x + currentP.velocityX * stepDelta
                     var nextY = currentP.y + currentP.velocityY * stepDelta
@@ -340,7 +342,10 @@ open class GameViewModel(
                         currentP = currentP.copy(x = nextX, y = nextY, velocityX = nextVx)
                     }
                 }
-                if (!collisionDetected) activeProjectile = currentP else activeProjectile = null
+                
+                if (isActive) {
+                    if (!collisionDetected) activeProjectile = currentP else activeProjectile = null
+                }
                 delay(8) 
             }
         }
@@ -354,7 +359,6 @@ open class GameViewModel(
         }
         if (toRemove.isNotEmpty()) {
             soundEvent = SoundType.POP; 
-            // Puntos por fireball también afectados por combo
             val pts = (toRemove.size * 10) * comboMultiplier
             score += pts
             triggerShake(toRemove.size * 0.5f)
@@ -487,14 +491,20 @@ open class GameViewModel(
             }
         }
         
-        // ✅ LÓGICA DE COMBO
         if (matched) {
             comboMultiplier++
         } else {
             comboMultiplier = 1
         }
         
-        bubblesByPosition = newGrid; activeProjectile = null; onPostSnap()
+        // ✅ MEJORA: Solo llamamos a remover burbujas flotantes si hubo un match/explosión.
+        // Si no hubo match, es imposible que haya burbujas colgando nuevas.
+        bubblesByPosition = newGrid
+        if (matched) {
+            removeFloatingBubbles(newGrid.toMutableMap())
+        }
+        
+        activeProjectile = null; onPostSnap()
     }
 
     protected open fun onPostSnap() {
@@ -522,20 +532,18 @@ open class GameViewModel(
         soundEvent = SoundType.POP; val count = matches.size
         if (count >= 6) unlockAchievement("combo_master")
         
-        // ✅ Puntos multiplicados por el combo actual
         val basePoints = (count * 10) + ((count - 3) * 20)
         val points = basePoints * comboMultiplier
         
         score += points
         if (count >= 5) addCoins(count / 2)
         
-        // Mostrar "x2", "x3", etc si hay combo
         val comboText = if (comboMultiplier > 1) " COMBO x$comboMultiplier!" else ""
         spawnFloatingText(x, y, "+$points$comboText")
         
         updateHighScore()
         matches.forEach { pos -> val color = grid[pos]?.color ?: visualColor; grid.remove(pos); val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, color) }
-        removeFloatingBubbles(grid)
+        // Nota: removeFloatingBubbles ahora se llama desde snapToGrid solo si matched es true
     }
 
     private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float): Boolean {
@@ -567,11 +575,12 @@ open class GameViewModel(
         spawnFloatingText(cx, cy, "+$points")
         updateHighScore()
         joyTick++
-        removeFloatingBubbles(grid)
     }
 
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         val floating = engine.findFloatingBubbles(grid, rowsDroppedCount)
+        if (floating.isEmpty()) return
+        
         if (floating.size >= 10) triggerShake(floating.size * 0.3f)
         floating.forEach { pos -> 
             val b = grid[pos]
@@ -579,8 +588,10 @@ open class GameViewModel(
             val (bx, by) = getBubbleCenter(pos)
             spawnExplosion(bx, by, b?.color ?: BubbleColor.BLUE)
             addCoins(1)
-            score += (20 * comboMultiplier) // Caídas también aprovechan el combo
+            score += (20 * comboMultiplier)
         }
+        // Actualizamos el estado global del grid después de quitar las flotantes
+        bubblesByPosition = grid.toMap()
     }
 
     protected fun checkGameConditions(m: BoardMetricsPx) {

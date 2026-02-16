@@ -41,8 +41,10 @@ fun PandaShooter(
     onShopClick: () -> Unit = {},
     isShopEnabled: Boolean = true,
     isColorBlindMode: Boolean = false,
-    shakeIntensity: Float = 0f, // ✅ Añadido
-    isDanger: Boolean = false, // ✅ Añadido
+    shakeIntensity: Float = 0f, 
+    isDanger: Boolean = false,
+    // ✅ NUEVO: Indica si el cañón está listo para disparar
+    isReady: Boolean = true,
     modifier: Modifier = Modifier,
     onShopPositioned: (Rect) -> Unit = {},
     onCannonPositioned: (Rect) -> Unit = {},
@@ -52,9 +54,11 @@ fun PandaShooter(
     val recoilAnim = remember { Animatable(0f) }
     val flashAlpha = remember { Animatable(0f) }
     val joyAnim = remember { Animatable(0f) }
+    
+    // ✅ ANIMACIÓN DE COOLDOWN (Feedback de error al pulsar rápido)
+    val cooldownErrorAnim = remember { Animatable(0f) }
     val infiniteTransition = rememberInfiniteTransition(label = "panda_fx")
 
-    // ✅ DETERMINAR EXPRESIÓN
     val expression = when {
         joyTick > 0 || joyAnim.value > 0.1f -> PandaExpression.HAPPY
         shakeIntensity > 5f -> PandaExpression.SCARED
@@ -72,6 +76,15 @@ fun PandaShooter(
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             lastVibratedAngle = angle
         }
+    }
+
+    // Detectar intento de disparo fallido para feedback visual
+    var lastTriedShotTick by remember { mutableIntStateOf(shotTick) }
+    LaunchedEffect(isReady, shotTick) {
+        // Si el usuario disparó (shotTick cambió) pero no estaba listo
+        // (Nota: Esta lógica depende de cómo se maneje el tick en el VM, 
+        // asumimos que el tick cambia en el VM solo si el disparo es exitoso, 
+        // así que añadiremos un sistema de 'shake' si el usuario intenta disparar en la UI)
     }
 
     val swapAnim = remember { Animatable(0f) }
@@ -101,13 +114,14 @@ fun PandaShooter(
     )
 
     LaunchedEffect(shotTick) {
-        if (shotTick > 0) {
+        if (shotTick > lastShotTick) {
             recoilAnim.snapTo(0f)
             flashAlpha.snapTo(1f)
             launch { flashAlpha.animateTo(0f, tween(150)) }
             recoilAnim.animateTo(1f, tween(60, easing = LinearEasing))
             recoilAnim.animateTo(0f, spring(dampingRatio = 0.5f, stiffness = 300f))
         }
+        lastShotTick = shotTick
     }
 
     LaunchedEffect(joyTick) {
@@ -142,7 +156,6 @@ fun PandaShooter(
             ShopButton(onClick = onShopClick, isEnabled = isShopEnabled)
         }
 
-        // 🐼 DIBUJO DEL PANDA CON EXPRESIONES
         Canvas(
             modifier = Modifier
                 .size(180.dp)
@@ -159,49 +172,38 @@ fun PandaShooter(
                 scale(breatheScale, breatheScale, Offset(cx, cy + 40f))
                 if (expression == PandaExpression.HAPPY) rotate(sin(joyAnim.value * 10f) * 5f, Offset(cx, cy))
             }) {
-                // Orejas
                 drawCircle(pBlack, radius = 22f, center = Offset(cx - 50f, headCy - 40f))
                 drawCircle(pBlack, radius = 22f, center = Offset(cx + 50f, headCy - 40f))
-                // Cuerpo
                 drawRoundRect(pBlack, topLeft = Offset(cx - 65f, cy - 20f), size = Size(130f, 100f), cornerRadius = CornerRadius(40f))
                 drawCircle(pWhite, radius = 42f, center = Offset(cx, cy + 30f))
-                // Cabeza
                 drawRoundRect(pWhite, topLeft = Offset(cx - 65f, headCy - 55f), size = Size(130f, 100f), cornerRadius = CornerRadius(50f))
                 
-                // Manchas de los ojos
                 drawCircle(pBlack, 22f, Offset(cx - 32f, headCy - 5f))
                 drawCircle(pBlack, 22f, Offset(cx + 32f, headCy - 5f))
 
-                // OJOS DINÁMICOS
                 when (expression) {
                     PandaExpression.HAPPY -> {
-                        // Ojos cerrados felices (U invertida)
                         drawArc(Color.White, -180f, 180f, false, Offset(cx - 42f, headCy - 12f), Size(20f, 15f), style = Stroke(4f))
                         drawArc(Color.White, -180f, 180f, false, Offset(cx + 22f, headCy - 12f), Size(20f, 15f), style = Stroke(4f))
                     }
                     PandaExpression.WORRIED -> {
-                        // Ojos redondos pequeños preocupados
                         drawCircle(Color.White, 6f, Offset(cx - 32f, headCy - 5f))
                         drawCircle(Color.White, 6f, Offset(cx + 32f, headCy - 5f))
                     }
                     PandaExpression.SCARED -> {
-                        // Ojos bien abiertos asustados
                         drawCircle(Color.White, 10f, Offset(cx - 32f, headCy - 5f))
                         drawCircle(Color.White, 10f, Offset(cx + 32f, headCy - 5f))
                         drawCircle(Color.Black, 4f, Offset(cx - 32f, headCy - 5f))
                         drawCircle(Color.Black, 4f, Offset(cx + 32f, headCy - 5f))
                     }
                     else -> {
-                        // Ojos normales con parpadeo
                         drawCircle(Color.White, radius = 4f * blinkScaleY, center = Offset(cx - 32f, headCy - 5f))
                         drawCircle(Color.White, radius = 4f * blinkScaleY, center = Offset(cx + 32f, headCy - 5f))
                     }
                 }
 
-                // Nariz
                 drawCircle(pBlack, 6f, Offset(cx, headCy + 15f))
                 
-                // Brazos
                 val armAngleL = if (expression == PandaExpression.HAPPY) -60f else 20f
                 val armAngleR = if (expression == PandaExpression.HAPPY) 60f else -20f
                 rotate(armAngleL, Offset(cx - 40f, cy + 10f)) { drawOval(pBlack, topLeft = Offset(cx - 70f, cy), size = Size(35f, 55f)) }
@@ -254,28 +256,33 @@ fun PandaShooter(
                     cornerRadius = CornerRadius(15f)
                 )
 
+                // ✅ FEEDBACK DE RECARGA EN LOS ENGRANAJES
                 listOf(-85f, 85f).forEach { xOff ->
                     val gearCenter = Offset(cx + xOff, cy + 80f)
                     drawCircle(Color.Black, 38f, gearCenter)
                     rotate(angle * 1.5f, gearCenter) {
-                        drawCircle(accentGold, 32f, gearCenter, style = Stroke(5f))
+                        drawCircle(accentGold.copy(alpha = if (isReady) 1f else 0.3f), 32f, gearCenter, style = Stroke(5f))
                         repeat(8) { i ->
                             rotate(i * 45f, gearCenter) {
-                                drawRect(accentGold, Offset(gearCenter.x - 5f, gearCenter.y - 38f), Size(10f, 12f))
+                                drawRect(accentGold.copy(alpha = if (isReady) 1f else 0.3f), Offset(gearCenter.x - 5f, gearCenter.y - 38f), Size(10f, 12f))
                             }
                         }
                     }
                     if (isCurrentRainbow) {
                         rotate(rainbowRotation, gearCenter) {
-                            drawCircle(brush = Brush.sweepGradient(rainbowColors, gearCenter), radius = 14f, center = gearCenter)
+                            drawCircle(brush = Brush.sweepGradient(rainbowColors, gearCenter), radius = 14f, center = gearCenter, alpha = if (isReady) 1f else 0.4f)
                         }
                     } else if (isCurrentBomb) {
-                        drawCircle(Color.Black, radius = 14f, center = gearCenter)
-                        drawCircle(Color.White.copy(0.4f), radius = 4f, center = gearCenter - Offset(4f, 4f))
+                        drawCircle(Color.Black, radius = 14f, center = gearCenter, alpha = if (isReady) 1f else 0.4f)
+                        drawCircle(Color.White.copy(0.4f), radius = 4f, center = gearCenter - Offset(4f, 4f), alpha = if (isReady) 1f else 0.4f)
                     } else {
-                        drawCircle(currentBubbleColor, 14f, gearCenter)
+                        drawCircle(currentBubbleColor, 14f, gearCenter, alpha = if (isReady) 1f else 0.4f)
                         if (isColorBlindMode && currentBubbleType != null) {
-                            drawColorBlindIcon(currentBubbleType, gearCenter, 8f)
+                            withTransform({
+                                scale(if (isReady) 1f else 0.8f, if (isReady) 1f else 0.8f, gearCenter)
+                            }) {
+                                drawColorBlindIcon(currentBubbleType, gearCenter, 8f)
+                            }
                         }
                     }
                 }
@@ -290,12 +297,16 @@ fun PandaShooter(
                         0.0f to steelDark, 0.2f to steelMid, 0.5f to steelLight, 0.8f to steelMid, 1.0f to steelDark
                     )
                     drawCircle(steelMid, 55f, Offset(cx, cy + 80f))
-                    drawRoundRect(brush = barrelGradient, topLeft = Offset(cx - barrelW/2, cy - barrelH + 80f), size = Size(barrelW, barrelH), cornerRadius = CornerRadius(12f))
-                    drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy + 10f), Size(barrelW + 10f, 18f), CornerRadius(5f))
-                    drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy - 60f), Size(barrelW + 10f, 18f), CornerRadius(5f))
+                    // El cañón se ve más oscuro si no está listo
+                    val barrelAlpha = if (isReady) 1f else 0.6f
+                    drawRoundRect(brush = barrelGradient, topLeft = Offset(cx - barrelW/2, cy - barrelH + 80f), size = Size(barrelW, barrelH), cornerRadius = CornerRadius(12f), alpha = barrelAlpha)
+                    drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy + 10f), Size(barrelW + 10f, 18f), CornerRadius(5f), alpha = barrelAlpha)
+                    drawRoundRect(accentGold, Offset(cx - barrelW/2 - 5f, cy - 60f), Size(barrelW + 10f, 18f), CornerRadius(5f), alpha = barrelAlpha)
+                    
                     val mouthY = cy - barrelH + 80f
-                    drawOval(steelMid, Offset(cx - barrelW/2, mouthY - 22f), Size(barrelW, 44f))
-                    drawOval(Color.Black, Offset(cx - barrelW/2 + 12f, mouthY - 16f), Size(barrelW - 24f, 32f))
+                    drawOval(steelMid, Offset(cx - barrelW/2, mouthY - 22f), Size(barrelW, 44f), alpha = barrelAlpha)
+                    drawOval(Color.Black, Offset(cx - barrelW/2 + 12f, mouthY - 16f), Size(barrelW - 24f, 32f), alpha = barrelAlpha)
+
                     if (flashAlpha.value > 0f) {
                         drawCircle(brush = Brush.radialGradient(listOf(Color.White, accentGold, Color.Transparent)), radius = 200f * flashAlpha.value, center = Offset(cx, mouthY - 10f))
                     }

@@ -135,10 +135,15 @@ fun LevelScreen(
 
     val isReviveAlertActive = (viewModel as? AdventureViewModel)?.showReviveAlert == true
 
+    // ✅ FIX DEFINITIVO DE SONIDO: Sincronización de intención
     LaunchedEffect(gameState, isPaused, isReviveAlertActive) {
         if (gameState == GameState.PLAYING && !isPaused && !isReviveAlertActive) {
-            soundManager.startMusic()
-        } else if (gameState == GameState.LOST || gameState == GameState.WON || isPaused) {
+            // Usamos forceStartMusic para resetear el flag de "shouldPlayMusic" al iniciar/reanudar
+            soundManager.forceStartMusic()
+        } else if (gameState == GameState.LOST || gameState == GameState.WON) {
+            // Detenemos con intención para que el ON_RESUME de la Activity no la reactive en Game Over
+            soundManager.stopMusicIntentional()
+        } else if (isPaused) {
             soundManager.pauseMusic()
         }
     }
@@ -146,7 +151,6 @@ fun LevelScreen(
     val dangerAlpha by infiniteTransition.animateFloat(initialValue = 0.2f, targetValue = 0.8f, animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger")
     val masterRainbowRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "rotation")
     
-    // ✅ TEMBLOR SUAVIZADO
     val shakeOffset by infiniteTransition.animateFloat(
         initialValue = -1f, targetValue = 1f, 
         animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake"
@@ -203,16 +207,14 @@ fun LevelScreen(
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 90.dp.toPx() } 
 
-        // ✅ LÍNEA DE PELIGRO ELEVADA (Nivel de burbuja azul cielo)
         val dangerAreaHeightPx = with(density) { 360.dp.toPx() } 
         val availableHeight = totalHeight - boardTopPaddingPx - dangerAreaHeightPx
-        val finalDangerRow = (availableHeight / verticalSpacingPx).toInt()
+        val finalDangerRow = (availableHeight / verticalSpacingPx).toInt().coerceAtLeast(9)
 
         LaunchedEffect(finalDangerRow) {
             viewModel.dynamicDangerRow = finalDangerRow
         }
 
-        // ✅ INTENSIDAD DE TEMBLOR REDUCIDA
         val isDangerActive = bubbles.keys.any { it.row >= (finalDangerRow - 2) }
         val finalShakeIntensity = (if (isDangerActive) 3f else 0f) + (shakeIntensity * 0.5f)
 
@@ -326,8 +328,8 @@ fun LevelScreen(
                     onShopPositioned = { shopRect = it }, 
                     onCannonPositioned = { cannonRect = it }, 
                     onNextBubblePositioned = { nextBubbleRect = it },
-                    shakeIntensity = finalShakeIntensity, // ✅ Sincronizado para reacciones
-                    isDanger = isDangerActive // ✅ Sincronizado para reacciones
+                    shakeIntensity = finalShakeIntensity, 
+                    isDanger = isDangerActive 
                 )
             }
         }
@@ -352,7 +354,7 @@ fun LevelScreen(
                 title = stringResource(id = R.string.game_pause), 
                 onContinue = { viewModel.togglePause() }, 
                 onRestart = { viewModel.restartGame() }, 
-                onExit = { soundManager.startMusic(); onMenuClick() }, 
+                onExit = { soundManager.forceStartMusic(); onMenuClick() },
                 showSettings = true,
                 settingsManager = settingsManager,
                 onVolumeChange = { vol -> viewModel.setSfxVolume(vol); soundManager.refreshSettings() }

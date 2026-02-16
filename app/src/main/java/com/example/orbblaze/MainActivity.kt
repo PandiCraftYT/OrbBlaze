@@ -48,11 +48,19 @@ class MainActivity : ComponentActivity() {
                 val factory = remember { OrbBlazeViewModelFactory(settingsManager, application) }
                 val lifecycleOwner = LocalLifecycleOwner.current
 
+                // ✅ REFINAMIENTO DE SONIDO: Gestión centralizada del ciclo de vida
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         when (event) {
-                            Lifecycle.Event.ON_RESUME -> globalSoundManager.startMusic()
-                            Lifecycle.Event.ON_PAUSE -> globalSoundManager.pauseMusic()
+                            Lifecycle.Event.ON_RESUME -> {
+                                // Al volver a la app, refrescamos velocidad y reanudamos si corresponde
+                                globalSoundManager.refreshSettings()
+                                globalSoundManager.startMusic()
+                            }
+                            Lifecycle.Event.ON_PAUSE -> {
+                                // Pausamos inmediatamente al salir de la app
+                                globalSoundManager.pauseMusic()
+                            }
                             else -> {}
                         }
                     }
@@ -66,12 +74,11 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     AppNavigation(factory, globalSoundManager, adsManager, settingsManager)
 
-                    // ✅ AJUSTE DEFINITIVO DE POSICIÓN
-                    // Usamos navigationBarsPadding() para pegarlo al milímetro al centro de control
+                    // ✅ AJUSTE DEFINITIVO DE POSICIÓN DE ANUNCIOS
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .navigationBarsPadding() // Se pega exactamente al borde de los botones/gestos
+                            .navigationBarsPadding()
                             .fillMaxWidth()
                     ) {
                         adsManager.BannerAd()
