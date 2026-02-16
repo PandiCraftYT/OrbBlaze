@@ -135,13 +135,10 @@ fun LevelScreen(
 
     val isReviveAlertActive = (viewModel as? AdventureViewModel)?.showReviveAlert == true
 
-    // ✅ FIX DEFINITIVO DE SONIDO: Sincronización de intención
     LaunchedEffect(gameState, isPaused, isReviveAlertActive) {
         if (gameState == GameState.PLAYING && !isPaused && !isReviveAlertActive) {
-            // Usamos forceStartMusic para resetear el flag de "shouldPlayMusic" al iniciar/reanudar
             soundManager.forceStartMusic()
         } else if (gameState == GameState.LOST || gameState == GameState.WON) {
-            // Detenemos con intención para que el ON_RESUME de la Activity no la reactive en Game Over
             soundManager.stopMusicIntentional()
         } else if (isPaused) {
             soundManager.pauseMusic()
@@ -199,7 +196,6 @@ fun LevelScreen(
         val totalWidth = constraints.maxWidth.toFloat()
         val totalHeight = constraints.maxHeight.toFloat()
         val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
-        val bubbleRadiusPx = bubbleDiameterPx / 2f
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
@@ -228,8 +224,8 @@ fun LevelScreen(
             }
         }
 
-        LaunchedEffect(totalWidth, boardTopPaddingPx, columnsCount) {
-            viewModel.setBoardMetrics(BoardMetricsPx(horizontalSpacing = horizontalSpacingPx, bubbleDiameter = bubbleDiameterPx, verticalSpacing = verticalSpacingPx, boardTopPadding = boardTopPaddingPx, boardStartPadding = boardStartPadding, ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f), screenWidth = totalWidth))
+        LaunchedEffect(totalWidth, totalHeight, boardTopPaddingPx, columnsCount) {
+            viewModel.setBoardMetrics(BoardMetricsPx(horizontalSpacing = horizontalSpacingPx, bubbleDiameter = bubbleDiameterPx, verticalSpacing = verticalSpacingPx, boardTopPadding = boardTopPaddingPx, boardStartPadding = boardStartPadding, ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f), screenWidth = totalWidth, screenHeight = totalHeight))
         }
 
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = shakeOffset * finalShakeIntensity; translationY = shakeOffset * finalShakeIntensity }) {
@@ -249,31 +245,28 @@ fun LevelScreen(
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
                 )
 
-                val pivotX = size.width / 2f
-                val pivotY = size.height - 220.dp.toPx() 
+                // ✅ DIBUJO DE TRAYECTORIA MEJORADO
                 if (isAiming) {
-                    val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
-                    var dirX = sin(angleRad).toFloat(); var dirY = -cos(angleRad).toFloat()
-                    val barrelLength = 95.dp.toPx(); var current = Offset(pivotX + dirX * barrelLength, pivotY + dirY * barrelLength)
-                    val totalAimLength = size.height * 0.85f; var remaining = totalAimLength
-                    val dotSpacing = 24.dp.toPx(); val baseDotRadius = 4.dp.toPx()
                     val bubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor)
-                    var totalTraversed = 0f
-                    while (remaining > 0f) {
-                        val bounceX = if (dirX > 0f) size.width else 0f; val tToWall = (bounceX - current.x) / dirX
-                        val segmentLength = if (tToWall <= 0 || tToWall >= remaining) remaining else tToWall
-                        var segmentTraversed = (aimPulse * dotSpacing) % dotSpacing
-                        while (segmentTraversed < segmentLength) {
-                            val dotPos = Offset(current.x + dirX * segmentTraversed, current.y + dirY * segmentTraversed)
-                            val progress = (totalTraversed + segmentTraversed) / totalAimLength
-                            val alpha = (0.7f - progress * 0.5f).coerceIn(0.1f, 0.7f); val radius = baseDotRadius * (1f - progress * 0.3f)
-                            drawCircle(brush = Brush.radialGradient(colors = listOf(bubbleColor.copy(alpha = alpha), Color.Transparent), center = dotPos, radius = radius * 3f), radius = radius * 3f, center = dotPos)
-                            drawCircle(color = Color.White.copy(alpha = (alpha + 0.2f).coerceAtMost(1f)), radius = radius, center = dotPos)
-                            segmentTraversed += dotSpacing
-                        }
-                        if (tToWall <= 0 || tToWall >= remaining) break
-                        totalTraversed += segmentLength; val hit = Offset(current.x + dirX * tToWall, current.y + dirY * tToWall)
-                        remaining -= tToWall; dirX *= -1f; current = hit
+                    viewModel.trajectoryPoints.forEachIndexed { index, point ->
+                        val progress = index.toFloat() / viewModel.trajectoryPoints.size.coerceAtLeast(1)
+                        val alpha = (0.7f - progress * 0.4f).coerceIn(0.1f, 0.7f)
+                        val radius = (4.dp.toPx() * (1f - progress * 0.2f)).coerceAtLeast(2.dp.toPx())
+                        
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(bubbleColor.copy(alpha = alpha), Color.Transparent),
+                                center = point,
+                                radius = radius * 3f
+                            ),
+                            radius = radius * 3f,
+                            center = point
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = (alpha + 0.2f).coerceAtMost(1f)),
+                            radius = radius,
+                            center = point
+                        )
                     }
                 }
                 

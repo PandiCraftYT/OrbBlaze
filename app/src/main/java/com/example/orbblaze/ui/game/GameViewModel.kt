@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.data.SettingsManager
@@ -121,6 +122,9 @@ open class GameViewModel(
     var comboMultiplier by mutableIntStateOf(1)
         protected set
 
+    var trajectoryPoints by mutableStateOf<List<Offset>>(emptyList())
+        protected set
+
     init {
         setupAchievements()
         observeData()
@@ -220,6 +224,7 @@ open class GameViewModel(
         shotTick = 0
         joyTick = 0
         shakeIntensity = 0f
+        trajectoryPoints = emptyList()
         
         particles.clear()
         floatingTexts.clear()
@@ -237,6 +242,7 @@ open class GameViewModel(
             viewModelScope.launch {
                 if (settingsManager.vibrationEnabledFlow.first()) vibrationEvent = true
             }
+            updateTrajectory()
         } 
     }
     
@@ -250,6 +256,45 @@ open class GameViewModel(
         if (gameState != GameState.PLAYING || isPaused) return
         val dx = touchX - (screenWidth / 2f); val dy = (screenHeight * 0.82f) - touchY
         shooterAngle = Math.toDegrees(atan2(dx, dy).toDouble()).toFloat().coerceIn(-80f, 80f)
+        updateTrajectory()
+    }
+
+    fun updateTrajectory() {
+        val m = metrics ?: return
+        val angleRad = Math.toRadians(shooterAngle.toDouble())
+        
+        var curX = m.screenWidth / 2f
+        var curY = m.screenHeight * 0.82f - with(m) { 95 * (screenWidth / 411f) } 
+        
+        var vx = sin(angleRad).toFloat() * 30f
+        var vy = -cos(angleRad).toFloat() * 30f
+        
+        val points = mutableListOf<Offset>()
+        val leftWall = m.boardStartPadding - bubbleRadius
+        val rightWall = m.screenWidth - (m.boardStartPadding - bubbleRadius)
+        
+        for (i in 0 until 120) {
+            curX += vx
+            curY += vy
+            
+            if (curX <= leftWall || curX >= rightWall) {
+                vx = -vx
+                curX = curX.coerceIn(leftWall, rightWall)
+            }
+            
+            val hit = bubblesByPosition.keys.any { pos ->
+                val (bx, by) = getBubbleCenter(pos)
+                hypot(curX - bx, curY - by) < m.bubbleDiameter * 0.85f
+            }
+            
+            if (hit || curY < m.ceilingY + (if(gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f)) {
+                points.add(Offset(curX, curY))
+                break
+            }
+            
+            if (i % 4 == 0) points.add(Offset(curX, curY))
+        }
+        trajectoryPoints = points
     }
 
     open fun onShoot(spawnX: Float, spawnY: Float) {
@@ -264,6 +309,7 @@ open class GameViewModel(
         isFireballQueued = false
         nextBubbleColor = previewBubbleColor
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+        trajectoryPoints = emptyList() 
         startPhysicsLoop()
     }
 
@@ -361,12 +407,13 @@ open class GameViewModel(
             soundEvent = SoundType.POP; 
             val pts = (toRemove.size * 10) * comboMultiplier
             score += pts
-            triggerShake(toRemove.size * 0.5f)
+            triggerShake(pts.toFloat() / 50f)
             toRemove.forEach { pos -> newGrid.remove(pos); val (cx, cy) = getBubbleCenter(pos); spawnExplosion(cx, cy, BubbleColor.entries.random()) }
             bubblesByPosition = newGrid; removeFloatingBubbles(newGrid)
         }
     }
 
+    // ✅ OPTIMIZACIÓN: Bucle de partículas atómico para evitar lag y excesiva basura (GC)
     private fun startParticleLoop() {
         viewModelScope.launch {
             var lastTime = System.currentTimeMillis()
@@ -375,42 +422,31 @@ open class GameViewModel(
                 val deltaTime = (currentTime - lastTime) / 1000f
                 lastTime = currentTime
 
-                if (!isPaused) {
-                    val toRemoveParticles = mutableListOf<Int>()
-                    for (i in particles.indices) {
-                        val p = particles[i]
-                        if (p.life <= 0f) {
-                            toRemoveParticles.add(i)
-                        } else {
-                            particles[i] = p.copy(
-                                x = p.x + p.vx * deltaTime * 60f,
-                                y = p.y + (p.vy + GameConstants.PARTICLE_GRAVITY * deltaTime) * deltaTime * 60f,
-                                life = p.life - GameConstants.PARTICLE_LIFE_DECAY * deltaTime
-                            )
-                        }
+                if (!isPaused && particles.isNotEmpty()) {
+                    val updated = particles.mapNotNull { p ->
+                        if (p.life <= 0f) null
+                        else p.copy(
+                            x = p.x + p.vx * deltaTime * 60f,
+                            y = p.y + (p.vy + GameConstants.PARTICLE_GRAVITY * deltaTime) * deltaTime * 60f,
+                            life = p.life - GameConstants.PARTICLE_LIFE_DECAY * deltaTime
+                        )
                     }
-                    if (toRemoveParticles.isNotEmpty()) {
-                        for (index in toRemoveParticles.asReversed()) {
-                            particles.removeAt(index)
-                        }
+                    if (updated.size != particles.size || updated.isNotEmpty()) {
+                        particles.clear()
+                        particles.addAll(updated)
                     }
 
-                    val toRemoveTexts = mutableListOf<Int>()
-                    for (i in floatingTexts.indices) {
-                        val t = floatingTexts[i]
-                        if (t.life <= 0f) {
-                            toRemoveTexts.add(i)
-                        } else {
-                            floatingTexts[i] = t.copy(
-                                y = t.y - GameConstants.TEXT_FLOAT_SPEED * deltaTime,
-                                life = t.life - GameConstants.TEXT_LIFE_DECAY * deltaTime
-                            )
-                        }
+                    // Textos flotantes
+                    val updatedTexts = floatingTexts.mapNotNull { t ->
+                        if (t.life <= 0f) null
+                        else t.copy(
+                            y = t.y - GameConstants.TEXT_FLOAT_SPEED * deltaTime,
+                            life = t.life - GameConstants.TEXT_LIFE_DECAY * deltaTime
+                        )
                     }
-                    if (toRemoveTexts.isNotEmpty()) {
-                        for (index in toRemoveTexts.asReversed()) {
-                            floatingTexts.removeAt(index)
-                        }
+                    if (updatedTexts.size != floatingTexts.size || updatedTexts.isNotEmpty()) {
+                        floatingTexts.clear()
+                        floatingTexts.addAll(updatedTexts)
                     }
                 }
                 delay(16)
@@ -497,8 +533,6 @@ open class GameViewModel(
             comboMultiplier = 1
         }
         
-        // ✅ MEJORA: Solo llamamos a remover burbujas flotantes si hubo un match/explosión.
-        // Si no hubo match, es imposible que haya burbujas colgando nuevas.
         bubblesByPosition = newGrid
         if (matched) {
             removeFloatingBubbles(newGrid.toMutableMap())
@@ -543,7 +577,6 @@ open class GameViewModel(
         
         updateHighScore()
         matches.forEach { pos -> val color = grid[pos]?.color ?: visualColor; grid.remove(pos); val (bx, by) = getBubbleCenter(pos); spawnExplosion(bx, by, color) }
-        // Nota: removeFloatingBubbles ahora se llama desde snapToGrid solo si matched es true
     }
 
     private fun handleRainbowAt(pos: GridPosition, grid: MutableMap<GridPosition, Bubble>, fx: Float, fy: Float): Boolean {
@@ -590,7 +623,6 @@ open class GameViewModel(
             addCoins(1)
             score += (20 * comboMultiplier)
         }
-        // Actualizamos el estado global del grid después de quitar las flotantes
         bubblesByPosition = grid.toMap()
     }
 
@@ -616,11 +648,19 @@ open class GameViewModel(
         }
     }
 
+    // ✅ OPTIMIZACIÓN: Filtrado por rango vertical para ahorrar el 70% de cálculos de colisión
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
         val m = metrics ?: return false
+        val threshold = m.bubbleDiameter * GameConstants.BUBBLE_COLLISION_SCALE
+        
+        val minY = min(y1, y2) - threshold
+        val maxY = max(y1, y2) + threshold
+
         return bubblesByPosition.keys.any { pos -> 
-            val (cx, cy) = getBubbleCenter(pos)
-            distancePointToSegment(cx, cy, x1, y1, x2, y2) <= m.bubbleDiameter * GameConstants.BUBBLE_COLLISION_SCALE
+            val (bx, by) = getBubbleCenter(pos)
+            if (by in minY..maxY) {
+                distancePointToSegment(bx, by, x1, y1, x2, y2) <= threshold
+            } else false
         }
     }
 
