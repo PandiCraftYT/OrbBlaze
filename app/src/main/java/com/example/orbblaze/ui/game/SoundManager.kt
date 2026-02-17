@@ -27,7 +27,6 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     private var musicVolume: Float = 0.5f
     private var isMusicMuted: Boolean = false
     
-    // Control de intención para evitar música superpuesta o indebida
     private var shouldPlayMusic: Boolean = true
 
     init {
@@ -56,6 +55,8 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
             soundMap[SoundType.WIN] = pool.load(context, R.raw.sfx_win, 1)
             soundMap[SoundType.LOSE] = pool.load(context, R.raw.sfx_lose, 1)
             soundMap[SoundType.STICK] = pool.load(context, R.raw.sfx_stick, 1)
+            // ✅ AÑADIDO: Sonido de logros
+            soundMap[SoundType.ACHIEVEMENT] = pool.load(context, R.raw.sfx_logros, 1)
         } catch (e: Exception) {
             Log.e("SoundManager", "Error loading sounds", e)
         }
@@ -119,14 +120,10 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
 
     fun refreshSettings() {
         setMusicSpeed(1.0f)
+        updateMusicVolume()
     }
 
     fun play(type: SoundType) {
-        // Al sonar WIN o LOSE, pausamos la música de fondo
-        if (type == SoundType.WIN || type == SoundType.LOSE) {
-            pauseMusic()
-        }
-        
         val pool = soundPool ?: return
         val soundId = soundMap[type] ?: return
         pool.play(soundId, sfxVolume, sfxVolume, 1, 0, 1f)
@@ -142,7 +139,6 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     fun startMusic() {
-        // ✅ Aseguramos que la música siempre pueda reanudarse si se llama a este método
         shouldPlayMusic = true
         try {
             if (mediaPlayer == null) initMusic()
@@ -156,6 +152,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     
     fun forceStartMusic() {
         shouldPlayMusic = true
+        updateMusicVolume()
         startMusic()
     }
 

@@ -24,7 +24,7 @@ import kotlin.math.*
 
 enum class GameState { IDLE, PLAYING, WON, LOST }
 enum class GameMode { CLASSIC, TIME_ATTACK, ADVENTURE } 
-enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP }
+enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP, ACHIEVEMENT }
 
 open class GameViewModel(
     application: Application,
@@ -413,7 +413,6 @@ open class GameViewModel(
         }
     }
 
-    // ✅ OPTIMIZACIÓN: Bucle de partículas atómico para evitar lag y excesiva basura (GC)
     private fun startParticleLoop() {
         viewModelScope.launch {
             var lastTime = System.currentTimeMillis()
@@ -436,7 +435,6 @@ open class GameViewModel(
                         particles.addAll(updated)
                     }
 
-                    // Textos flotantes
                     val updatedTexts = floatingTexts.mapNotNull { t ->
                         if (t.life <= 0f) null
                         else t.copy(
@@ -648,7 +646,6 @@ open class GameViewModel(
         }
     }
 
-    // ✅ OPTIMIZACIÓN: Filtrado por rango vertical para ahorrar el 70% de cálculos de colisión
     private fun checkSweepCollision(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
         val m = metrics ?: return false
         val threshold = m.bubbleDiameter * GameConstants.BUBBLE_COLLISION_SCALE
@@ -694,7 +691,7 @@ open class GameViewModel(
             viewModelScope.launch {
                 settingsManager.unlockAchievement(id)
                 addCoins(50)
-                activeAchievement = achievement; soundEvent = SoundType.WIN; delay(4000); activeAchievement = null
+                activeAchievement = achievement; soundEvent = SoundType.ACHIEVEMENT; delay(4000); activeAchievement = null
             }
         }
     }

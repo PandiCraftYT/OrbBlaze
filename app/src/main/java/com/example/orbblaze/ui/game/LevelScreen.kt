@@ -86,6 +86,7 @@ fun LevelScreen(
     val isFireballQueued = viewModel.isFireballQueued
     val currentGameMode = viewModel.gameMode
     val shakeIntensity = viewModel.shakeIntensity
+    val activeAchievement = viewModel.activeAchievement
 
     var showQuickShop by remember { mutableStateOf(false) }
     var hasRedeemedCoins by remember { mutableStateOf(false) }
@@ -99,13 +100,22 @@ fun LevelScreen(
     val settingsManager = remember { SettingsManager(context) }
     val isColorBlindMode by settingsManager.colorBlindModeFlow.collectAsState(initial = false)
 
+    val isTutorialCompleted by settingsManager.tutorialCompletedFlow.collectAsState(initial = true)
+    var showTutorial by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTutorialCompleted) {
+        if (!isTutorialCompleted) {
+            showTutorial = true
+        }
+    }
+
     BackHandler(enabled = gameState == GameState.PLAYING && !isPaused) {
         viewModel.togglePause()
     }
 
     val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
-    
+
     val backgroundOffset by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 2000f,
         animationSpec = infiniteRepeatable(tween(40000, easing = LinearEasing), RepeatMode.Restart),
@@ -120,11 +130,11 @@ fun LevelScreen(
 
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
         when {
-            currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7)) 
-            currentLevelId <= 50 -> listOf(Color(0xFF3E2723), Color(0xFFBF360C)) 
-            currentLevelId <= 70 -> listOf(Color(0xFF1B5E20), Color(0xFF4DB6AC)) 
-            currentLevelId <= 90 -> listOf(Color(0xFF0277BD), Color(0xFFE1F5FE)) 
-            else -> listOf(Color(0xFF0D47A1), Color(0xFF000000)) 
+            currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7))
+            currentLevelId <= 50 -> listOf(Color(0xFF3E2723), Color(0xFFBF360C))
+            currentLevelId <= 70 -> listOf(Color(0xFF1B5E20), Color(0xFF4DB6AC))
+            currentLevelId <= 90 -> listOf(Color(0xFF0277BD), Color(0xFFE1F5FE))
+            else -> listOf(Color(0xFF0D47A1), Color(0xFF000000))
         }
     } else {
         listOf(BgTop, BgBottom)
@@ -147,9 +157,9 @@ fun LevelScreen(
 
     val dangerAlpha by infiniteTransition.animateFloat(initialValue = 0.2f, targetValue = 0.8f, animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "danger")
     val masterRainbowRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)), label = "rotation")
-    
+
     val shakeOffset by infiniteTransition.animateFloat(
-        initialValue = -1f, targetValue = 1f, 
+        initialValue = -1f, targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(50, easing = LinearEasing), RepeatMode.Reverse), label = "shake"
     )
 
@@ -165,11 +175,11 @@ fun LevelScreen(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
             .background(Brush.verticalGradient(colors = listOf(animatedBgTop, animatedBgBottom)))
-            .pointerInput(gameState, isPaused, showQuickShop) {
-                if (gameState != GameState.PLAYING || isPaused || showQuickShop) return@pointerInput
+            .pointerInput(gameState, isPaused, showQuickShop, showTutorial) {
+                if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(); val startPos = down.position
-                    val centerX = size.width / 2; val pandaTopY = size.height - 280.dp.toPx() 
+                    val centerX = size.width / 2; val pandaTopY = size.height - 280.dp.toPx()
                     val isPandaClick = startPos.x >= (centerX - 120.dp.toPx()) && startPos.x <= (centerX + 120.dp.toPx()) && startPos.y >= pandaTopY
                     if (isPandaClick) {
                         do { val event = awaitPointerEvent() } while (event.changes.any { it.pressed })
@@ -184,7 +194,7 @@ fun LevelScreen(
                         } while (event.changes.any { it.pressed })
                         isAiming = false
                         val barrelLengthPx = 95.dp.toPx()
-                        val pivotHeightPx = 220.dp.toPx() 
+                        val pivotHeightPx = 220.dp.toPx()
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                         val pivotX = size.width / 2f
                         val pivotY = size.height - pivotHeightPx
@@ -195,15 +205,15 @@ fun LevelScreen(
     ) {
         val totalWidth = constraints.maxWidth.toFloat()
         val totalHeight = constraints.maxHeight.toFloat()
-        val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f) 
+        val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f)
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
         val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
-        
-        val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
-        val boardTopPaddingPx = statusBarHeightPx + with(density) { 90.dp.toPx() } 
 
-        val dangerAreaHeightPx = with(density) { 360.dp.toPx() } 
+        val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
+        val boardTopPaddingPx = statusBarHeightPx + with(density) { 90.dp.toPx() }
+
+        val dangerAreaHeightPx = with(density) { 360.dp.toPx() }
         val availableHeight = totalHeight - boardTopPaddingPx - dangerAreaHeightPx
         val finalDangerRow = (availableHeight / verticalSpacingPx).toInt().coerceAtLeast(9)
 
@@ -229,10 +239,10 @@ fun LevelScreen(
         }
 
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = shakeOffset * finalShakeIntensity; translationY = shakeOffset * finalShakeIntensity }) {
-            
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val redLineY = boardTopPaddingPx + (verticalSpacingPx * finalDangerRow)
-                
+
                 if (isDangerActive || (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10)) {
                     drawRect(color = Color.Red.copy(alpha = dangerAlpha * 0.3f), size = size)
                 }
@@ -245,14 +255,13 @@ fun LevelScreen(
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
                 )
 
-                // ✅ DIBUJO DE TRAYECTORIA MEJORADO
                 if (isAiming) {
                     val bubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor)
                     viewModel.trajectoryPoints.forEachIndexed { index, point ->
                         val progress = index.toFloat() / viewModel.trajectoryPoints.size.coerceAtLeast(1)
                         val alpha = (0.7f - progress * 0.4f).coerceIn(0.1f, 0.7f)
                         val radius = (4.dp.toPx() * (1f - progress * 0.2f)).coerceAtLeast(2.dp.toPx())
-                        
+
                         drawCircle(
                             brush = Brush.radialGradient(
                                 colors = listOf(bubbleColor.copy(alpha = alpha), Color.Transparent),
@@ -269,7 +278,7 @@ fun LevelScreen(
                         )
                     }
                 }
-                
+
                 particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
                 drawIntoCanvas { canvas ->
                     val paint = android.graphics.Paint().apply { textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = android.graphics.Color.WHITE }
@@ -277,52 +286,52 @@ fun LevelScreen(
                 }
             }
 
-            bubbles.forEach { (pos, bubble) -> 
+            bubbles.forEach { (pos, bubble) ->
                 val (x, y) = viewModel.getBubbleCenter(pos)
                 VisualBubble(
-                    color = mapBubbleColor(bubble.color), 
-                    isRainbow = bubble.color == BubbleColor.RAINBOW, 
-                    isBomb = bubble.color == BubbleColor.BOMB, 
-                    rainbowRotation = masterRainbowRotation, 
+                    color = mapBubbleColor(bubble.color),
+                    isRainbow = bubble.color == BubbleColor.RAINBOW,
+                    isBomb = bubble.color == BubbleColor.BOMB,
+                    rainbowRotation = masterRainbowRotation,
                     isColorBlindMode = isColorBlindMode,
                     bubbleColorType = bubble.color,
                     modifier = Modifier.size(with(density) { bubbleDiameterPx.toDp() }).graphicsLayer { translationX = x - (bubbleDiameterPx / 2); translationY = y - (bubbleDiameterPx / 2) }
-                ) 
+                )
             }
-            activeProjectile?.let { p -> 
+            activeProjectile?.let { p ->
                 val scaleFactor = if(p.isFireball) 0.7f else 1f
                 val sizePx = bubbleDiameterPx * scaleFactor
                 VisualBubble(
-                    color = mapBubbleColor(p.color), 
-                    isRainbow = p.color == BubbleColor.RAINBOW, 
-                    isBomb = p.color == BubbleColor.BOMB, 
-                    rainbowRotation = masterRainbowRotation, 
+                    color = mapBubbleColor(p.color),
+                    isRainbow = p.color == BubbleColor.RAINBOW,
+                    isBomb = p.color == BubbleColor.BOMB,
+                    rainbowRotation = masterRainbowRotation,
                     isColorBlindMode = isColorBlindMode,
                     bubbleColorType = p.color,
                     modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2); if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f }
-                ) 
+                )
             }
 
             Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp)) {
                 PandaShooter(
-                    angle = viewModel.shooterAngle, 
-                    currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor), 
-                    currentBubbleType = currentBubbleColor, 
-                    isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW && !isFireballQueued, 
-                    nextBubbleColor = mapBubbleColor(previewBubbleColor), 
-                    nextBubbleType = previewBubbleColor, 
-                    isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW, 
-                    isColorBlindMode = isColorBlindMode, 
-                    shotTick = viewModel.shotTick, 
-                    joyTick = viewModel.joyTick, 
-                    rainbowRotation = masterRainbowRotation, 
-                    onShopClick = { if (currentGameMode == GameMode.ADVENTURE) { Toast.makeText(context, context.getString(R.string.shop_not_available_adventure), Toast.LENGTH_SHORT).show() } else { showQuickShop = true } }, 
-                    isShopEnabled = currentGameMode != GameMode.ADVENTURE, 
-                    onShopPositioned = { shopRect = it }, 
-                    onCannonPositioned = { cannonRect = it }, 
+                    angle = viewModel.shooterAngle,
+                    currentBubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor),
+                    currentBubbleType = currentBubbleColor,
+                    isCurrentRainbow = currentBubbleColor == BubbleColor.RAINBOW && !isFireballQueued,
+                    nextBubbleColor = mapBubbleColor(previewBubbleColor),
+                    nextBubbleType = previewBubbleColor,
+                    isNextRainbow = previewBubbleColor == BubbleColor.RAINBOW,
+                    isColorBlindMode = isColorBlindMode,
+                    shotTick = viewModel.shotTick,
+                    joyTick = viewModel.joyTick,
+                    rainbowRotation = masterRainbowRotation,
+                    onShopClick = { if (currentGameMode == GameMode.ADVENTURE) { Toast.makeText(context, context.getString(R.string.shop_not_available_adventure), Toast.LENGTH_SHORT).show() } else { showQuickShop = true } },
+                    isShopEnabled = currentGameMode != GameMode.ADVENTURE,
+                    onShopPositioned = { shopRect = it },
+                    onCannonPositioned = { cannonRect = it },
                     onNextBubblePositioned = { nextBubbleRect = it },
-                    shakeIntensity = finalShakeIntensity, 
-                    isDanger = isDangerActive 
+                    shakeIntensity = finalShakeIntensity,
+                    isDanger = isDangerActive
                 )
             }
         }
@@ -344,9 +353,9 @@ fun LevelScreen(
 
         if (isPaused && gameState == GameState.PLAYING && !isReviveAlertActive) {
             OverlayMenu(
-                title = stringResource(id = R.string.game_pause), 
-                onContinue = { viewModel.togglePause() }, 
-                onRestart = { viewModel.restartGame() }, 
+                title = stringResource(id = R.string.game_pause),
+                onContinue = { viewModel.togglePause() },
+                onRestart = { viewModel.restartGame() },
                 onExit = { soundManager.forceStartMusic(); onMenuClick() },
                 showSettings = true,
                 settingsManager = settingsManager,
@@ -360,6 +369,70 @@ fun LevelScreen(
 
         if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
             ReviveAlertOverlay(onDismiss = { (viewModel as AdventureViewModel).showReviveAlert = false; viewModel.togglePause() })
+        }
+
+        if (showTutorial && gameState == GameState.PLAYING && !isPaused) {
+            TutorialDialog(
+                shopRect = shopRect,
+                cannonRect = cannonRect,
+                nextBubbleRect = nextBubbleRect,
+                scoreRect = scoreRect,
+                onComplete = {
+                    coroutineScope.launch {
+                        settingsManager.setTutorialCompleted(true)
+                        showTutorial = false
+                    }
+                }
+            )
+        }
+
+        // ✅ Notificación más abajo para no tapar puntos
+        AchievementNotification(achievement = activeAchievement)
+    }
+}
+
+@Composable
+fun AchievementNotification(achievement: Achievement?) {
+    AnimatedVisibility(
+        visible = achievement != null,
+        enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { -it / 2 }),
+        exit = fadeOut(tween(400)),
+        // Se cambió el padding a 130.dp para asegurar que baje más y no toque la TopBar
+        modifier = Modifier.fillMaxWidth().padding(top = 130.dp),
+        label = "achievement_anim"
+    ) {
+        if (achievement != null) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Surface(
+                    color = Color(0xFF151515).copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f)),
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD700),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = achievement.title.uppercase(),
+                            style = TextStyle(
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -430,9 +503,9 @@ fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> U
 
 @Composable
 fun OverlayMenu(
-    title: String, onContinue: (() -> Unit)? = null, onRestart: () -> Unit, onExit: () -> Unit, 
-    score: Int? = null, isWin: Boolean = false, 
-    showSettings: Boolean = false, settingsManager: SettingsManager? = null, 
+    title: String, onContinue: (() -> Unit)? = null, onRestart: () -> Unit, onExit: () -> Unit,
+    score: Int? = null, isWin: Boolean = false,
+    showSettings: Boolean = false, settingsManager: SettingsManager? = null,
     onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null,
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
     currentLevelId: Int = 0
@@ -442,11 +515,11 @@ fun OverlayMenu(
     val scope = rememberCoroutineScope()
 
     Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, 
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {},
         contentAlignment = Alignment.Center
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally, 
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .width(300.dp)
                 .clip(RoundedCornerShape(40.dp))
@@ -455,7 +528,7 @@ fun OverlayMenu(
         ) {
             Text(text = title, style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = accentColor, letterSpacing = 1.sp, textAlign = TextAlign.Center))
             Spacer(Modifier.height(24.dp))
-            
+
             if (score != null) {
                 Text(stringResource(id = R.string.game_score_label), color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 Text("$score", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Light)
@@ -480,15 +553,15 @@ fun OverlayMenu(
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text("SONIDO", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Slider(
-                        value = sfxVol, 
-                        onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } }, 
+                        value = sfxVol,
+                        onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } },
                         colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor)
                     )
-                    
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("DALTONISMO", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         Switch(
-                            checked = colorBlind, 
+                            checked = colorBlind,
                             onCheckedChange = { scope.launch { settingsManager.setColorBlindMode(it) } },
                             colors = SwitchDefaults.colors(checkedThumbColor = accentColor)
                         )
@@ -510,7 +583,7 @@ fun OverlayMenu(
             }
 
             if (!isPause) {
-                onShowAd?.let { adAction -> 
+                onShowAd?.let { adAction ->
                     val adLabel = if (isAdventure && !isWin) stringResource(id = R.string.game_revive_ad) else stringResource(id = R.string.game_bonus_ad)
                     Spacer(Modifier.height(32.dp))
                     TextButton(onClick = adAction) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) } }
