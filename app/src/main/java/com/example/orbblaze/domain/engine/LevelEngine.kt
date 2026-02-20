@@ -52,12 +52,15 @@ class LevelEngine {
     }
 
     /**
-     * Genera un color para el proyectil basado solo en los colores que existen en el tablero
+     * Genera un color para el proyectil basado solo en los colores que existen en el tablero.
+     * allowSpecials permite o bloquea la generación de Bombas y Arcoíris.
      */
-    fun getSmartProjectileColor(grid: Map<GridPosition, Bubble>): BubbleColor {
-        val rand = Math.random()
-        if (rand < 0.02) return BubbleColor.RAINBOW
-        if (rand < 0.05) return BubbleColor.BOMB
+    fun getSmartProjectileColor(grid: Map<GridPosition, Bubble>, allowSpecials: Boolean = true): BubbleColor {
+        if (allowSpecials) {
+            val rand = Math.random()
+            if (rand < 0.02) return BubbleColor.RAINBOW
+            if (rand < 0.05) return BubbleColor.BOMB
+        }
 
         val currentColors = grid.values.map { it.color }.distinct()
             .filter { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB }

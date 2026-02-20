@@ -80,8 +80,9 @@ class AdventureViewModel(
         rowsDroppedCount = 0
         visualScrollOffset = 0f
         
-        nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
-        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+        // ✅ AVENTURA: No permitir bombas ni arcoíris
+        nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
+        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
         cascadeJob?.cancel()
     }
 
@@ -108,7 +109,6 @@ class AdventureViewModel(
                 if (gameState == GameState.PLAYING && !isPaused && !showReviveAlert) {
                     val m = metrics
                     if (m != null) {
-                        // ✅ VELOCIDAD REDUCIDA: De 220f a 80f píxeles por segundo
                         visualScrollOffset += 80f * deltaTime
                         checkAdventureDefeat(m)
                         if (visualScrollOffset >= m.verticalSpacing && gameState == GameState.PLAYING) {
@@ -159,7 +159,8 @@ class AdventureViewModel(
     override fun onShoot(spawnX: Float, spawnY: Float) {
         if (showReviveAlert || isPaused) return
         super.onShoot(spawnX, spawnY)
-        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+        // ✅ AVENTURA: No permitir bombas ni arcoíris en la vista previa
+        previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
     }
 
     override fun onPostSnap() {
@@ -174,7 +175,8 @@ class AdventureViewModel(
                 saveProgress()
             } else {
                 if (!bubblesByPosition.values.any { it.color == nextBubbleColor }) {
-                    nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
+                    // ✅ AVENTURA: No permitir bombas ni arcoíris al validar colores
+                    nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
                 }
             }
         }

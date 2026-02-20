@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -194,7 +195,6 @@ fun LevelScreen(
                         } while (event.changes.any { it.pressed })
                         isAiming = false
                         
-                        // ✅ COORDINACIÓN CON EL CAÑÓN: Usamos los mismos valores para el disparo
                         val barrelLengthPx = 95.dp.toPx()
                         val pivotHeightPx = 220.dp.toPx()
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
@@ -299,9 +299,22 @@ fun LevelScreen(
                 }
 
                 particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
+                
                 drawIntoCanvas { canvas ->
-                    val paint = android.graphics.Paint().apply { textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD; color = android.graphics.Color.WHITE }
-                    floatingTexts.forEach { ft -> paint.alpha = (ft.life * 255).toInt().coerceIn(0, 255); canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paint) }
+                    floatingTexts.forEach { ft ->
+                        val alpha = (ft.life * 255).toInt().coerceIn(0, 255)
+                        val paintOutline = android.graphics.Paint().apply {
+                            textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+                            color = android.graphics.Color.BLACK; this.alpha = (alpha * 0.6f).toInt()
+                            style = android.graphics.Paint.Style.STROKE; strokeWidth = 6f
+                        }
+                        val paintFill = android.graphics.Paint().apply {
+                            textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+                            color = android.graphics.Color.WHITE; this.alpha = alpha
+                        }
+                        canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paintOutline)
+                        canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paintFill)
+                    }
                 }
             }
 
@@ -383,7 +396,22 @@ fun LevelScreen(
         }
 
         if (gameState == GameState.WON || gameState == GameState.LOST) {
-            OverlayMenu(title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over), onContinue = null, onRestart = { viewModel.restartGame() }, onExit = { onMenuClick() }, score = score, isWin = gameState == GameState.WON, isAdventure = viewModel.gameMode == GameMode.ADVENTURE, stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0, currentLevelId = currentLevelId, onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, context.getString(R.string.game_redeemed), Toast.LENGTH_SHORT).show() } } } else null, onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } })
+            OverlayMenu(
+                title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over),
+                onContinue = null,
+                onRestart = { viewModel.restartGame() },
+                onNextLevel = if (gameState == GameState.WON && currentGameMode == GameMode.ADVENTURE && currentLevelId < AdventureLevels.levels.size) {
+                    { (viewModel as? AdventureViewModel)?.loadAdventureLevel(currentLevelId + 1) }
+                } else null,
+                onExit = { onMenuClick() },
+                score = score,
+                isWin = gameState == GameState.WON,
+                isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
+                stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
+                currentLevelId = currentLevelId,
+                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, context.getString(R.string.game_redeemed), Toast.LENGTH_SHORT).show() } } } else null,
+                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } }
+            )
         }
 
         if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
@@ -405,7 +433,6 @@ fun LevelScreen(
             )
         }
 
-        // ✅ Notificación más abajo para no tapar puntos
         AchievementNotification(achievement = activeAchievement)
     }
 }
@@ -416,7 +443,6 @@ fun AchievementNotification(achievement: Achievement?) {
         visible = achievement != null,
         enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { -it / 2 }),
         exit = fadeOut(tween(400)),
-        // Se cambió el padding a 130.dp para asegurar que baje más y no toque la TopBar
         modifier = Modifier.fillMaxWidth().padding(top = 130.dp),
         label = "achievement_anim"
     ) {
@@ -433,22 +459,9 @@ fun AchievementNotification(achievement: Achievement?) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = Color(0xFFFFD700),
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = achievement.title.uppercase(),
-                            style = TextStyle(
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            )
-                        )
+                        Text(text = achievement.title.uppercase(), style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp))
                     }
                 }
             }
@@ -527,24 +540,15 @@ fun OverlayMenu(
     showSettings: Boolean = false, settingsManager: SettingsManager? = null,
     onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null,
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
-    currentLevelId: Int = 0
+    currentLevelId: Int = 0,
+    onNextLevel: (() -> Unit)? = null // ✅ Nuevo callback
 ) {
     val isPause = title == stringResource(id = R.string.game_pause)
     val accentColor = if (isPause) Color(0xFF64FFDA) else if (isWin) Color(0xFFFFD700) else Color(0xFFFF5252)
     val scope = rememberCoroutineScope()
 
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {},
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .width(300.dp)
-                .clip(RoundedCornerShape(40.dp))
-                .background(Color(0xFF080B25).copy(alpha = 0.95f))
-                .padding(vertical = 32.dp, horizontal = 24.dp)
-        ) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(300.dp).clip(RoundedCornerShape(40.dp)).background(Color(0xFF080B25).copy(alpha = 0.95f)).padding(vertical = 32.dp, horizontal = 24.dp)) {
             Text(text = title, style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = accentColor, letterSpacing = 1.sp, textAlign = TextAlign.Center))
             Spacer(Modifier.height(24.dp))
 
@@ -568,22 +572,12 @@ fun OverlayMenu(
             if (showSettings && settingsManager != null) {
                 val sfxVol by settingsManager.sfxVolumeFlow.collectAsState(1f)
                 val colorBlind by settingsManager.colorBlindModeFlow.collectAsState(false)
-
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text("SONIDO", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Slider(
-                        value = sfxVol,
-                        onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } },
-                        colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor)
-                    )
-
+                    Slider(value = sfxVol, onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } }, colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("DALTONISMO", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = colorBlind,
-                            onCheckedChange = { scope.launch { settingsManager.setColorBlindMode(it) } },
-                            colors = SwitchDefaults.colors(checkedThumbColor = accentColor)
-                        )
+                        Switch(checked = colorBlind, onCheckedChange = { scope.launch { settingsManager.setColorBlindMode(it) } }, colors = SwitchDefaults.colors(checkedThumbColor = accentColor))
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -591,6 +585,18 @@ fun OverlayMenu(
 
             onContinue?.let { action ->
                 Button(onClick = action, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor)) { Text(stringResource(id = R.string.game_resume), color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp) }
+                Spacer(Modifier.height(16.dp))
+            }
+
+            // ✅ BOTÓN DE SIGUIENTE NIVEL (Solo en victoria aventura)
+            onNextLevel?.let { action ->
+                Button(onClick = action, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(id = R.string.game_next_level), color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFF080B25), modifier = Modifier.size(18.dp))
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
             }
 
@@ -614,10 +620,6 @@ fun OverlayMenu(
 
 fun mapBubbleColor(type: BubbleColor): Color = when (type) {
     BubbleColor.RED -> BubbleRed; BubbleColor.BLUE -> BubbleBlue; BubbleColor.GREEN -> BubbleGreen; BubbleColor.PURPLE -> BubblePurple; BubbleColor.YELLOW -> BubbleYellow; BubbleColor.CYAN -> BubbleCyan; BubbleColor.BOMB -> Color(0xFF212121); BubbleColor.RAINBOW -> Color.White
-}
-
-private fun highScore(viewModel: GameViewModel): Int {
-    return viewModel.highScore
 }
 
 @Composable

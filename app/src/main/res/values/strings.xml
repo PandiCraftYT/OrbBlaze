@@ -38,6 +38,7 @@
     <string name="game_redeemed">¡Canjeado!</string>
     <string name="game_bonus_ad">BONUS +50</string>
     <string name="game_revive_ad">REVIVIR</string>
+    <string name="game_next_level">SIGUIENTE</string>
 
     <!-- Tienda Rápida -->
     <string name="shop_title">OBJETOS TÁCTICOS</string>
