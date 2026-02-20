@@ -106,8 +106,11 @@ open class GameViewModel(
     var activeProjectile by mutableStateOf<Projectile?>(null)
         protected set
 
-    val particles = mutableStateListOf<GameParticle>()
-    val floatingTexts = mutableStateListOf<FloatingText>()
+    // ✅ Listas de partículas y textos (Fix para recomposición fluida)
+    var particles by mutableStateOf<List<GameParticle>>(emptyList())
+        protected set
+    var floatingTexts by mutableStateOf<List<FloatingText>>(emptyList())
+        protected set
 
     var metrics: BoardMetricsPx? = null
         protected set
@@ -226,8 +229,8 @@ open class GameViewModel(
         shakeIntensity = 0f
         trajectoryPoints = emptyList()
         
-        particles.clear()
-        floatingTexts.clear()
+        particles = emptyList()
+        floatingTexts = emptyList()
         timerJob?.cancel()
     }
 
@@ -246,7 +249,11 @@ open class GameViewModel(
         } 
     }
     
-    fun setBoardMetrics(metrics: BoardMetricsPx) { this.metrics = metrics }
+    fun setBoardMetrics(metrics: BoardMetricsPx) { 
+        this.metrics = metrics 
+        updateTrajectory() 
+    }
+
     fun togglePause() { if (gameState == GameState.PLAYING) isPaused = !isPaused }
     fun setSfxVolume(volume: Float) { viewModelScope.launch { settingsManager.setSfxVolume(volume) } }
     fun clearSoundEvent() { soundEvent = null }
@@ -254,7 +261,10 @@ open class GameViewModel(
 
     fun updateAngle(touchX: Float, touchY: Float, screenWidth: Float, screenHeight: Float) {
         if (gameState != GameState.PLAYING || isPaused) return
-        val dx = touchX - (screenWidth / 2f); val dy = (screenHeight * 0.82f) - touchY
+        val dx = touchX - (screenWidth / 2f)
+        val pivotY = metrics?.pivotY ?: (screenHeight * 0.82f)
+        val dy = pivotY - touchY
+        
         shooterAngle = Math.toDegrees(atan2(dx, dy).toDouble()).toFloat().coerceIn(-80f, 80f)
         updateTrajectory()
     }
@@ -263,17 +273,24 @@ open class GameViewModel(
         val m = metrics ?: return
         val angleRad = Math.toRadians(shooterAngle.toDouble())
         
-        var curX = m.screenWidth / 2f
-        var curY = m.screenHeight * 0.82f - with(m) { 95 * (screenWidth / 411f) } 
+        val pivotX = m.screenWidth / 2f
+        val pivotY = m.pivotY
+        var curX = pivotX + (sin(angleRad) * m.barrelLength).toFloat()
+        var curY = pivotY - (cos(angleRad) * m.barrelLength).toFloat()
         
-        var vx = sin(angleRad).toFloat() * 30f
-        var vy = -cos(angleRad).toFloat() * 30f
+        val speed = 35f 
+        var vx = sin(angleRad).toFloat() * speed
+        var vy = -cos(angleRad).toFloat() * speed
         
         val points = mutableListOf<Offset>()
         val leftWall = m.boardStartPadding - bubbleRadius
         val rightWall = m.screenWidth - (m.boardStartPadding - bubbleRadius)
         
+        val collisionThreshold = m.bubbleDiameter * GameConstants.BUBBLE_COLLISION_SCALE
+        
         for (i in 0 until 120) {
+            val prevX = curX
+            val prevY = curY
             curX += vx
             curY += vy
             
@@ -284,15 +301,17 @@ open class GameViewModel(
             
             val hit = bubblesByPosition.keys.any { pos ->
                 val (bx, by) = getBubbleCenter(pos)
-                hypot(curX - bx, curY - by) < m.bubbleDiameter * 0.85f
+                distancePointToSegment(bx, by, prevX, prevY, curX, curY) < collisionThreshold
             }
             
-            if (hit || curY < m.ceilingY + (if(gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f)) {
+            val ceiling = m.ceilingY + (if(gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f)
+            
+            if (hit || curY < ceiling) {
                 points.add(Offset(curX, curY))
                 break
             }
             
-            if (i % 4 == 0) points.add(Offset(curX, curY))
+            if (i % 3 == 0) points.add(Offset(curX, curY))
         }
         trajectoryPoints = points
     }
@@ -305,7 +324,9 @@ open class GameViewModel(
         }
         val angleRad = Math.toRadians(shooterAngle.toDouble())
         val speed = GameConstants.PROJECTILE_SPEED 
+        
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
+        
         isFireballQueued = false
         nextBubbleColor = previewBubbleColor
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
@@ -379,7 +400,13 @@ open class GameViewModel(
                         }
                     } else {
                         val ceiling = m.ceilingY + if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
-                        if (nextY - bubbleRadius <= ceiling || checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
+                        
+                        // ✅ FIX "TRASPASO": Detección de techo y burbujas con snap corregido
+                        if (nextY - bubbleRadius <= ceiling) {
+                            // Si golpea el techo, forzamos la posición para evitar que traspase el UI
+                            snapToGrid(nextX, ceiling + bubbleRadius, currentP.color)
+                            collisionDetected = true
+                        } else if (checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
                             snapToGrid(nextX, nextY, currentP.color)
                             collisionDetected = true
                         }
@@ -418,33 +445,31 @@ open class GameViewModel(
             var lastTime = System.currentTimeMillis()
             while (isActive) {
                 val currentTime = System.currentTimeMillis()
-                val deltaTime = (currentTime - lastTime) / 1000f
+                val deltaTime = ((currentTime - lastTime) / 1000f).coerceIn(0.001f, 0.05f)
                 lastTime = currentTime
 
-                if (!isPaused && particles.isNotEmpty()) {
-                    val updated = particles.mapNotNull { p ->
-                        if (p.life <= 0f) null
-                        else p.copy(
-                            x = p.x + p.vx * deltaTime * 60f,
-                            y = p.y + (p.vy + GameConstants.PARTICLE_GRAVITY * deltaTime) * deltaTime * 60f,
-                            life = p.life - GameConstants.PARTICLE_LIFE_DECAY * deltaTime
-                        )
-                    }
-                    if (updated.size != particles.size || updated.isNotEmpty()) {
-                        particles.clear()
-                        particles.addAll(updated)
+                if (!isPaused) {
+                    // ✅ Actualización de partículas
+                    if (particles.isNotEmpty()) {
+                        particles = particles.mapNotNull { p ->
+                            if (p.life <= 0f) null
+                            else p.copy(
+                                x = p.x + p.vx * deltaTime * 60f,
+                                y = p.y + (p.vy + GameConstants.PARTICLE_GRAVITY * deltaTime) * deltaTime * 60f,
+                                life = p.life - GameConstants.PARTICLE_LIFE_DECAY * deltaTime
+                            )
+                        }
                     }
 
-                    val updatedTexts = floatingTexts.mapNotNull { t ->
-                        if (t.life <= 0f) null
-                        else t.copy(
-                            y = t.y - GameConstants.TEXT_FLOAT_SPEED * deltaTime,
-                            life = t.life - GameConstants.TEXT_LIFE_DECAY * deltaTime
-                        )
-                    }
-                    if (updatedTexts.size != floatingTexts.size || updatedTexts.isNotEmpty()) {
-                        floatingTexts.clear()
-                        floatingTexts.addAll(updatedTexts)
+                    // ✅ Actualización de textos flotantes (Fix: No se quedan pegados)
+                    if (floatingTexts.isNotEmpty()) {
+                        floatingTexts = floatingTexts.mapNotNull { t ->
+                            if (t.life <= 0f) null
+                            else t.copy(
+                                y = t.y - GameConstants.TEXT_FLOAT_SPEED * deltaTime,
+                                life = t.life - GameConstants.TEXT_LIFE_DECAY * deltaTime
+                            )
+                        }
                     }
                 }
                 delay(16)
@@ -479,12 +504,16 @@ open class GameViewModel(
         val newGrid = bubblesByPosition.toMutableMap()
 
         val offset = if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
-        val estRow = ((y - m.boardTopPadding - offset) / m.verticalSpacing).roundToInt()
+        
+        // ✅ FIX "TRASPASO": Forzamos a que la fila sea como mínimo 0
+        val estRow = ((y - m.boardTopPadding - offset) / m.verticalSpacing).roundToInt().coerceAtLeast(0)
         
         val candidates = mutableListOf<GridPosition>()
-        for (r in (estRow - 1)..(estRow + 1)) {
-            if (r < -1) continue 
-            for (c in 0 until columnsCount + 1) { 
+        // ✅ Aumentamos rango de búsqueda para evitar que burbujas rápidas se pierdan
+        for (r in (estRow - 1)..(estRow + 2)) {
+            if (r < 0) continue // Nunca permitir burbujas por encima de la fila 0
+            val actualCols = if ((r + rowsDroppedCount) % 2 == 0) columnsCount else columnsCount - 1
+            for (c in 0 until actualCols) {
                 val p = GridPosition(r, c)
                 if (!newGrid.containsKey(p)) candidates.add(p)
             }
@@ -679,11 +708,13 @@ open class GameViewModel(
     fun spawnExplosion(cx: Float, cy: Float, color: BubbleColor) {
         repeat(12) {
             val angle = Math.random() * 2 * Math.PI; val speed = 5.0 + (Math.random() * 10.0)
-            particles.add(GameParticle(particleIdCounter++, cx, cy, (cos(angle) * speed).toFloat(), (sin(angle) * speed).toFloat(), color, (10.0 + Math.random() * 15.0).toFloat(), 1.0f))
+            particles = particles + GameParticle(particleIdCounter++, cx, cy, (cos(angle) * speed).toFloat(), (sin(angle) * speed).toFloat(), color, (10.0 + Math.random() * 15.0).toFloat(), 1.0f)
         }
     }
 
-    fun spawnFloatingText(x: Float, y: Float, text: String) { floatingTexts.add(FloatingText(textIdCounter++, x, y, text, 1.0f)) }
+    fun spawnFloatingText(x: Float, y: Float, text: String) { 
+        floatingTexts = floatingTexts + FloatingText(textIdCounter++, x, y, text, 1.0f) 
+    }
 
     fun unlockAchievement(id: String) {
         val achievement = achievements.find { it.id == id }

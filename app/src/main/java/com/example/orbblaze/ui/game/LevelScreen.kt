@@ -193,12 +193,17 @@ fun LevelScreen(
                             if (change != null && change.pressed) { viewModel.updateAngle(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat()) }
                         } while (event.changes.any { it.pressed })
                         isAiming = false
+                        
+                        // ✅ COORDINACIÓN CON EL CAÑÓN: Usamos los mismos valores para el disparo
                         val barrelLengthPx = 95.dp.toPx()
                         val pivotHeightPx = 220.dp.toPx()
                         val angleRad = Math.toRadians(viewModel.shooterAngle.toDouble())
                         val pivotX = size.width / 2f
                         val pivotY = size.height - pivotHeightPx
-                        viewModel.onShoot(pivotX + (sin(angleRad) * barrelLengthPx).toFloat(), pivotY - (cos(angleRad) * barrelLengthPx).toFloat())
+                        viewModel.onShoot(
+                            pivotX + (sin(angleRad) * barrelLengthPx).toFloat(), 
+                            pivotY - (cos(angleRad) * barrelLengthPx).toFloat()
+                        )
                     }
                 }
             }
@@ -235,7 +240,21 @@ fun LevelScreen(
         }
 
         LaunchedEffect(totalWidth, totalHeight, boardTopPaddingPx, columnsCount) {
-            viewModel.setBoardMetrics(BoardMetricsPx(horizontalSpacing = horizontalSpacingPx, bubbleDiameter = bubbleDiameterPx, verticalSpacing = verticalSpacingPx, boardTopPadding = boardTopPaddingPx, boardStartPadding = boardStartPadding, ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f), screenWidth = totalWidth, screenHeight = totalHeight))
+            val pivotHeightPx = with(density) { 220.dp.toPx() }
+            val barrelLengthPx = with(density) { 95.dp.toPx() }
+            
+            viewModel.setBoardMetrics(BoardMetricsPx(
+                horizontalSpacing = horizontalSpacingPx, 
+                bubbleDiameter = bubbleDiameterPx, 
+                verticalSpacing = verticalSpacingPx, 
+                boardTopPadding = boardTopPaddingPx, 
+                boardStartPadding = boardStartPadding, 
+                ceilingY = boardTopPaddingPx - (bubbleDiameterPx * 0.5f), 
+                screenWidth = totalWidth, 
+                screenHeight = totalHeight,
+                pivotY = totalHeight - pivotHeightPx,
+                barrelLength = barrelLengthPx
+            ))
         }
 
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = shakeOffset * finalShakeIntensity; translationY = shakeOffset * finalShakeIntensity }) {

@@ -53,5 +53,7 @@ data class BoardMetricsPx(
     val boardStartPadding: Float,
     val ceilingY: Float,
     val screenWidth: Float = 1080f,
-    val screenHeight: Float = 1920f
+    val screenHeight: Float = 1920f,
+    val pivotY: Float = 0f,
+    val barrelLength: Float = 0f
 )
