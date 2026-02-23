@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -29,12 +27,12 @@ import com.example.orbblaze.ui.score.HighScoreScreen
 import com.example.orbblaze.ui.score.AchievementsScreen
 import com.example.orbblaze.ui.shop.ShopScreen
 import com.example.orbblaze.ui.theme.OrbBlazeTheme
+import com.example.orbblaze.ui.components.GlobalBackground
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Habilitar modo pantalla completa de borde a borde
         enableEdgeToEdge()
         
         setContent {
@@ -48,17 +46,14 @@ class MainActivity : ComponentActivity() {
                 val factory = remember { OrbBlazeViewModelFactory(settingsManager, application) }
                 val lifecycleOwner = LocalLifecycleOwner.current
 
-                // ✅ REFINAMIENTO DE SONIDO: Gestión centralizada del ciclo de vida
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         when (event) {
                             Lifecycle.Event.ON_RESUME -> {
-                                // Al volver a la app, refrescamos velocidad y reanudamos si corresponde
                                 globalSoundManager.refreshSettings()
                                 globalSoundManager.startMusic()
                             }
                             Lifecycle.Event.ON_PAUSE -> {
-                                // Pausamos inmediatamente al salir de la app
                                 globalSoundManager.pauseMusic()
                             }
                             else -> {}
@@ -71,17 +66,19 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Box(modifier = Modifier.fillMaxSize()) {
-                    AppNavigation(factory, globalSoundManager, adsManager, settingsManager)
+                // ✅ FONDO GLOBAL SINCRONIZADO
+                GlobalBackground {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AppNavigation(factory, globalSoundManager, adsManager, settingsManager)
 
-                    // ✅ AJUSTE DEFINITIVO DE POSICIÓN DE ANUNCIOS
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .navigationBarsPadding()
-                            .fillMaxWidth()
-                    ) {
-                        adsManager.BannerAd()
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                                .fillMaxWidth()
+                        ) {
+                            adsManager.BannerAd()
+                        }
                     }
                 }
             }

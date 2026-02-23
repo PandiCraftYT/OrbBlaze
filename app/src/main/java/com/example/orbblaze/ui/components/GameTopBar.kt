@@ -1,7 +1,6 @@
 package com.example.orbblaze.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -9,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,11 +16,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+// Colores del menú
+private val SageGreen = Color(0xFF8DA094)
+private val NavyDark = Color(0xFF2D324F)
+private val StarGold = Color(0xFFF4C491)
 
 @Composable
 fun GameTopBar(
@@ -32,54 +36,122 @@ fun GameTopBar(
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Surface(
         modifier = modifier
+            .padding(horizontal = 12.dp, vertical = 10.dp)
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 16.dp)
-            .height(64.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .background(Color.White.copy(alpha = 0.15f))
-            .border(2.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .height(64.dp),
+        // Forma de píldora elegante con bordes redondeados
+        shape = RoundedCornerShape(32.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        shadowElevation = 6.dp
     ) {
-        // IZQUIERDA: MONEDAS
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))), contentAlignment = Alignment.Center) {
-                Text("C", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // IZQUIERDA: MONEDAS
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Brush.radialGradient(listOf(StarGold, Color(0xFFB8860B)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("C", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "$coins",
+                    style = TextStyle(
+                        color = NavyDark,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                )
             }
-            Spacer(Modifier.width(6.dp))
-            Text(text = "$coins", style = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold))
-        }
 
-        // CENTRO: TIROS O TIEMPO
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (shotsLeft != null) {
-                Text("TIROS", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
-                Text(text = "$shotsLeft", style = TextStyle(color = if (shotsLeft <= 3) Color(0xFFFF4D4D) else Color(0xFF64FFDA), fontSize = 26.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
-            } else if (timeLeft != null) {
-                Text("TIEMPO", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
-                Text(text = "$timeLeft s", style = TextStyle(color = if (timeLeft < 10) Color.Red else Color(0xFF64FFDA), fontSize = 24.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
-            } else {
-                Text("SCORE", style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold))
-                Text(text = "$score", style = TextStyle(color = Color(0xFFFFD700), fontSize = 22.sp, fontWeight = FontWeight.Black, shadow = Shadow(color = Color.Black, blurRadius = 4f)))
-            }
-        }
+            // CENTRO: TIROS O TIEMPO O SCORE
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val label = when {
+                    shotsLeft != null -> "TIROS"
+                    timeLeft != null -> "TIEMPO"
+                    else -> "SCORE"
+                }
+                val value = when {
+                    shotsLeft != null -> "$shotsLeft"
+                    timeLeft != null -> "$timeLeft s"
+                    else -> "$score"
+                }
+                val valueColor = when {
+                    shotsLeft != null && shotsLeft <= 3 -> Color(0xFFEF4444)
+                    timeLeft != null && timeLeft < 10 -> Color(0xFFEF4444)
+                    else -> SageGreen
+                }
 
-        // DERECHA: SCORE (AVENTURA) O MAX (OTROS)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.End) {
-                val isAdventure = (shotsLeft != null)
-                val label = if (isAdventure) "SCORE" else "MAX"
-                val value = if (isAdventure) "$score" else "$bestScore"
-                
-                Text(text = label, style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 9.sp, fontWeight = FontWeight.Bold))
-                Text(text = value, style = TextStyle(color = if (isAdventure) Color(0xFF64FFDA) else Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold))
+                Text(
+                    text = label,
+                    style = TextStyle(
+                        color = Color.Gray,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
+                )
+                Text(
+                    text = value,
+                    style = TextStyle(
+                        color = valueColor,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                )
             }
-            Spacer(Modifier.width(12.dp))
-            Box(modifier = Modifier.size(42.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)).border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape).clickable { onSettingsClick() }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(22.dp))
+
+            // DERECHA: SCORE (AVENTURA) O MAX (OTROS) + BOTÓN PAUSA
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.End) {
+                    val isAdventure = (shotsLeft != null)
+                    val label = if (isAdventure) "SCORE" else "MAX"
+                    val value = if (isAdventure) "$score" else "$bestScore"
+
+                    Text(
+                        text = label,
+                        style = TextStyle(
+                            color = Color.Gray,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    )
+                    Text(
+                        text = value,
+                        style = TextStyle(
+                            color = NavyDark.copy(alpha = 0.6f),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(NavyDark.copy(alpha = 0.05f))
+                        .clickable { onSettingsClick() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = NavyDark,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

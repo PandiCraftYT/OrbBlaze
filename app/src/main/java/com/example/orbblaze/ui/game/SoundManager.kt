@@ -20,6 +20,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     private var soundPool: SoundPool? = null
     private val soundMap = mutableMapOf<SoundType, Int>()
     private var mediaPlayer: MediaPlayer? = null
+    private var currentMusicResId: Int = R.raw.music_background
     
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -41,7 +42,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
             .build()
 
         loadSounds()
-        initMusic()
+        initMusic(R.raw.music_background)
         observeSettings()
     }
 
@@ -55,7 +56,6 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
             soundMap[SoundType.WIN] = pool.load(context, R.raw.sfx_win, 1)
             soundMap[SoundType.LOSE] = pool.load(context, R.raw.sfx_lose, 1)
             soundMap[SoundType.STICK] = pool.load(context, R.raw.sfx_stick, 1)
-            // ✅ AÑADIDO: Sonido de logros
             soundMap[SoundType.ACHIEVEMENT] = pool.load(context, R.raw.sfx_logros, 1)
         } catch (e: Exception) {
             Log.e("SoundManager", "Error loading sounds", e)
@@ -80,15 +80,33 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         }
     }
 
-    private fun initMusic() {
+    private fun initMusic(resId: Int) {
         try {
-            if (mediaPlayer == null) {
-                mediaPlayer = MediaPlayer.create(context, R.raw.music_background)
-                mediaPlayer?.isLooping = true
+            if (mediaPlayer != null) {
+                mediaPlayer?.stop()
+                mediaPlayer?.release()
+                mediaPlayer = null
             }
+            mediaPlayer = MediaPlayer.create(context, resId)
+            mediaPlayer?.isLooping = true
+            currentMusicResId = resId
             updateMusicVolume()
         } catch (e: Exception) {
             Log.e("SoundManager", "Error initializing music", e)
+        }
+    }
+
+    fun switchToLevelMusic() {
+        if (currentMusicResId != R.raw.level_background) {
+            initMusic(R.raw.level_background)
+            if (shouldPlayMusic) mediaPlayer?.start()
+        }
+    }
+
+    fun switchToMenuMusic() {
+        if (currentMusicResId != R.raw.music_background) {
+            initMusic(R.raw.music_background)
+            if (shouldPlayMusic) mediaPlayer?.start()
         }
     }
 
@@ -141,7 +159,7 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     fun startMusic() {
         shouldPlayMusic = true
         try {
-            if (mediaPlayer == null) initMusic()
+            if (mediaPlayer == null) initMusic(currentMusicResId)
             if (mediaPlayer?.isPlaying == false) {
                 mediaPlayer?.start()
             }

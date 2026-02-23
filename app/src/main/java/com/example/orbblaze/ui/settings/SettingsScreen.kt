@@ -2,12 +2,13 @@ package com.example.orbblaze.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,15 +20,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -38,14 +36,15 @@ import androidx.compose.ui.unit.sp
 import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.SoundManager
-import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
-import com.example.orbblaze.ui.menu.PhysicsBubble
+import com.example.orbblaze.ui.menu.ReferenceButton
 import com.example.orbblaze.ui.theme.*
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.hypot
-import kotlin.random.Random
+
+// Colores del menú (redefinidos aquí para evitar errores si no están en Color.kt)
+private val SageGreen = Color(0xFF8DA094)
+private val NavyDark = Color(0xFF2D324F)
+private val StarGold = Color(0xFFF4C491)
 
 @Composable
 fun SettingsScreen(
@@ -57,10 +56,10 @@ fun SettingsScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "settings_animations")
     var showAboutDialog by remember { mutableStateOf(false) }
 
-    val titleScale by infiniteTransition.animateFloat(
-        initialValue = 1f, targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(tween(3000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "title_scale"
+    val titleFloat by infiniteTransition.animateFloat(
+        initialValue = -8f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "title_float"
     )
 
     val sfxVolume by settingsManager.sfxVolumeFlow.collectAsState(initial = 1.0f)
@@ -70,162 +69,101 @@ fun SettingsScreen(
     val isColorBlindMode by settingsManager.colorBlindModeFlow.collectAsState(initial = false)
 
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
+        modifier = Modifier.fillMaxSize()
     ) {
         val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
         
         CompositionLocalProvider(LocalFontScale provides fontScale) {
-            val screenWidthPx = constraints.maxWidth.toFloat()
-            val screenHeightPx = constraints.maxHeight.toFloat()
-            val density = LocalDensity.current
-            var frameTick by remember { mutableLongStateOf(0L) }
-            val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
-
-            val physicsBubbles = remember(screenWidthPx, screenHeightPx) {
-                List(15) {
-                    PhysicsBubble(
-                        x = Random.nextFloat() * screenWidthPx,
-                        y = Random.nextFloat() * screenHeightPx,
-                        vx = Random.nextFloat() * 1.5f - 0.75f,
-                        vy = Random.nextFloat() * -8f - 2f,
-                        radius = with(density) { Random.nextInt(10, 40).dp.toPx() },
-                        color = bubbleColors.random()
-                    )
-                }
-            }
-
-            LaunchedEffect(screenWidthPx, screenHeightPx) {
-                val gravity = 0.15f
-                while (isActive) {
-                    withFrameNanos { frameTime ->
-                        frameTick = frameTime
-                        physicsBubbles.forEach { bubble ->
-                            bubble.x += bubble.vx; bubble.y += bubble.vy; bubble.vy += gravity
-                            if (bubble.y > screenHeightPx + bubble.radius * 2) {
-                                bubble.y = -bubble.radius; bubble.x = Random.nextFloat() * screenWidthPx; bubble.vy = Random.nextFloat() * 1.5f
-                            }
-                            if (bubble.x < -bubble.radius) bubble.x = screenWidthPx + bubble.radius
-                            if (bubble.x > screenWidthPx + bubble.radius) bubble.x = -bubble.radius
-                        }
-                    }
-                }
-            }
-
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(screenWidthPx, screenHeightPx) {
-                        detectTapGestures { offset ->
-                            physicsBubbles.forEach { bubble ->
-                                val dist = hypot(offset.x - bubble.x, offset.y - bubble.y)
-                                if (dist <= bubble.radius * 1.8f) {
-                                    soundManager.play(SoundType.POP); bubble.vy = -25f; bubble.vx = (Random.nextFloat() * 12f - 6f)
-                                }
-                            }
-                        }
-                    }
+                    .systemBarsPadding()
+                    .padding(start = 32.dp, end = 32.dp, top = 32.dp, bottom = 80.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    @Suppress("UNUSED_VARIABLE")
-                    val t = frameTick 
-                    physicsBubbles.forEach { bubble ->
-                        val center = Offset(bubble.x, bubble.y); val radius = bubble.radius
-                        drawCircle(brush = Brush.radialGradient(listOf(bubble.color.copy(alpha = 0.8f), bubble.color.copy(alpha = 0.2f)), center = center, radius = radius), radius = radius, center = center)
-                        drawCircle(color = Color.White.copy(alpha = 0.4f), radius = radius * 0.35f, center = Offset(center.x - radius * 0.3f, center.y - radius * 0.3f))
-                        drawCircle(color = Color.White.copy(alpha = 0.2f), radius = radius, center = center, style = Stroke(width = 1.5f))
-                    }
+                // ✅ TÍTULO (Estilo Menú)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                ) {
+                    Text(
+                        text = "CONFIGURACIÓN",
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(
+                            fontSize = (42 * fontScale).sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 2.sp,
+                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                        )
+                    )
+                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
                 }
 
-                Column(
+                // ✅ PANEL DE OPCIONES (Estilo Menú)
+                Surface(
+                    shape = RoundedCornerShape(32.dp),
+                    color = Color.White,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .systemBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceEvenly
+                        .fillMaxWidth()
+                        .shadow(8.dp, RoundedCornerShape(32.dp))
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "CONFIGURACIÓN",
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Visible,
-                            textAlign = TextAlign.Center,
-                            style = TextStyle(
-                                fontSize = (36 * fontScale).sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White,
-                                letterSpacing = (1.5 * fontScale).sp,
-                                shadow = null
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    scaleX = titleScale
-                                    scaleY = titleScale
-                                }
-                        )
-                        Box(modifier = Modifier.width((100 * fontScale).dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)))
-                    }
-
-                    // ✅ PANEL DE OPCIONES (Sólido, ya no es transparente)
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(Color(0xFFE3F2FD)) // Azul muy claro y sólido
-                            .border(2.dp, Color.White, RoundedCornerShape(32.dp))
-                            .padding(20.dp),
+                        modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        SettingSliderItem("EFECTOS DE SONIDO", sfxVolume) {
+                        SettingSliderItem("EFECTOS DE SONIDO", sfxVolume, color = SageGreen) {
                             scope.launch { settingsManager.setSfxVolume(it) }
                             soundManager.setSfxVol(it)
                         }
 
-                        SettingSliderItem("MÚSICA", musicVolume, enabled = !isMusicMuted) {
+                        SettingSliderItem("MÚSICA", musicVolume, enabled = !isMusicMuted, color = SageGreen) {
                             scope.launch { settingsManager.setMusicVolume(it) }
                             soundManager.setMusicVol(it)
                         }
 
-                        HorizontalDivider(color = Color.Black.copy(alpha = 0.1f), thickness = 1.dp)
+                        HorizontalDivider(color = Color.Black.copy(alpha = 0.05f), thickness = 1.dp)
 
-                        SettingsToggleRow("SILENCIAR MÚSICA", isMusicMuted) { 
+                        SettingsToggleRow("SILENCIAR MÚSICA", isMusicMuted, activeColor = Color(0xFFEF4444)) { 
                             scope.launch { settingsManager.setMusicMuted(it) }
                             soundManager.setMusicMute(it) 
                         }
-                        SettingsToggleRow("VIBRACIÓN", isVibrationEnabled) { 
+                        SettingsToggleRow("VIBRACIÓN", isVibrationEnabled, activeColor = SageGreen) { 
                             scope.launch { settingsManager.setVibrationEnabled(it) }
                         }
-                        SettingsToggleRow("DALTONISMO", isColorBlindMode) { 
+                        SettingsToggleRow("DALTONISMO", isColorBlindMode, activeColor = NavyDark) { 
                             scope.launch { settingsManager.setColorBlindMode(it) }
                         }
                     }
+                }
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 50.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircleSettingsButton(
-                            icon = Icons.Default.Info,
-                            onClick = { showAboutDialog = true },
-                            color = Color.White // Botón sólido
-                        )
+                // ✅ BOTONES INFERIORES
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Botón INFO
+                    ReferenceButton(
+                        text = "INFO",
+                        backgroundColor = NavyDark,
+                        contentColor = Color.White,
+                        icon = Icons.Default.Info,
+                        iconColor = StarGold,
+                        modifier = Modifier.weight(1f),
+                        onClick = { showAboutDialog = true }
+                    )
 
-                        Spacer(modifier = Modifier.width(40.dp))
-
-                        CircleSettingsButton(
-                            icon = Icons.Default.Home,
-                            onClick = onBackClick,
-                            color = Color(0xFF00E676)
-                        )
-                    }
+                    // Botón VOLVER
+                    ReferenceButton(
+                        text = "VOLVER",
+                        backgroundColor = Color.White,
+                        contentColor = Color.Gray,
+                        modifier = Modifier.weight(1f),
+                        onClick = onBackClick
+                    )
                 }
             }
         }
@@ -237,66 +175,70 @@ fun SettingsScreen(
 }
 
 @Composable
-fun SettingSliderItem(label: String, value: Float, enabled: Boolean = true, onValueChange: (Float) -> Unit) {
+fun SettingSliderItem(
+    label: String, 
+    value: Float, 
+    enabled: Boolean = true, 
+    color: Color,
+    onValueChange: (Float) -> Unit
+) {
     val fontScale = LocalFontScale.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
-            style = TextStyle(fontSize = (11 * fontScale).sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E).copy(alpha = 0.7f), letterSpacing = 1.sp)
+            style = TextStyle(
+                fontSize = (12 * fontScale).sp, 
+                fontWeight = FontWeight.Black, 
+                color = color.copy(alpha = 0.8f), 
+                letterSpacing = 1.sp
+            )
         )
         Slider(
             value = value,
             onValueChange = onValueChange,
             enabled = enabled,
             colors = SliderDefaults.colors(
-                thumbColor = Color(0xFF1A237E),
-                activeTrackColor = Color(0xFF1A237E),
-                inactiveTrackColor = Color(0xFF1A237E).copy(alpha = 0.2f)
+                thumbColor = color,
+                activeTrackColor = color,
+                inactiveTrackColor = color.copy(alpha = 0.15f)
             )
         )
     }
 }
 
 @Composable
-fun SettingsToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun SettingsToggleRow(
+    label: String, 
+    checked: Boolean, 
+    activeColor: Color,
+    onCheckedChange: (Boolean) -> Unit
+) {
     val fontScale = LocalFontScale.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, style = TextStyle(fontSize = (13 * fontScale).sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E)))
+        Text(
+            text = label, 
+            style = TextStyle(
+                fontSize = (14 * fontScale).sp, 
+                fontWeight = FontWeight.Bold, 
+                color = NavyDark
+            )
+        )
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             modifier = Modifier.graphicsLayer(scaleX = 0.85f, scaleY = 0.85f),
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = Color(0xFF00E676),
-                uncheckedThumbColor = Color.Gray,
-                uncheckedTrackColor = Color.Black.copy(alpha = 0.1f)
+                checkedTrackColor = activeColor,
+                uncheckedThumbColor = Color.LightGray,
+                uncheckedTrackColor = Color.Black.copy(alpha = 0.05f),
+                uncheckedBorderColor = Color.Transparent
             )
         )
-    }
-}
-
-@Composable
-fun CircleSettingsButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-    color: Color
-) {
-    val fontScale = LocalFontScale.current
-    Box(
-        modifier = Modifier
-            .size((60 * fontScale).dp)
-            .background(color, CircleShape)
-            .border(2.dp, Color.White, CircleShape)
-            .clip(CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(imageVector = icon, contentDescription = null, tint = if(color == Color.White) Color.Gray else Color.White, modifier = Modifier.size((28 * fontScale).dp))
     }
 }
 
@@ -311,7 +253,6 @@ fun SettingsAboutDialog(onDismiss: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // BOTÓN INSTAGRAM
                 Button(
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
@@ -319,17 +260,15 @@ fun SettingsAboutDialog(onDismiss: () -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE1306C)),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(20.dp)
                 ) {
                     Text("INSTAGRAM", color = Color.White, fontWeight = FontWeight.Bold)
                 }
-
-                // BOTÓN CERRAR
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
-                    Text("CERRAR", color = Color(0xFF1A237E), fontWeight = FontWeight.ExtraBold)
+                    Text("CERRAR", color = Color.Gray, fontWeight = FontWeight.ExtraBold)
                 }
             }
         },
@@ -347,31 +286,13 @@ fun SettingsAboutDialog(onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    "Versión 1.0.0",
-                    style = TextStyle(color = Color.Gray, fontSize = 14.sp)
-                )
+                Text("Versión 1.0.7", style = TextStyle(color = Color.Gray, fontSize = 14.sp))
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    "Un emocionante juego de burbujas creado con amor.",
-                    textAlign = TextAlign.Center,
-                    style = TextStyle(fontSize = 15.sp)
-                )
+                Text("Un emocionante juego de burbujas creado con amor.", textAlign = TextAlign.Center, style = TextStyle(fontSize = 15.sp))
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    "Creado por Carlos",
-                    style = TextStyle(
-                        color = Color(0xFF1A237E),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                )
+                Text("Creado por Carlos", style = TextStyle(color = NavyDark, fontSize = 16.sp, fontWeight = FontWeight.Bold))
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "¡Gracias por jugar!",
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Medium
-                )
+                Text("¡Gracias por jugar!", textAlign = TextAlign.Center, fontWeight = FontWeight.Medium)
             }
         },
         shape = RoundedCornerShape(28.dp),

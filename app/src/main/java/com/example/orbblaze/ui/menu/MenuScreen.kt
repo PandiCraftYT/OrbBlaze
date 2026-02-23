@@ -5,9 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -15,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,28 +24,24 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.R
 import com.example.orbblaze.ui.game.SoundManager
-import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
-import kotlinx.coroutines.isActive
-import kotlin.math.hypot
-import kotlin.random.Random
 
-// ✅ Composición Local para escalar texto en cualquier dispositivo
 val LocalFontScale = compositionLocalOf { 1f }
+
+// Colores de la referencia
+val SageGreen = Color(0xFF8DA094)
+val NavyDark = Color(0xFFFFC107)
+val StarGold = Color(0xFFFFFFFF)
 
 @Composable
 fun MenuScreen(
@@ -59,215 +52,127 @@ fun MenuScreen(
     onSettingsClick: () -> Unit,
     onExitClick: () -> Unit,
     soundManager: SoundManager,
-    onSecretClick: () -> Unit
+    @Suppress("UNUSED_PARAMETER") onSecretClick: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
     var showExitDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        soundManager.startMusic()
-    }
+    LaunchedEffect(Unit) { soundManager.startMusic() }
+    BackHandler { showExitDialog = true }
 
-    BackHandler {
-        showExitDialog = true
-    }
+    val titleFloat by infiniteTransition.animateFloat(
+        initialValue = -8f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "title_float"
+    )
 
-    val titleScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "title_scale"
+    val backgroundOffset by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 2000f,
+        animationSpec = infiniteRepeatable(tween(40000, easing = LinearEasing), RepeatMode.Restart),
+        label = "bg_scroll"
     )
 
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(colors = listOf(BgTop, BgBottom)))
+        modifier = Modifier.fillMaxSize()
     ) {
+        val totalWidth = constraints.maxWidth.toFloat()
+        val totalHeight = constraints.maxHeight.toFloat()
         val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
         
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val color1 = Color.White.copy(alpha = 0.15f)
+            val color2 = Color.White.copy(alpha = 0.08f)
+            drawCircle(color = color1, radius = 150.dp.toPx(), center = Offset(x = (backgroundOffset % (totalWidth + 400.dp.toPx())) - 200.dp.toPx(), y = 150.dp.toPx()))
+            drawCircle(color = color2, radius = 250.dp.toPx(), center = Offset(x = ((backgroundOffset * 0.7f) % (totalWidth + 600.dp.toPx())) - 300.dp.toPx(), y = totalHeight * 0.4f))
+            drawCircle(color = color1, radius = 120.dp.toPx(), center = Offset(x = totalWidth - ((backgroundOffset * 1.2f) % (totalWidth + 300.dp.toPx())), y = totalHeight * 0.7f))
+        }
+
         CompositionLocalProvider(LocalFontScale provides fontScale) {
-            val screenWidthPx = constraints.maxWidth.toFloat()
-            val screenHeightPx = constraints.maxHeight.toFloat()
-            val density = LocalDensity.current
-            var frameTick by remember { mutableStateOf(0L) }
-            val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
-
-            val physicsBubbles = remember(screenWidthPx, screenHeightPx) {
-                List(20) {
-                    PhysicsBubble(
-                        x = Random.nextFloat() * screenWidthPx,
-                        y = Random.nextFloat() * screenHeightPx,
-                        vx = Random.nextFloat() * 1.5f - 0.75f,
-                        vy = Random.nextFloat() * -8f - 2f,
-                        radius = with(density) { Random.nextInt(10, 40).dp.toPx() },
-                        color = bubbleColors.random()
-                    )
-                }
-            }
-
-            LaunchedEffect(screenWidthPx, screenHeightPx) {
-                val gravity = 0.15f
-                while (isActive) {
-                    withFrameNanos { frameTime ->
-                        frameTick = frameTime
-                        physicsBubbles.forEach { bubble ->
-                            bubble.x += bubble.vx
-                            bubble.y += bubble.vy
-                            bubble.vy += gravity
-                            if (bubble.y > screenHeightPx + bubble.radius * 2) {
-                                bubble.y = -bubble.radius
-                                bubble.x = Random.nextFloat() * screenWidthPx
-                                bubble.vy = Random.nextFloat() * 1.5f
-                            }
-                            if (bubble.x < -bubble.radius) bubble.x = screenWidthPx + bubble.radius
-                            if (bubble.x > screenWidthPx + bubble.radius) bubble.x = -bubble.radius
-                        }
-                    }
-                }
-            }
-
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(screenWidthPx, screenHeightPx) {
-                        detectTapGestures { offset ->
-                            physicsBubbles.forEach { bubble ->
-                                val dist = hypot(offset.x - bubble.x, offset.y - bubble.y)
-                                if (dist <= bubble.radius * 1.8f) {
-                                    soundManager.play(SoundType.POP)
-                                    onSecretClick()
-                                    bubble.vy = -25f
-                                    bubble.vx = (Random.nextFloat() * 12f - 6f)
-                                }
-                            }
-                        }
-                    }
+                    .systemBarsPadding()
+                    .padding(horizontal = 32.dp, vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    @Suppress("UNUSED_VARIABLE")
-                    val t = frameTick
-                    physicsBubbles.forEach { bubble ->
-                        val center = Offset(bubble.x, bubble.y)
-                        val radius = bubble.radius
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(bubble.color.copy(alpha = 0.8f), bubble.color.copy(alpha = 0.2f)),
-                                center = center,
-                                radius = radius
-                            ),
-                            radius = radius,
-                            center = center
+                // TÍTULO
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.graphicsLayer { translationY = titleFloat }) {
+                    Text(
+                        text = stringResource(id = R.string.app_name).uppercase(),
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(
+                            fontSize = (75 * fontScale).sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 2.sp,
+                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
                         )
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.4f),
-                            radius = radius * 0.35f,
-                            center = Offset(center.x - radius * 0.3f, center.y - radius * 0.3f)
-                        )
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.2f),
-                            radius = radius,
-                            center = center,
-                            style = Stroke(width = 1.5f)
-                        )
-                    }
+                    )
+                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
                 }
 
+                // CONTENEDOR DE BOTONES REESTRUCTURADO
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .systemBarsPadding()
-                        .padding(horizontal = 24.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceEvenly
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // ✅ TÍTULO CON COLOR BLANCO SÓLIDO
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = stringResource(id = R.string.app_name).uppercase(),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Visible,
-                            textAlign = TextAlign.Center,
-                            style = TextStyle(
-                                fontSize = (54 * fontScale).sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White, // Ahora es blanco sólido sin degradados
-                                letterSpacing = (4 * fontScale).sp,
-                                shadow = null // Sin sombras para máxima nitidez
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    scaleX = titleScale
-                                    scaleY = titleScale
-                                }
-                        )
-                        Box(modifier = Modifier.width((160 * fontScale).dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)))
-                    }
+                    // BOTÓN JUGAR
+                    ReferenceButton(
+                        text = stringResource(id = R.string.menu_play),
+                        backgroundColor = Color.White,
+                        contentColor = SageGreen,
+                        onClick = onModesClick
+                    )
 
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy((18 * fontScale).dp)
-                    ) {
-                        PremiumMenuButton(
-                            text = stringResource(id = R.string.menu_play),
-                            icon = Icons.Default.PlayArrow,
-                            color = Color(0xFF00E676),
-                            onClick = onPlayClick
-                        )
-
-                        PremiumMenuButton(
-                            text = stringResource(id = R.string.menu_modes),
-                            color = Color(0xFF40C4FF),
-                            onClick = onModesClick
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                PremiumSmallButton(
-                                    text = stringResource(id = R.string.menu_record),
-                                    icon = Icons.Default.Star,
-                                    color = Color(0xFFFFD700),
-                                    onClick = onScoreClick
-                                )
-                            }
-                            Box(modifier = Modifier.weight(1f)) {
-                                PremiumSmallButton(
-                                    text = stringResource(id = R.string.menu_achievements),
-                                    color = Color(0xFFFF4081),
-                                    onClick = onAchievementsClick
-                                )
-                            }
-                        }
-                    }
-
+                    // FILA: RÉCORDS | LOGROS
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = stringResource(id = R.string.menu_version),
-                            color = Color.White.copy(alpha = 0.3f),
-                            fontSize = (12 * fontScale).sp,
-                            fontWeight = FontWeight.Medium
+                        // BOTÓN RÉCORDS
+                        ReferenceButton(
+                            text = stringResource(id = R.string.menu_record),
+                            backgroundColor = Color.White,
+                            contentColor = SageGreen,
+                            modifier = Modifier.weight(1f),
+                            onClick = onScoreClick
                         )
 
-                        CircleIconButton(
-                            icon = Icons.Default.Settings,
-                            onClick = onSettingsClick,
-                            color = Color.White,
-                            iconTint = Color.Gray
+                        // BOTÓN LOGROS (Azul con estrella dorada)
+                        ReferenceButton(
+                            text = "LOGROS",
+                            backgroundColor = NavyDark,
+                            contentColor = Color.White,
+                            icon = Icons.Default.Star,
+                            iconColor = StarGold,
+                            modifier = Modifier.weight(1f),
+                            onClick = onAchievementsClick
                         )
                     }
+
+                    // BOTÓN AJUSTES
+                    ReferenceButton(
+                        text = "AJUSTES",
+                        backgroundColor = Color.White,
+                        contentColor = SageGreen,
+                        onClick = onSettingsClick
+                    )
+                }
+
+                // PIE DE PÁGINA (Solo versión)
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "VERSION 1.0.7",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
         }
@@ -279,122 +184,65 @@ fun MenuScreen(
 }
 
 @Composable
-fun PremiumMenuButton(
+fun ReferenceButton(
     text: String,
+    backgroundColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    color: Color,
+    iconColor: Color = Color.Unspecified,
+    showDot: Boolean = false,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.94f else 1f, label = "scale")
-    val alpha by animateFloatAsState(if (isPressed) 0.7f else 1f, label = "alpha")
+    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
     val fontScale = LocalFontScale.current
 
-    Box(
-        modifier = Modifier
+    Surface(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(28.dp),
+        color = backgroundColor,
+        shadowElevation = if (isPressed) 2.dp else 4.dp,
+        modifier = modifier
             .fillMaxWidth()
-            .height((70 * fontScale).dp.coerceAtLeast(50.dp))
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-            }
-            .background(
-                brush = Brush.horizontalGradient(listOf(color, color)),
-                shape = RoundedCornerShape(24.dp)
-            )
-            .border(2.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() },
-        contentAlignment = Alignment.Center
+            .height((64 * fontScale).dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
-            if (icon != null) {
-                Icon(icon, null, tint = Color.White, modifier = Modifier.size((28 * fontScale).dp.coerceAtLeast(20.dp)))
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (showDot) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(contentColor)
+                )
                 Spacer(Modifier.width(12.dp))
+            } else if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
             }
+            
             Text(
                 text = text.uppercase(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 style = TextStyle(
                     fontSize = (20 * fontScale).sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    letterSpacing = (1.5 * fontScale).sp,
-                    shadow = null
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun PremiumSmallButton(
-    text: String,
-    icon: ImageVector? = null,
-    color: Color,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.92f else 1f, label = "scale")
-    val fontScale = LocalFontScale.current
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height((60 * fontScale).dp.coerceAtLeast(45.dp))
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .background(color, RoundedCornerShape(20.dp))
-            .border(1.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
-            if (icon != null) {
-                Icon(icon, null, tint = Color.White, modifier = Modifier.size((18 * fontScale).dp.coerceAtLeast(14.dp)))
-                Spacer(Modifier.width(6.dp))
-            }
-            Text(
-                text = text.uppercase(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(
-                    fontSize = (13 * fontScale).sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    shadow = null
+                    color = contentColor,
+                    letterSpacing = 1.sp
                 )
             )
         }
-    }
-}
-
-@Composable
-fun CircleIconButton(
-    icon: ImageVector,
-    onClick: () -> Unit,
-    color: Color,
-    iconTint: Color = Color.White
-) {
-    val fontScale = LocalFontScale.current
-    Box(
-        modifier = Modifier
-            .size((56 * fontScale).dp.coerceAtLeast(48.dp))
-            .background(color, CircleShape)
-            .border(1.dp, Color.Black.copy(alpha = 0.05f), CircleShape)
-            .clip(CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, null, tint = iconTint, modifier = Modifier.size((24 * fontScale).dp.coerceAtLeast(20.dp)))
     }
 }
 
@@ -403,21 +251,15 @@ fun OrbBlazeExitDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252))) {
+            Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))) {
                 Text(stringResource(id = R.string.dialog_exit_confirm), color = Color.White, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(id = R.string.dialog_exit_cancel), color = Color(0xFF1A237E), fontWeight = FontWeight.Bold)
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.dialog_exit_cancel), color = Color.Gray) }
         },
-        title = {
-            Text(stringResource(id = R.string.dialog_exit_title), fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        },
-        text = {
-            Text(stringResource(id = R.string.dialog_exit_desc), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        },
+        title = { Text(stringResource(id = R.string.dialog_exit_title), fontWeight = FontWeight.Black) },
+        text = { Text(stringResource(id = R.string.dialog_exit_desc)) },
         shape = RoundedCornerShape(28.dp),
         containerColor = Color.White
     )

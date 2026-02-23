@@ -1,12 +1,12 @@
 package com.example.orbblaze.ui.menu
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -20,14 +20,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -37,11 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.R
 import com.example.orbblaze.ui.game.SoundManager
-import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
-import kotlinx.coroutines.isActive
-import kotlin.math.hypot
-import kotlin.random.Random
 
 @Composable
 fun GameModesScreen(
@@ -52,166 +44,100 @@ fun GameModesScreen(
     var showLockedDialog by remember { mutableStateOf(false) }
     val infiniteTransition = rememberInfiniteTransition(label = "modes_animations")
     
-    val titleScale by infiniteTransition.animateFloat(
-        initialValue = 1f, targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(tween(3000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "title_scale"
+    val titleFloat by infiniteTransition.animateFloat(
+        initialValue = -8f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "title_float"
     )
 
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(BgTop, BgBottom)))
+        modifier = Modifier.fillMaxSize()
     ) {
         val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
         
         CompositionLocalProvider(LocalFontScale provides fontScale) {
-            val screenWidthPx = constraints.maxWidth.toFloat()
-            val screenHeightPx = constraints.maxHeight.toFloat()
-            val density = LocalDensity.current
-            var frameTick by remember { mutableLongStateOf(0L) }
-            val bubbleColors = listOf(BubbleRed, BubbleBlue, BubbleGreen, BubbleYellow, BubblePurple, BubbleCyan)
-
-            val physicsBubbles = remember(screenWidthPx, screenHeightPx) {
-                List(15) {
-                    PhysicsBubble(
-                        x = Random.nextFloat() * screenWidthPx,
-                        y = Random.nextFloat() * screenHeightPx,
-                        vx = Random.nextFloat() * 1.5f - 0.75f,
-                        vy = Random.nextFloat() * -8f - 2f,
-                        radius = with(density) { Random.nextInt(10, 40).dp.toPx() },
-                        color = bubbleColors.random()
-                    )
-                }
-            }
-
-            LaunchedEffect(screenWidthPx, screenHeightPx) {
-                val gravity = 0.15f
-                while (isActive) {
-                    withFrameNanos { frameTime ->
-                        frameTick = frameTime
-                        physicsBubbles.forEach { bubble ->
-                            bubble.x += bubble.vx; bubble.y += bubble.vy; bubble.vy += gravity
-                            if (bubble.y > screenHeightPx + bubble.radius * 2) {
-                                bubble.y = -bubble.radius; bubble.x = Random.nextFloat() * screenWidthPx
-                                bubble.vy = Random.nextFloat() * 1.5f
-                            }
-                            if (bubble.x < -bubble.radius) bubble.x = screenWidthPx + bubble.radius
-                            if (bubble.x > screenWidthPx + bubble.radius) bubble.x = -bubble.radius
-                        }
-                    }
-                }
-            }
-
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(screenWidthPx, screenHeightPx) {
-                        detectTapGestures { offset ->
-                            physicsBubbles.forEach { bubble ->
-                                val dist = hypot(offset.x - bubble.x, offset.y - bubble.y)
-                                if (dist <= bubble.radius * 1.8f) {
-                                    soundManager.play(SoundType.POP)
-                                    bubble.vy = -25f; bubble.vx = (Random.nextFloat() * 12f - 6f)
-                                }
-                            }
-                        }
-                    }
+                    .systemBarsPadding()
+                    // Añadimos padding inferior extra para evitar que el banner de anuncios tape el botón
+                    .padding(start = 32.dp, end = 32.dp, top = 32.dp, bottom = 80.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    @Suppress("UNUSED_VARIABLE")
-                    val t = frameTick 
-                    physicsBubbles.forEach { bubble ->
-                        val center = Offset(bubble.x, bubble.y); val radius = bubble.radius
-                        drawCircle(brush = Brush.radialGradient(listOf(bubble.color.copy(alpha = 0.8f), bubble.color.copy(alpha = 0.2f)), center = center, radius = radius), radius = radius, center = center)
-                        drawCircle(color = Color.White.copy(alpha = 0.4f), radius = radius * 0.35f, center = Offset(center.x - radius * 0.3f, center.y - radius * 0.3f))
-                        drawCircle(color = Color.White.copy(alpha = 0.2f), radius = radius, center = center, style = Stroke(width = 1.5f))
-                    }
-                }
-
+                // ✅ TÍTULO (Estilo Menú)
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .systemBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceEvenly
+                    modifier = Modifier.graphicsLayer { translationY = titleFloat }
                 ) {
-                    // ✅ TÍTULO ESTILO PREMIUM
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "MODOS DE JUEGO",
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Visible,
-                            textAlign = TextAlign.Center,
-                            style = TextStyle(
-                                fontSize = (36 * fontScale).sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White,
-                                letterSpacing = (2 * fontScale).sp,
-                                shadow = null
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    scaleX = titleScale
-                                    scaleY = titleScale
-                                }
+                    Text(
+                        text = "ELIGE TU MODO",
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(
+                            fontSize = (42 * fontScale).sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 2.sp,
+                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
                         )
-                        Box(modifier = Modifier.width((120 * fontScale).dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)))
-                    }
+                    )
+                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
+                }
 
-                    // ✅ LISTA DE MODOS REFINADA
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        contentPadding = PaddingValues(vertical = 16.dp)
-                    ) {
-                        item {
-                            ModeCardPremium(
-                                title = "CONTRA TIEMPO", 
-                                icon = Icons.Default.Refresh, 
-                                color = Color(0xFF00E676), 
-                                isLocked = false,
-                                onClick = { onModeSelect("time_attack") }
-                            )
-                        }
-                        item {
-                            ModeCardPremium(
-                                title = "MODO AVENTURA", 
-                                icon = Icons.Default.Place, 
-                                color = Color(0xFFFFD700), 
-                                isLocked = false,
-                                onClick = { onModeSelect("adventure_map") }
-                            )
-                        }
-                        item {
-                            ModeCardPremium(title = "MODO INVERSA", icon = Icons.Default.KeyboardArrowUp, color = Color(0xFFFF5252), onClick = { showLockedDialog = true })
-                        }
-                        item {
-                            ModeCardPremium(title = "PUZZLE DIARIO", icon = Icons.Default.DateRange, color = Color(0xFFBB86FC), onClick = { showLockedDialog = true })
-                        }
-                        item {
-                            ModeCardPremium(title = "MINIJUEGOS", icon = Icons.Default.PlayArrow, color = Color(0xFF03DAC5), onClick = { showLockedDialog = true })
-                        }
+                // ✅ LISTA DE MODOS
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(vertical = 24.dp)
+                ) {
+                    item {
+                        ModeCardPremium(
+                            title = "MODO CLÁSICO", 
+                            color = SageGreen, 
+                            isLocked = false,
+                            isPrincipal = true,
+                            onClick = { onModeSelect("game") }
+                        )
                     }
-
-                    // ✅ BOTÓN VOLVER (Elevado para el anuncio)
-                    Box(
-                        modifier = Modifier
-                            .padding(bottom = 55.dp) // Espacio para el banner
-                            .width(200.dp)
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(Color.White)
-                            .border(2.dp, Color.White, RoundedCornerShape(24.dp))
-                            .clickable { onBackClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("VOLVER", color = Color.Gray, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, letterSpacing = 1.sp)
+                    
+                    item {
+                        ModeCardPremium(
+                            title = "CONTRA TIEMPO", 
+                            color = Color(0xFF00E676), 
+                            isLocked = false,
+                            onClick = { onModeSelect("time_attack") }
+                        )
+                    }
+                    
+                    item {
+                        ModeCardPremium(
+                            title = "MODO AVENTURA", 
+                            color = Color(0xFFFFD700), 
+                            isLocked = false,
+                            onClick = { onModeSelect("adventure_map") }
+                        )
+                    }
+                    
+                    item {
+                        ModeCardPremium(title = "MODO INVERSA", color = Color(0xFFFF5252), onClick = { showLockedDialog = true })
+                    }
+                    
+                    item {
+                        ModeCardPremium(title = "PUZZLE DIARIO", color = Color(0xFFBB86FC), onClick = { showLockedDialog = true })
+                    }
+                    item {
+                        ModeCardPremium(title = "MINIJUEGOS", color = Color(0xFF03DAC5), onClick = { showLockedDialog = true })
                     }
                 }
+
+                // ✅ BOTÓN VOLVER (Estilo Menú)
+                ReferenceButton(
+                    text = "VOLVER",
+                    backgroundColor = Color.White,
+                    contentColor = Color.Gray,
+                    modifier = Modifier.width(200.dp),
+                    onClick = onBackClick
+                )
             }
         }
 
@@ -224,70 +150,114 @@ fun GameModesScreen(
 @Composable
 fun ModeCardPremium(
     title: String,
-    icon: ImageVector,
     color: Color,
     isLocked: Boolean = true,
+    isPrincipal: Boolean = false,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
     val fontScale = LocalFontScale.current
     
-    Box(
+    Surface(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(28.dp),
+        color = Color.White,
         modifier = Modifier
             .fillMaxWidth()
-            .height((85 * fontScale).dp.coerceAtLeast(70.dp))
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color.White)
-            .border(width = 2.dp, color = if(isLocked) Color.LightGray.copy(alpha = 0.3f) else color.copy(alpha = 0.5f), shape = RoundedCornerShape(24.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart
+            .height(if (isPrincipal) (90 * fontScale).dp else (75 * fontScale).dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .shadow(if (isPressed) 2.dp else 6.dp, RoundedCornerShape(28.dp))
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size((50 * fontScale).dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (isLocked) Color.LightGray.copy(alpha = 0.1f) else color.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isLocked) Icons.Default.Lock else icon, 
-                    contentDescription = null, 
-                    tint = if(isLocked) Color.Gray else color, 
-                    modifier = Modifier.size((26 * fontScale).dp)
-                )
-            }
-            
-            Spacer(Modifier.width(16.dp))
-            
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title, 
                     style = TextStyle(
-                        color = Color(0xFF1A237E), 
-                        fontSize = (18 * fontScale).sp, 
-                        fontWeight = FontWeight.Black
+                        color = if(isLocked) Color.Gray else color, 
+                        fontSize = ((if (isPrincipal) 20 else 18) * fontScale).sp, 
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
                     )
                 )
                 Text(
-                    text = if (isLocked) "PRÓXIMAMENTE" else "MODO DISPONIBLE", 
+                    text = if (isLocked) "PRÓXIMAMENTE" else if (isPrincipal) "MODO RECOMENDADO" else "DISPONIBLE", 
                     style = TextStyle(
-                        color = if (isLocked) Color.Gray.copy(alpha = 0.6f) else color, 
+                        color = Color.LightGray, 
                         fontSize = (11 * fontScale).sp, 
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 1.sp
                     )
                 )
             }
             
-            if (!isLocked) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow, 
-                    contentDescription = null, 
-                    tint = color, 
-                    modifier = Modifier.size(24.dp)
-                )
+            if (isLocked) {
+                Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = Color.LightGray)
+            } else if (isPrincipal) {
+                Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
+            } else {
+                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = color.copy(alpha = 0.5f), modifier = Modifier.size(24.dp))
             }
+        }
+    }
+}
+
+// Reutilizamos el estilo de botón del menú
+@Composable
+fun ReferenceButton(
+    text: String,
+    backgroundColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    iconColor: Color = Color.Unspecified,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
+    val fontScale = LocalFontScale.current
+
+    Surface(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(28.dp),
+        color = backgroundColor,
+        modifier = modifier
+            .fillMaxWidth()
+            .height((64 * fontScale).dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .shadow(if (isPressed) 2.dp else 4.dp, RoundedCornerShape(28.dp))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            
+            Text(
+                text = text.uppercase(),
+                style = TextStyle(
+                    fontSize = (16 * fontScale).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                    letterSpacing = 1.sp
+                )
+            )
         }
     }
 }
@@ -305,7 +275,7 @@ fun OrbBlazeLockedDialog(onDismiss: () -> Unit) {
             Text("MODO BLOQUEADO", fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         },
         text = {
-            Text("Este modo de juego estará disponible en futuras actualizaciones. ¡Sigue atento!", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text("Este modo de juego estará disponible en futuras actualizaciones.", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         },
         shape = RoundedCornerShape(28.dp),
         containerColor = Color.White

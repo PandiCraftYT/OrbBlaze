@@ -12,6 +12,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,12 +49,18 @@ import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.*
 import com.example.orbblaze.ui.components.*
+import com.example.orbblaze.ui.menu.ReferenceButton
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+
+// Reutilizamos los colores del menú
+private val SageGreen = Color(0xFF8DA094)
+private val NavyDark = Color(0xFF2D324F)
+private val StarGold = Color(0xFFF4C491)
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
@@ -107,6 +115,14 @@ fun LevelScreen(
     LaunchedEffect(isTutorialCompleted) {
         if (!isTutorialCompleted) {
             showTutorial = true
+        }
+    }
+
+    // ✅ CAMBIO DE MÚSICA AL ENTRAR Y VOLVER AL MENÚ AL SALIR
+    DisposableEffect(Unit) {
+        soundManager.switchToLevelMusic()
+        onDispose {
+            soundManager.switchToMenuMusic()
         }
     }
 
@@ -304,7 +320,7 @@ fun LevelScreen(
                 if (isAiming) {
                     val bubbleColor = if(isFireballQueued) Color(0xFFFF5722) else mapBubbleColor(currentBubbleColor)
                     viewModel.trajectoryPoints.forEachIndexed { index, point ->
-                        val progress = index.toFloat() / viewModel.trajectoryPoints.size.coerceAtLeast(1)
+                        val progress = index.mapProgress(viewModel.trajectoryPoints.size)
                         val alpha = (0.7f - progress * 0.4f).coerceIn(0.1f, 0.7f)
                         val radius = (4.dp.toPx() * (1f - progress * 0.2f)).coerceAtLeast(2.dp.toPx())
 
@@ -470,31 +486,77 @@ fun LevelScreen(
     }
 }
 
+private fun Int.mapProgress(total: Int): Float = if (total <= 1) 0f else this.toFloat() / (total - 1)
+
 @Composable
 fun AchievementNotification(achievement: Achievement?) {
     AnimatedVisibility(
         visible = achievement != null,
-        enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { -it / 2 }),
+        enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { -it }),
         exit = fadeOut(tween(400)),
-        modifier = Modifier.fillMaxWidth().padding(top = 130.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
         label = "achievement_anim"
     ) {
         if (achievement != null) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
                 Surface(
-                    color = Color(0xFF151515).copy(alpha = 0.95f),
-                    shape = RoundedCornerShape(50),
-                    border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f)),
-                    shadowElevation = 8.dp
+                    color = Color.White,
+                    shape = RoundedCornerShape(28.dp),
+                    shadowElevation = 10.dp,
+                    modifier = Modifier.widthIn(max = 350.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text(text = achievement.title.uppercase(), style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp))
+                        // Icono Izquierda (Caja redondeada con estrella)
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(StarGold.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = StarGold,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.width(12.dp))
+
+                        // Texto Central (Título + Descripción)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = achievement.title.uppercase(),
+                                style = TextStyle(
+                                    color = NavyDark,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.5.sp
+                                )
+                            )
+                            Text(
+                                text = achievement.description,
+                                style = TextStyle(
+                                    color = Color.Gray,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        // Estrellita derecha (decorativa)
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = StarGold.copy(alpha = 0.5f),
+                            modifier = Modifier.size(14.dp)
+                        )
                     }
                 }
             }
@@ -521,20 +583,61 @@ fun QuickShopOverlay(onDismiss: () -> Unit, onBuyFireball: () -> Unit) {
 @Composable
 fun ModeStartOverlay(gameMode: GameMode, highScore: Int, onStart: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
-        val isTimeAttack = gameMode == GameMode.TIME_ATTACK; val accentColor = if (isTimeAttack) Color(0xFFFFB74D) else Color(0xFF64FFDA)
-        Surface(modifier = Modifier.width(340.dp).padding(16.dp), shape = RoundedCornerShape(32.dp), color = Color(0xFF0F1444), border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))), shadowElevation = 24.dp) {
-            Column(modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(text = if (isTimeAttack) stringResource(id = R.string.mode_time_attack) else stringResource(id = R.string.mode_classic), style = TextStyle(color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, textAlign = TextAlign.Center))
+        Surface(
+            modifier = Modifier.width(320.dp).padding(16.dp),
+            shape = RoundedCornerShape(40.dp),
+            color = Color.White,
+            shadowElevation = 12.dp
+        ) {
+            Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                val isTimeAttack = gameMode == GameMode.TIME_ATTACK
+                
+                Text(
+                    text = if (isTimeAttack) "CONTRA TIEMPO" else "MODO CLÁSICO",
+                    style = TextStyle(
+                        color = NavyDark,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp,
+                        textAlign = TextAlign.Center
+                    )
+                )
+                Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
+                
                 Spacer(Modifier.height(16.dp))
-                Text(text = if (isTimeAttack) stringResource(id = R.string.mode_desc_time) else stringResource(id = R.string.mode_desc_classic), color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, fontSize = 16.sp, lineHeight = 22.sp)
+                
+                Text(
+                    text = if (isTimeAttack) stringResource(id = R.string.mode_desc_time) else stringResource(id = R.string.mode_desc_classic),
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 22.sp
+                )
+                
                 if (highScore > 0) {
                     Spacer(Modifier.height(24.dp))
-                    Row(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(id = R.string.game_best_label) + ": $highScore", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                    Surface(
+                        color = SageGreen.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(1.dp, SageGreen.copy(alpha = 0.2f))
+                    ) {
+                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Star, null, tint = StarGold, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(text = "RÉCORD: $highScore", color = SageGreen, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                        }
                     }
                 }
-                Spacer(Modifier.height(40.dp))
-                Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(64.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor), elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)) { Text(stringResource(id = R.string.mode_play_now), color = Color(0xFF0F1444), fontWeight = FontWeight.Black, fontSize = 18.sp) }
+                
+                Spacer(Modifier.height(32.dp))
+                
+                ReferenceButton(
+                    text = "¡JUGAR AHORA!",
+                    backgroundColor = SageGreen,
+                    contentColor = Color.White,
+                    onClick = onStart
+                )
             }
         }
     }
@@ -574,77 +677,130 @@ fun OverlayMenu(
     onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null,
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
     currentLevelId: Int = 0,
-    onNextLevel: (() -> Unit)? = null // ✅ Nuevo callback
+    onNextLevel: (() -> Unit)? = null
 ) {
     val isPause = title == stringResource(id = R.string.game_pause)
-    val accentColor = if (isPause) Color(0xFF64FFDA) else if (isWin) Color(0xFFFFD700) else Color(0xFFFF5252)
     val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(300.dp).clip(RoundedCornerShape(40.dp)).background(Color(0xFF080B25).copy(alpha = 0.95f)).padding(vertical = 32.dp, horizontal = 24.dp)) {
-            Text(text = title, style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = accentColor, letterSpacing = 1.sp, textAlign = TextAlign.Center))
-            Spacer(Modifier.height(24.dp))
-
-            if (score != null) {
-                Text(stringResource(id = R.string.game_score_label), color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Text("$score", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Light)
+        Surface(
+            shape = RoundedCornerShape(40.dp),
+            color = Color.White,
+            shadowElevation = 12.dp,
+            modifier = Modifier.width(320.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // TÍTULO
+                Text(
+                    text = title.uppercase(),
+                    style = TextStyle(
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black,
+                        color = NavyDark,
+                        letterSpacing = 1.sp
+                    )
+                )
+                Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
+                
                 Spacer(Modifier.height(24.dp))
-            }
 
-            if (isAdventure && isWin && currentLevelId > 30) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    repeat(3) { i ->
-                        val scale = remember { Animatable(0f) }
-                        LaunchedEffect(Unit) { delay(i * 150L); scale.animateTo(1f, spring(0.6f, 300f)) }
-                        Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = if (i < stars) Color(0xFFFFD600) else Color.White.copy(alpha = 0.05f), modifier = Modifier.size(32.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value })
-                    }
+                if (score != null) {
+                    Text("PUNTUACIÓN", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text("$score", color = NavyDark, fontSize = 48.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(24.dp))
                 }
-                Spacer(Modifier.height(24.dp))
-            }
 
-            if (showSettings && settingsManager != null) {
-                val sfxVol by settingsManager.sfxVolumeFlow.collectAsState(1f)
-                val colorBlind by settingsManager.colorBlindModeFlow.collectAsState(false)
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("SONIDO", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Slider(value = sfxVol, onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } }, colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("DALTONISMO", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Switch(checked = colorBlind, onCheckedChange = { scope.launch { settingsManager.setColorBlindMode(it) } }, colors = SwitchDefaults.colors(checkedThumbColor = accentColor))
+                if (isAdventure && isWin && stars > 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(3) { i ->
+                            val scale = remember { Animatable(0f) }
+                            LaunchedEffect(Unit) { delay(i * 150L); scale.animateTo(1f, spring(0.6f, 300f)) }
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = if (i < stars) StarGold else Color.LightGray.copy(alpha = 0.3f),
+                                modifier = Modifier.size(32.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+                            )
+                        }
                     }
+                    Spacer(Modifier.height(24.dp))
                 }
-                Spacer(Modifier.height(24.dp))
-            }
 
-            onContinue?.let { action ->
-                Button(onClick = action, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = accentColor)) { Text(stringResource(id = R.string.game_resume), color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp) }
-                Spacer(Modifier.height(16.dp))
-            }
-
-            // ✅ BOTÓN DE SIGUIENTE NIVEL (Solo en victoria aventura)
-            onNextLevel?.let { action ->
-                Button(onClick = action, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA))) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(id = R.string.game_next_level), color = Color(0xFF080B25), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color(0xFF080B25), modifier = Modifier.size(18.dp))
+                if (showSettings && settingsManager != null) {
+                    val sfxVol by settingsManager.sfxVolumeFlow.collectAsState(1f)
+                    val colorBlind by settingsManager.colorBlindModeFlow.collectAsState(false)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text("SONIDO", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Slider(
+                            value = sfxVol, 
+                            onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } },
+                            colors = SliderDefaults.colors(thumbColor = SageGreen, activeTrackColor = SageGreen, inactiveTrackColor = SageGreen.copy(alpha = 0.2f))
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("DALTONISMO", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            Switch(
+                                checked = colorBlind,
+                                onCheckedChange = { scope.launch { settingsManager.setColorBlindMode(it) } },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SageGreen)
+                            )
+                        }
                     }
+                    Spacer(Modifier.height(24.dp))
                 }
-                Spacer(Modifier.height(16.dp))
-            }
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onRestart, modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))) { Icon(Icons.Default.Refresh, null, tint = Color.White.copy(alpha = 0.7f)) }
-                Spacer(Modifier.width(24.dp))
-                val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
-                IconButton(onClick = onExit, modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.05f))) { Icon(exitIcon, null, tint = Color.White.copy(alpha = 0.7f)) }
-            }
+                // BOTÓN CONTINUAR / SIGUIENTE
+                val mainButtonAction = onContinue ?: onNextLevel
+                val mainButtonText = if (onContinue != null) stringResource(id = R.string.game_resume) else stringResource(id = R.string.game_next_level)
+                
+                if (mainButtonAction != null) {
+                    ReferenceButton(
+                        text = mainButtonText,
+                        backgroundColor = SageGreen,
+                        contentColor = Color.White,
+                        onClick = mainButtonAction
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
 
-            if (!isPause) {
-                onShowAd?.let { adAction ->
-                    val adLabel = if (isAdventure && !isWin) stringResource(id = R.string.game_revive_ad) else stringResource(id = R.string.game_bonus_ad)
-                    Spacer(Modifier.height(32.dp))
-                    TextButton(onClick = adAction) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.PlayArrow, null, tint = accentColor, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text(adLabel, color = accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) } }
+                // FILA DE ACCIONES (REINICIAR | SALIR)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ReferenceButton(
+                        text = "",
+                        backgroundColor = Color.White,
+                        contentColor = Color.Gray,
+                        icon = Icons.Default.Refresh,
+                        iconColor = Color.Gray,
+                        modifier = Modifier.weight(1f),
+                        onClick = onRestart
+                    )
+                    
+                    val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
+                    ReferenceButton(
+                        text = "",
+                        backgroundColor = Color.White,
+                        contentColor = Color.Gray,
+                        icon = exitIcon,
+                        iconColor = Color.Gray,
+                        modifier = Modifier.weight(1f),
+                        onClick = onExit
+                    )
+                }
+
+                if (!isPause) {
+                    onShowAd?.let { adAction ->
+                        val adLabel = if (isAdventure && !isWin) stringResource(id = R.string.game_revive_ad) else stringResource(id = R.string.game_bonus_ad)
+                        Spacer(Modifier.height(24.dp))
+                        TextButton(onClick = adAction) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.PlayArrow, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(adLabel, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -19,6 +20,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.domain.model.LevelObjective
+import com.example.orbblaze.ui.menu.ReferenceButton
+
+// Colores del menú
+private val SageGreen = Color(0xFF8DA094)
+private val NavyDark = Color(0xFF2D324F)
 
 @Composable
 fun AdventureStartDialog(
@@ -32,40 +38,37 @@ fun AdventureStartDialog(
             .background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
-        val accentColor = Color(0xFF64FFDA)
-        
         Surface(
             modifier = Modifier
-                .width(340.dp)
+                .width(320.dp)
                 .padding(16.dp),
-            shape = RoundedCornerShape(32.dp),
-            color = Color(0xFF0F1444),
-            border = BorderStroke(1.5.dp, Brush.sweepGradient(listOf(accentColor, Color.Transparent, accentColor))),
-            shadowElevation = 24.dp
+            shape = RoundedCornerShape(40.dp),
+            color = Color.White,
+            shadowElevation = 12.dp
         ) {
             Column(
-                modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp),
+                modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Indicador de Nivel
                 Surface(
-                    color = accentColor.copy(alpha = 0.1f),
+                    color = SageGreen.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(50),
-                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f))
+                    border = BorderStroke(1.dp, SageGreen.copy(alpha = 0.2f))
                 ) {
                     Text(
                         text = "NIVEL $levelId",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         style = TextStyle(
-                            color = accentColor,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            color = SageGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
                             letterSpacing = 2.sp
                         )
                     )
                 }
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(24.dp))
 
                 // Icono según objetivo
                 val icon = when(objective) {
@@ -75,12 +78,12 @@ fun AdventureStartDialog(
                 }
 
                 Box(contentAlignment = Alignment.Center) {
-                    Box(modifier = Modifier.size(80.dp).background(accentColor.copy(alpha = 0.1f), CircleShape))
+                    Box(modifier = Modifier.size(70.dp).background(NavyDark.copy(alpha = 0.05f), CircleShape))
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(36.dp)
+                        tint = NavyDark.copy(alpha = 0.6f),
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
@@ -89,14 +92,15 @@ fun AdventureStartDialog(
                 Text(
                     text = "OBJETIVO",
                     style = TextStyle(
-                        color = Color.White,
+                        color = NavyDark,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.sp
                     )
                 )
+                Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
 
                 val objectiveDescription = when(objective) {
                     is LevelObjective.ClearBoard -> objective.description
@@ -106,30 +110,21 @@ fun AdventureStartDialog(
 
                 Text(
                     text = objectiveDescription,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = Color.Gray,
                     textAlign = TextAlign.Center,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 24.sp
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 22.sp
                 )
 
-                Spacer(Modifier.height(40.dp))
+                Spacer(Modifier.height(32.dp))
 
-                Button(
-                    onClick = onStartClick,
-                    modifier = Modifier.fillMaxWidth().height(64.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = accentColor),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-                ) {
-                    Text(
-                        "¡ENTENDIDO!",
-                        color = Color(0xFF0F1444),
-                        fontWeight = FontWeight.Black,
-                        fontSize = 18.sp,
-                        letterSpacing = 1.sp
-                    )
-                }
+                ReferenceButton(
+                    text = "¡ENTENDIDO!",
+                    backgroundColor = SageGreen,
+                    contentColor = Color.White,
+                    onClick = onStartClick
+                )
             }
         }
     }
