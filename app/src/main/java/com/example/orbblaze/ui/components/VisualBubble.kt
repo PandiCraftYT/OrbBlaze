@@ -1,10 +1,8 @@
 package com.example.orbblaze.ui.components
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -30,37 +28,13 @@ fun VisualBubble(
     isActive: Boolean = false,
     isMatchingTarget: Boolean = false,
     isColorBlindMode: Boolean = false,
-    bubbleColorType: BubbleColor? = null
+    bubbleColorType: BubbleColor? = null,
+    // ✅ Animaciones centralizadas para optimizar batería
+    breathingScale: Float = 1f,
+    lightTime: Float = 0f,
+    sparkleScale: Float = 0f,
+    indicatorAlpha: Float = 1f
 ) {
-    // --- LÓGICA DE ANIMACIÓN ---
-    val infiniteTransition = rememberInfiniteTransition(label = "jewel_pro_fx")
-
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.985f, targetValue = 1.015f,
-        animationSpec = infiniteRepeatable(animation = tween(2500, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
-        label = "soft_breath"
-    )
-
-    val lightTime by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 360f,
-        animationSpec = infiniteRepeatable(animation = tween(4000, easing = LinearEasing), repeatMode = RepeatMode.Restart),
-        label = "light_move"
-    )
-
-    val sparkleScale by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes { durationMillis = 5000; 0f at 0; 0f at 3000; 1f at 3200; 0f at 3400; 0f at 5000 },
-            repeatMode = RepeatMode.Restart
-        ), label = "sparkle"
-    )
-
-    val indicatorAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-        label = "indicator_pulse"
-    )
-
     // Colores del borde
     val goldDark = Color(0xFFC5A059)
     val goldLight = Color(0xFFFFE5B4)
@@ -73,8 +47,8 @@ fun VisualBubble(
         modifier = modifier
             .size(44.dp)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = breathingScale
+                scaleY = breathingScale
             }
             .drawWithCache {
                 val radius = size.minDimension / 2f
@@ -109,14 +83,14 @@ fun VisualBubble(
                             style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
                         )
 
-                        val sparkleAlpha = (sin(lightTime * 0.1f) * 0.5f + 0.5f)
+                        val sparkleAlphaValue = (sin(lightTime * 0.1f) * 0.5f + 0.5f)
                         drawCircle(
-                            color = Color(0xFFFF9800).copy(alpha = sparkleAlpha),
+                            color = Color(0xFFFF9800).copy(alpha = sparkleAlphaValue),
                             radius = 4.dp.toPx(),
                             center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f)
                         )
                         drawCircle(
-                            color = Color.Yellow.copy(alpha = sparkleAlpha),
+                            color = Color.Yellow.copy(alpha = sparkleAlphaValue),
                             radius = 2.dp.toPx(),
                             center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f)
                         )

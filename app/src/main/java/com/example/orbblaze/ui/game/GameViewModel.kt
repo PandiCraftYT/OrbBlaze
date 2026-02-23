@@ -62,6 +62,8 @@ open class GameViewModel(
 
     protected var timerJob: Job? = null
     private var physicsJob: Job? = null
+    private var shakeJob: Job? = null
+    private var particleJob: Job? = null
 
     var shotsFiredCount by mutableIntStateOf(0)
         protected set
@@ -131,8 +133,6 @@ open class GameViewModel(
     init {
         setupAchievements()
         observeData()
-        startParticleLoop()
-        startShakeDecayLoop()
     }
 
     private fun observeData() {
@@ -155,14 +155,16 @@ open class GameViewModel(
 
     fun triggerShake(intensity: Float) {
         shakeIntensity = (shakeIntensity + intensity).coerceAtMost(15f)
+        if (shakeJob == null || !shakeJob!!.isActive) {
+            startShakeDecayLoop()
+        }
     }
 
     private fun startShakeDecayLoop() {
-        viewModelScope.launch {
-            while (isActive) {
-                if (shakeIntensity > 0) {
-                    shakeIntensity = (shakeIntensity - 0.8f).coerceAtLeast(0f)
-                }
+        shakeJob?.cancel()
+        shakeJob = viewModelScope.launch {
+            while (isActive && shakeIntensity > 0f) {
+                shakeIntensity = (shakeIntensity - 0.8f).coerceAtLeast(0f)
                 delay(16)
             }
         }
@@ -232,6 +234,8 @@ open class GameViewModel(
         particles = emptyList()
         floatingTexts = emptyList()
         timerJob?.cancel()
+        shakeJob?.cancel()
+        particleJob?.cancel()
     }
 
     open fun restartGame() { loadLevel(if (gameMode == GameMode.TIME_ATTACK) 3 else 6) }
@@ -441,9 +445,10 @@ open class GameViewModel(
     }
 
     private fun startParticleLoop() {
-        viewModelScope.launch {
+        if (particleJob?.isActive == true) return
+        particleJob = viewModelScope.launch {
             var lastTime = System.currentTimeMillis()
-            while (isActive) {
+            while (isActive && (particles.isNotEmpty() || floatingTexts.isNotEmpty())) {
                 val currentTime = System.currentTimeMillis()
                 val deltaTime = ((currentTime - lastTime) / 1000f).coerceIn(0.001f, 0.05f)
                 lastTime = currentTime
@@ -710,10 +715,12 @@ open class GameViewModel(
             val angle = Math.random() * 2 * Math.PI; val speed = 5.0 + (Math.random() * 10.0)
             particles = particles + GameParticle(particleIdCounter++, cx, cy, (cos(angle) * speed).toFloat(), (sin(angle) * speed).toFloat(), color, (10.0 + Math.random() * 15.0).toFloat(), 1.0f)
         }
+        startParticleLoop()
     }
 
     fun spawnFloatingText(x: Float, y: Float, text: String) { 
         floatingTexts = floatingTexts + FloatingText(textIdCounter++, x, y, text, 1.0f) 
+        startParticleLoop()
     }
 
     fun unlockAchievement(id: String) {

@@ -115,18 +115,45 @@ fun LevelScreen(
     }
 
     val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
+    
+    // ✅ OPTIMIZACIÓN: Transición infinita única y centralizada
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
 
+    // ✅ OPTIMIZACIÓN: El fondo solo se anima si el juego NO está pausado
     val backgroundOffset by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 2000f,
-        animationSpec = infiniteRepeatable(tween(40000, easing = LinearEasing), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(
+            animation = if (isPaused) snap() else tween(40000, easing = LinearEasing), 
+            repeatMode = RepeatMode.Restart
+        ),
         label = "bg_scroll"
     )
 
-    val aimPulse by infiniteTransition.animateFloat(
+    // ✅ OPTIMIZACIÓN: Valores de animación para VisualBubble (Centralizados)
+    val breathingScale by infiniteTransition.animateFloat(
+        initialValue = 0.985f, targetValue = 1.015f,
+        animationSpec = infiniteRepeatable(animation = tween(2500, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+        label = "soft_breath"
+    )
+
+    val lightTime by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(animation = tween(4000, easing = LinearEasing), repeatMode = RepeatMode.Restart),
+        label = "light_move"
+    )
+
+    val sparkleScale by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart),
-        label = "aim_pulse"
+        animationSpec = infiniteRepeatable(
+            animation = keyframes { durationMillis = 5000; 0f at 0; 0f at 3000; 1f at 3200; 0f at 3400; 0f at 5000 },
+            repeatMode = RepeatMode.Restart
+        ), label = "sparkle"
+    )
+
+    val indicatorAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f, targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "indicator_pulse"
     )
 
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
@@ -327,6 +354,10 @@ fun LevelScreen(
                     rainbowRotation = masterRainbowRotation,
                     isColorBlindMode = isColorBlindMode,
                     bubbleColorType = bubble.color,
+                    breathingScale = breathingScale,
+                    lightTime = lightTime,
+                    sparkleScale = sparkleScale,
+                    indicatorAlpha = indicatorAlpha,
                     modifier = Modifier.size(with(density) { bubbleDiameterPx.toDp() }).graphicsLayer { translationX = x - (bubbleDiameterPx / 2); translationY = y - (bubbleDiameterPx / 2) }
                 )
             }
@@ -340,6 +371,8 @@ fun LevelScreen(
                     rainbowRotation = masterRainbowRotation,
                     isColorBlindMode = isColorBlindMode,
                     bubbleColorType = p.color,
+                    breathingScale = 1.1f, // Proyectil un poco más grande
+                    lightTime = lightTime,
                     modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2); if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f }
                 )
             }
