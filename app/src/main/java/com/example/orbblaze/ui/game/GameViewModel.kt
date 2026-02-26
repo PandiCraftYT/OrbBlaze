@@ -101,6 +101,10 @@ open class GameViewModel(
     var isFireballQueued by mutableStateOf(false)
         protected set
 
+    // ✅ Límite de compras de bola de fuego por partida
+    var fireballsBoughtCount by mutableIntStateOf(0)
+        protected set
+
     val currentBubbleColor: BubbleColor get() = nextBubbleColor
 
     var shotTick by mutableIntStateOf(0)
@@ -185,9 +189,13 @@ open class GameViewModel(
     }
 
     fun buyFireball() {
+        // Límite de 3 compras por partida
+        if (fireballsBoughtCount >= 3) return
+
         spendCoins(1000) { success ->
             if (success) {
                 isFireballQueued = true
+                fireballsBoughtCount++
                 soundEvent = SoundType.SWAP
             }
         }
@@ -197,6 +205,7 @@ open class GameViewModel(
     open fun startGame() { 
         gameState = GameState.PLAYING
         comboMultiplier = 1
+        fireballsBoughtCount = 0 // Reiniciar contador al empezar partida
         nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
         startTimer() 
@@ -215,6 +224,7 @@ open class GameViewModel(
         
         score = 0
         comboMultiplier = 1
+        fireballsBoughtCount = 0 // Reiniciar contador
         gameState = GameState.IDLE
         isPaused = false
         shotsFiredCount = 0

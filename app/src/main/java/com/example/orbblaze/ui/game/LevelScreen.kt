@@ -97,6 +97,7 @@ fun LevelScreen(
     val vibrationEvent = viewModel.vibrationEvent
     val isPaused = viewModel.isPaused
     val isFireballQueued = viewModel.isFireballQueued
+    val fireballsBoughtCount = viewModel.fireballsBoughtCount
     val currentGameMode = viewModel.gameMode
     val shakeIntensity = viewModel.shakeIntensity
     val activeAchievement = viewModel.activeAchievement
@@ -354,23 +355,6 @@ fun LevelScreen(
                 }
 
                 particles.forEach { p -> drawCircle(color = mapBubbleColor(p.color).copy(alpha = p.life), radius = p.size, center = Offset(p.x, p.y)) }
-                
-                drawIntoCanvas { canvas ->
-                    floatingTexts.forEach { ft ->
-                        val alpha = (ft.life * 255).toInt().coerceIn(0, 255)
-                        val paintOutline = android.graphics.Paint().apply {
-                            textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
-                            color = android.graphics.Color.BLACK; this.alpha = (alpha * 0.6f).toInt()
-                            style = android.graphics.Paint.Style.STROKE; strokeWidth = 6f
-                        }
-                        val paintFill = android.graphics.Paint().apply {
-                            textSize = 70f; textAlign = android.graphics.Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
-                            color = android.graphics.Color.WHITE; this.alpha = alpha
-                        }
-                        canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paintOutline)
-                        canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paintFill)
-                    }
-                }
             }
 
             bubbles.forEach { (pos, bubble) ->
@@ -390,19 +374,30 @@ fun LevelScreen(
                 )
             }
             activeProjectile?.let { p ->
-                val scaleFactor = if(p.isFireball) 0.7f else 1f
-                val sizePx = bubbleDiameterPx * scaleFactor
-                VisualBubble(
-                    color = mapBubbleColor(p.color),
-                    isRainbow = p.color == BubbleColor.RAINBOW,
-                    isBomb = p.color == BubbleColor.BOMB,
-                    rainbowRotation = masterRainbowRotation,
-                    isColorBlindMode = isColorBlindMode,
-                    bubbleColorType = p.color,
-                    breathingScale = 1.1f, // Proyectil un poco más grande
-                    lightTime = lightTime,
-                    modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2); if (p.isFireball) rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f }
-                )
+                val sizePx = bubbleDiameterPx * (if(p.isFireball) 0.85f else 1f)
+                if (p.isFireball) {
+                    FireballRenderer(
+                        modifier = Modifier
+                            .size(with(density) { sizePx.toDp() })
+                            .graphicsLayer { 
+                                translationX = p.x - (sizePx / 2)
+                                translationY = p.y - (sizePx / 2)
+                                rotationZ = Math.toDegrees(atan2(p.velocityY.toDouble(), p.velocityX.toDouble())).toFloat() + 90f
+                            }
+                    )
+                } else {
+                    VisualBubble(
+                        color = mapBubbleColor(p.color),
+                        isRainbow = p.color == BubbleColor.RAINBOW,
+                        isBomb = p.color == BubbleColor.BOMB,
+                        rainbowRotation = masterRainbowRotation,
+                        isColorBlindMode = isColorBlindMode,
+                        bubbleColorType = p.color,
+                        breathingScale = 1.1f,
+                        lightTime = lightTime,
+                        modifier = Modifier.size(with(density) { sizePx.toDp() }).graphicsLayer { translationX = p.x - (sizePx / 2); translationY = p.y - (sizePx / 2) }
+                    )
+                }
             }
 
             Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp)) {
@@ -427,6 +422,49 @@ fun LevelScreen(
                     isDanger = isDangerActive
                 )
             }
+
+            // ✅ CAPA DE TEXTOS FLOTANTES (Por encima de todo el juego)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawIntoCanvas { canvas ->
+                    floatingTexts.forEach { ft ->
+                        val alpha = (ft.life * 255).toInt().coerceIn(0, 255)
+                        val isCombo = ft.text.contains("COMBO")
+                        
+                        val paintOutline = android.graphics.Paint().apply {
+                            textSize = if(isCombo) 95f else 70f
+                            textAlign = android.graphics.Paint.Align.CENTER
+                            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                            color = android.graphics.Color.BLACK; this.alpha = (alpha * 0.7f).toInt()
+                            style = android.graphics.Paint.Style.STROKE; strokeWidth = if(isCombo) 10f else 6f
+                        }
+                        
+                        val paintFill = android.graphics.Paint().apply {
+                            textSize = if(isCombo) 95f else 70f
+                            textAlign = android.graphics.Paint.Align.CENTER
+                            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                            this.alpha = alpha
+                            
+                            if (isCombo) {
+                                // Gradiente colorido para el combo
+                                shader = android.graphics.LinearGradient(
+                                    ft.x - 50f, ft.y - 50f, ft.x + 50f, ft.y + 50f,
+                                    intArrayOf(
+                                        android.graphics.Color.YELLOW,
+                                        android.graphics.Color.RED,
+                                        android.graphics.Color.MAGENTA
+                                    ),
+                                    null, android.graphics.Shader.TileMode.MIRROR
+                                )
+                            } else {
+                                color = android.graphics.Color.WHITE
+                            }
+                        }
+                        
+                        canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paintOutline)
+                        canvas.nativeCanvas.drawText(ft.text, ft.x, ft.y, paintFill)
+                    }
+                }
+            }
         }
 
         GameTopBar(
@@ -443,7 +481,12 @@ fun LevelScreen(
         )
 
         if (showQuickShop) {
-            QuickShopOverlay(onDismiss = { showQuickShop = false }, onBuyFireball = { viewModel.buyFireball() })
+            QuickShopOverlay(
+                soundManager = soundManager,
+                fireballsBoughtCount = fireballsBoughtCount,
+                onDismiss = { showQuickShop = false }, 
+                onBuyFireball = { viewModel.buyFireball() }
+            )
         }
 
         if (gameState == GameState.IDLE) {
@@ -613,17 +656,176 @@ fun AchievementNotification(achievement: Achievement?) {
 }
 
 @Composable
-fun QuickShopOverlay(onDismiss: () -> Unit, onBuyFireball: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { onDismiss() }, contentAlignment = Alignment.Center) {
-        Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
-            val brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))
-            @Suppress("ControlFlowWithEmptyBody")
-            Column(modifier = Modifier.background(brush).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(id = R.string.shop_title), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
-                Spacer(Modifier.height(20.dp))
-                ItemRow(stringResource(id = R.string.shop_item_fireball), stringResource(id = R.string.shop_item_fireball), 1000, "🔥") { onBuyFireball(); onDismiss() }
+fun QuickShopOverlay(
+    soundManager: SoundManager,
+    fireballsBoughtCount: Int,
+    onDismiss: () -> Unit, 
+    onBuyFireball: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f))
+            .clickable(enabled = false) {}, 
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier.width(320.dp).padding(16.dp),
+            shape = RoundedCornerShape(40.dp),
+            color = Color.White,
+            shadowElevation = 12.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // TÍTULO
+                Text(
+                    text = stringResource(id = R.string.shop_title).uppercase(),
+                    style = TextStyle(
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        color = NavyDark,
+                        letterSpacing = 1.sp
+                    )
+                )
+                Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
+                
                 Spacer(Modifier.height(24.dp))
-                Box(modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(50)).background(Color(0xFF1A237E)).clickable { onDismiss() }, contentAlignment = Alignment.Center) { Text(stringResource(id = R.string.shop_close), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, letterSpacing = 1.sp) }
+
+                // FILA DE ITEMS
+                ItemRow(
+                    name = stringResource(id = R.string.shop_item_fireball),
+                    desc = if (fireballsBoughtCount < 3) stringResource(id = R.string.shop_desc_fireball) else "Máximo alcanzado",
+                    price = 1000,
+                    icon = "🔥",
+                    isFireball = true,
+                    isLocked = fireballsBoughtCount >= 3,
+                    soundManager = soundManager,
+                    onClick = { onBuyFireball(); onDismiss() }
+                )
+
+                if (fireballsBoughtCount >= 3) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "comprasaste el maximo de bola de fuego para esta partida",
+                        color = Color(0xFFEF4444),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 14.sp
+                    )
+                }
+
+                Spacer(Modifier.height(32.dp))
+
+                // BOTÓN CERRAR (Estilo Menú)
+                ReferenceButton(
+                    text = stringResource(id = R.string.shop_close),
+                    backgroundColor = SageGreen,
+                    contentColor = Color.White,
+                    soundManager = soundManager,
+                    onClick = onDismiss
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ItemRow(
+    name: String, 
+    desc: String, 
+    price: Int, 
+    icon: String, 
+    isFireball: Boolean = false,
+    isLocked: Boolean = false,
+    soundManager: SoundManager,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed && !isLocked) 0.96f else 1f, label = "scale")
+
+    Surface(
+        onClick = {
+            if (!isLocked) {
+                onClick()
+            }
+        },
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(24.dp),
+        color = if (isLocked) Color(0xFFF5F5F5) else Color.White,
+        shadowElevation = if (isPressed && !isLocked) 2.dp else 4.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { 
+                scaleX = scale
+                scaleY = scale
+                alpha = if (isLocked) 0.6f else 1f
+            }
+            .border(1.5.dp, if (isLocked) Color.LightGray else NavyDark.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icono con fondo circular sutil
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(if (isLocked) Color.LightGray.copy(alpha = 0.2f) else SageGreen.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isFireball) {
+                    FireballRenderer(modifier = Modifier.size(32.dp))
+                } else {
+                    Text(icon, fontSize = 24.sp)
+                }
+            }
+            
+            Spacer(Modifier.width(16.dp))
+            
+            // Textos (Nombre + Desc)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name.uppercase(),
+                    style = TextStyle(
+                        color = if (isLocked) Color.Gray else NavyDark,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                )
+                Text(
+                    text = desc,
+                    style = TextStyle(
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
+            
+            // Precio (Moneda)
+            if (!isLocked) {
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f))
+                ) {
+                    Text(
+                        text = "🪙 $price",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = TextStyle(
+                            color = Color(0xFFB8860B),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    )
+                }
+            } else {
+                Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -710,15 +912,6 @@ fun ReviveAlertOverlay(soundManager: SoundManager, onDismiss: () -> Unit) {
                 }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text(stringResource(id = R.string.adventure_ready), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
             }
         }
-    }
-}
-
-@Composable
-fun ItemRow(name: String, desc: String, price: Int, icon: String, onBuy: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF1A237E).copy(alpha = 0.05f)).border(1.dp, Color(0xFF1A237E).copy(alpha = 0.1f), RoundedCornerShape(16.dp)).clickable { onBuy() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(icon, fontSize = 32.sp); Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) { Text(name, color = Color(0xFF1A237E), fontWeight = FontWeight.Bold, fontSize = 15.sp); Text(desc, color = Color(0xFF1A237E).copy(alpha = 0.5f), fontSize = 11.sp) }
-        Surface(color = Color(0xFFFFD700), shape = RoundedCornerShape(50)) { Text("🪙 $price", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A237E)) }
     }
 }
 
