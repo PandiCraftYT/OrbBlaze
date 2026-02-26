@@ -7,9 +7,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -29,13 +31,12 @@ fun VisualBubble(
     isMatchingTarget: Boolean = false,
     isColorBlindMode: Boolean = false,
     bubbleColorType: BubbleColor? = null,
-    // ✅ Animaciones centralizadas para optimizar batería
+    // ✅ Animaciones centralizadas
     breathingScale: Float = 1f,
     lightTime: Float = 0f,
     sparkleScale: Float = 0f,
     indicatorAlpha: Float = 1f
 ) {
-    // Colores del borde
     val goldDark = Color(0xFFC5A059)
     val goldLight = Color(0xFFFFE5B4)
 
@@ -61,7 +62,7 @@ fun VisualBubble(
                 onDrawBehind {
                     val bubbleRadius = radius * 0.92f
 
-                    // --- 1. SOMBRA SUAVE ---
+                    // 1. SOMBRA
                     drawCircle(
                         color = Color.Black.copy(alpha = 0.2f),
                         radius = radius * 0.95f,
@@ -69,7 +70,7 @@ fun VisualBubble(
                     )
 
                     if (isBomb) {
-                        // --- DISEÑO DE BOMBA ---
+                        // --- BOMBA ---
                         val fusePath = Path().apply {
                             moveTo(center.x, center.y - bubbleRadius)
                             quadraticTo(
@@ -77,152 +78,89 @@ fun VisualBubble(
                                 center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f
                             )
                         }
-                        drawPath(
-                            path = fusePath,
-                            color = Color(0xFF795548),
-                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-                        )
-
-                        val sparkleAlphaValue = (sin(lightTime * 0.1f) * 0.5f + 0.5f)
-                        drawCircle(
-                            color = Color(0xFFFF9800).copy(alpha = sparkleAlphaValue),
-                            radius = 4.dp.toPx(),
-                            center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f)
-                        )
-                        drawCircle(
-                            color = Color.Yellow.copy(alpha = sparkleAlphaValue),
-                            radius = 2.dp.toPx(),
-                            center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f)
-                        )
-
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(Color(0xFF424242), Color.Black),
-                                center = center.copy(x = center.x - radius * 0.2f, y = center.y - radius * 0.2f),
-                                radius = bubbleRadius * 1.2f
-                            ),
-                            radius = bubbleRadius,
-                            center = center
-                        )
+                        drawPath(path = fusePath, color = Color(0xFF795548), style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
                         
+                        val sparkleAlphaValue = (sin(lightTime * 0.1f) * 0.5f + 0.5f)
+                        drawCircle(color = Color(0xFFFF9800).copy(alpha = sparkleAlphaValue), radius = 4.dp.toPx(), center = Offset(center.x + bubbleRadius * 0.5f, center.y - bubbleRadius * 1.4f))
+
                         drawCircle(
-                            color = Color.White.copy(alpha = 0.1f),
-                            radius = bubbleRadius * 0.4f,
-                            center = center,
-                            style = Stroke(width = 1.dp.toPx())
+                            brush = Brush.radialGradient(colors = listOf(Color(0xFF424242), Color.Black), center = center.copy(x = center.x - radius * 0.2f, y = center.y - radius * 0.2f), radius = bubbleRadius * 1.2f),
+                            radius = bubbleRadius, center = center
                         )
                     } else {
-                        // --- DISEÑO DE BURBUJA NORMAL ---
+                        // --- BURBUJA NORMAL ---
                         drawCircle(
-                            brush = Brush.linearGradient(
-                                colors = listOf(goldLight, goldDark),
-                                start = Offset(center.x - radius, center.y - radius),
-                                end = Offset(center.x + radius, center.y + radius)
-                            ),
-                            radius = radius,
-                            center = center
+                            brush = Brush.linearGradient(colors = listOf(goldLight, goldDark), start = Offset(center.x - radius, center.y - radius), end = Offset(center.x + radius, center.y + radius)),
+                            radius = radius, center = center
                         )
 
                         if (isRainbow) {
                             rotate(rainbowRotation, center) {
-                                drawCircle(
-                                    brush = Brush.sweepGradient(rainbowColors, center),
-                                    radius = bubbleRadius, center = center
-                                )
+                                drawCircle(brush = Brush.sweepGradient(rainbowColors, center), radius = bubbleRadius, center = center)
                             }
                         } else {
                             drawCircle(
                                 brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        color.copy(alpha = 0.9f).compositeOver(Color.White),
-                                        color,
-                                        color.copy(red=color.red*0.4f, green=color.green*0.4f, blue=color.blue*0.4f)
-                                    ),
+                                    colors = listOf(color.copy(alpha = 0.9f).compositeOver(Color.White), color, color.copy(red=color.red*0.4f, green=color.green*0.4f, blue=color.blue*0.4f)),
                                     center = center.copy(x = center.x - radius * 0.2f, y = center.y - radius * 0.2f),
                                     radius = bubbleRadius * 1.3f
                                 ),
-                                radius = bubbleRadius,
-                                center = center
+                                radius = bubbleRadius, center = center
                             )
                         }
                     }
 
-                    // --- MODO DALTONISMO: FIGURAS ---
+                    // --- MEJORA DALTONISMO: ICONOS DE ALTA VISIBILIDAD ---
                     if (isColorBlindMode && !isBomb && !isRainbow && bubbleColorType != null) {
-                        drawColorBlindIcon(bubbleColorType, center, bubbleRadius * 0.45f)
+                        drawEnhancedColorBlindIcon(bubbleColorType, center, bubbleRadius * 0.40f)
                     }
 
-                    // --- BRILLO COMÚN ---
+                    // BRILLO
                     rotate(-45f, center) {
                         drawOval(
-                            brush = Brush.linearGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.6f), Color.White.copy(alpha = 0.05f)),
-                                start = Offset(center.x, center.y - bubbleRadius),
-                                end = Offset(center.x, center.y)
-                            ),
+                            brush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.5f), Color.White.copy(alpha = 0.05f)), start = Offset(center.x, center.y - bubbleRadius), end = Offset(center.x, center.y)),
                             topLeft = Offset(center.x - bubbleRadius * 0.5f, center.y - bubbleRadius * 0.85f),
                             size = Size(bubbleRadius, bubbleRadius * 0.5f)
                         )
                     }
-
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.8f),
-                        radius = bubbleRadius * 0.08f,
-                        center = Offset(center.x - bubbleRadius * 0.35f + lightOffsetX, center.y - bubbleRadius * 0.35f + lightOffsetY)
-                    )
-
-                    if (isActive && sparkleScale > 0f) {
-                        val sPos = Offset(center.x + radius * 0.35f, center.y - radius * 0.35f)
-                        val sSize = radius * 0.6f * sparkleScale
-                        drawLine(
-                            brush = Brush.radialGradient(listOf(Color.White, Color.Transparent)),
-                            start = sPos.copy(y = sPos.y - sSize), end = sPos.copy(y = sPos.y + sSize),
-                            strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round
-                        )
-                        drawLine(
-                            brush = Brush.radialGradient(listOf(Color.White, Color.Transparent)),
-                            start = sPos.copy(x = sPos.x - sSize), end = sPos.copy(x = sPos.x + sSize),
-                            strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round
-                        )
-                    }
+                    drawCircle(color = Color.White.copy(alpha = 0.7f), radius = bubbleRadius * 0.08f, center = Offset(center.x - bubbleRadius * 0.35f + lightOffsetX, center.y - bubbleRadius * 0.35f + lightOffsetY))
 
                     if (isMatchingTarget) {
-                        drawCircle(
-                            color = Color.White.copy(alpha = indicatorAlpha),
-                            radius = radius,
-                            center = center,
-                            style = Stroke(width = 3.dp.toPx())
-                        )
+                        drawCircle(color = Color.White.copy(alpha = indicatorAlpha), radius = radius, center = center, style = Stroke(width = 3.dp.toPx()))
                     }
                 }
             }
     )
 }
 
-private fun DrawScope.drawColorBlindIcon(type: BubbleColor, center: Offset, size: Float) {
-    val iconColor = Color.White.copy(alpha = 0.8f)
-    val strokeWidth = 2.5.dp.toPx()
-    
+private fun DrawScope.drawEnhancedColorBlindIcon(type: BubbleColor, center: Offset, size: Float) {
+    val mainColor = Color.White.copy(alpha = 0.9f)
+    val shadowColor = Color.Black.copy(alpha = 0.3f)
+    val strokeWidth = 2.dp.toPx()
+
+    fun drawForm(path: Path) {
+        drawPath(path, shadowColor, style = Fill)
+        drawPath(path, mainColor, style = Stroke(strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+
     when (type) {
         BubbleColor.RED -> {
-            drawCircle(iconColor, radius = size, center = center, style = Stroke(strokeWidth))
+            drawCircle(shadowColor, radius = size, center = center, style = Fill)
+            drawCircle(mainColor, radius = size, center = center, style = Stroke(strokeWidth))
         }
         BubbleColor.BLUE -> {
-            drawRect(
-                iconColor, 
-                topLeft = Offset(center.x - size, center.y - size), 
-                size = Size(size * 2, size * 2), 
-                style = Stroke(strokeWidth)
-            )
+            val rect = Rect(center.x - size, center.y - size, center.x + size, center.y + size)
+            drawRect(shadowColor, topLeft = rect.topLeft, size = rect.size, style = Fill)
+            drawRect(mainColor, topLeft = rect.topLeft, size = rect.size, style = Stroke(strokeWidth))
         }
         BubbleColor.GREEN -> {
             val path = Path().apply {
                 moveTo(center.x, center.y - size)
-                lineTo(center.x + size, center.y + size)
-                lineTo(center.x - size, center.y + size)
+                lineTo(center.x + size, center.y + size * 0.8f)
+                lineTo(center.x - size, center.y + size * 0.8f)
                 close()
             }
-            drawPath(path, iconColor, style = Stroke(strokeWidth))
+            drawForm(path)
         }
         BubbleColor.YELLOW -> {
             val path = Path().apply {
@@ -232,23 +170,30 @@ private fun DrawScope.drawColorBlindIcon(type: BubbleColor, center: Offset, size
                 lineTo(center.x - size, center.y)
                 close()
             }
-            drawPath(path, iconColor, style = Stroke(strokeWidth))
+            drawForm(path)
         }
         BubbleColor.PURPLE -> {
-            drawLine(iconColor, Offset(center.x - size, center.y), Offset(center.x + size, center.y), strokeWidth, StrokeCap.Round)
-            drawLine(iconColor, Offset(center.x, center.y - size), Offset(center.x, center.y + size), strokeWidth, StrokeCap.Round)
+            val path = Path().apply {
+                val s = size * 0.8f
+                moveTo(center.x - s, center.y - s)
+                lineTo(center.x + s, center.y + s)
+                moveTo(center.x + s, center.y - s)
+                lineTo(center.x - s, center.y + s)
+            }
+            drawPath(path, shadowColor, style = Stroke(strokeWidth + 2f, cap = StrokeCap.Round))
+            drawPath(path, mainColor, style = Stroke(strokeWidth, cap = StrokeCap.Round))
         }
         BubbleColor.CYAN -> {
             val path = Path().apply {
                 for (i in 0..5) {
-                    val angle = i * Math.PI / 3
+                    val angle = i * Math.PI / 3 - Math.PI / 6
                     val x = center.x + size * cos(angle).toFloat()
                     val y = center.y + size * sin(angle).toFloat()
                     if (i == 0) moveTo(x, y) else lineTo(x, y)
                 }
                 close()
             }
-            drawPath(path, iconColor, style = Stroke(strokeWidth))
+            drawForm(path)
         }
         else -> {}
     }

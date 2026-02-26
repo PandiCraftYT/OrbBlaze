@@ -108,7 +108,6 @@ open class GameViewModel(
     var activeProjectile by mutableStateOf<Projectile?>(null)
         protected set
 
-    // ✅ Listas de partículas y textos (Fix para recomposición fluida)
     var particles by mutableStateOf<List<GameParticle>>(emptyList())
         protected set
     var floatingTexts by mutableStateOf<List<FloatingText>>(emptyList())
@@ -273,16 +272,22 @@ open class GameViewModel(
         updateTrajectory()
     }
 
+    /**
+     * Sincroniza la trayectoria con el punto de salida real del proyectil.
+     */
     fun updateTrajectory() {
         val m = metrics ?: return
         val angleRad = Math.toRadians(shooterAngle.toDouble())
         
         val pivotX = m.screenWidth / 2f
         val pivotY = m.pivotY
+        
+        // El origen DEBE ser idéntico al spawnX/spawnY del PandaShooter
         var curX = pivotX + (sin(angleRad) * m.barrelLength).toFloat()
         var curY = pivotY - (cos(angleRad) * m.barrelLength).toFloat()
         
-        val speed = 35f 
+        // Usamos la misma velocidad que el proyectil real para la simulación
+        val speed = GameConstants.PROJECTILE_SPEED
         var vx = sin(angleRad).toFloat() * speed
         var vy = -cos(angleRad).toFloat() * speed
         
@@ -292,15 +297,19 @@ open class GameViewModel(
         
         val collisionThreshold = m.bubbleDiameter * GameConstants.BUBBLE_COLLISION_SCALE
         
-        for (i in 0 until 120) {
+        // Simulación paso a paso idéntica a la física real
+        val stepDelta = 0.016f // Simulamos pasos de 16ms
+        
+        for (i in 0 until 150) {
             val prevX = curX
             val prevY = curY
-            curX += vx
-            curY += vy
+            curX += vx * stepDelta
+            curY += vy * stepDelta
             
-            if (curX <= leftWall || curX >= rightWall) {
+            // Rebote en paredes
+            if (curX - bubbleRadius <= leftWall || curX + bubbleRadius >= rightWall) {
                 vx = -vx
-                curX = curX.coerceIn(leftWall, rightWall)
+                curX = if (curX - bubbleRadius <= leftWall) leftWall + bubbleRadius else rightWall - bubbleRadius
             }
             
             val hit = bubblesByPosition.keys.any { pos ->
@@ -310,12 +319,12 @@ open class GameViewModel(
             
             val ceiling = m.ceilingY + (if(gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f)
             
-            if (hit || curY < ceiling) {
+            if (hit || curY - bubbleRadius < ceiling) {
                 points.add(Offset(curX, curY))
                 break
             }
             
-            if (i % 3 == 0) points.add(Offset(curX, curY))
+            if (i % 2 == 0) points.add(Offset(curX, curY))
         }
         trajectoryPoints = points
     }
@@ -329,6 +338,7 @@ open class GameViewModel(
         val angleRad = Math.toRadians(shooterAngle.toDouble())
         val speed = GameConstants.PROJECTILE_SPEED 
         
+        // Sincronización final: El proyectil sale exactamente del mismo punto inicial
         activeProjectile = Projectile(spawnX, spawnY, nextBubbleColor, (sin(angleRad) * speed).toFloat(), (-cos(angleRad) * speed).toFloat(), isFireballQueued)
         
         isFireballQueued = false
@@ -405,9 +415,7 @@ open class GameViewModel(
                     } else {
                         val ceiling = m.ceilingY + if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
                         
-                        // ✅ FIX "TRASPASO": Detección de techo y burbujas con snap corregido
                         if (nextY - bubbleRadius <= ceiling) {
-                            // Si golpea el techo, forzamos la posición para evitar que traspase el UI
                             snapToGrid(nextX, ceiling + bubbleRadius, currentP.color)
                             collisionDetected = true
                         } else if (checkSweepCollision(currentP.x, currentP.y, nextX, nextY)) {
@@ -454,7 +462,6 @@ open class GameViewModel(
                 lastTime = currentTime
 
                 if (!isPaused) {
-                    // ✅ Actualización de partículas
                     if (particles.isNotEmpty()) {
                         particles = particles.mapNotNull { p ->
                             if (p.life <= 0f) null
@@ -466,7 +473,6 @@ open class GameViewModel(
                         }
                     }
 
-                    // ✅ Actualización de textos flotantes (Fix: No se quedan pegados)
                     if (floatingTexts.isNotEmpty()) {
                         floatingTexts = floatingTexts.mapNotNull { t ->
                             if (t.life <= 0f) null
@@ -509,14 +515,11 @@ open class GameViewModel(
         val newGrid = bubblesByPosition.toMutableMap()
 
         val offset = if (gameMode == GameMode.ADVENTURE) visualScrollOffset else 0f
-        
-        // ✅ FIX "TRASPASO": Forzamos a que la fila sea como mínimo 0
         val estRow = ((y - m.boardTopPadding - offset) / m.verticalSpacing).roundToInt().coerceAtLeast(0)
         
         val candidates = mutableListOf<GridPosition>()
-        // ✅ Aumentamos rango de búsqueda para evitar que burbujas rápidas se pierdan
         for (r in (estRow - 1)..(estRow + 2)) {
-            if (r < 0) continue // Nunca permitir burbujas por encima de la fila 0
+            if (r < 0) continue
             val actualCols = if ((r + rowsDroppedCount) % 2 == 0) columnsCount else columnsCount - 1
             for (c in 0 until actualCols) {
                 val p = GridPosition(r, c)
