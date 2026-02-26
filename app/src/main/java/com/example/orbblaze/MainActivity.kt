@@ -136,7 +136,8 @@ fun AppNavigation(
                     navController.navigate("adventure_game")
                 },
                 onBackClick = { navController.popBackStack() },
-                settingsManager = settingsManager
+                settingsManager = settingsManager,
+                soundManager = soundManager
             )
         }
         composable("adventure_game") {

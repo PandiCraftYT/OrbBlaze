@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.orbblaze.ui.game.GameViewModel
 import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
 import com.example.orbblaze.ui.menu.ReferenceButton
 import com.example.orbblaze.ui.theme.*
@@ -98,6 +99,7 @@ fun AchievementsScreen(
                         AchievementCardPremium(
                             achievement = achievement,
                             isRevealed = revealedId == achievement.id,
+                            soundManager = soundManager,
                             onRevealToggle = { revealedId = if (revealedId == achievement.id) null else achievement.id }
                         )
                     }
@@ -108,6 +110,7 @@ fun AchievementsScreen(
                     backgroundColor = Color.White,
                     contentColor = Color.Gray,
                     modifier = Modifier.width(200.dp),
+                    soundManager = soundManager,
                     onClick = onBackClick
                 )
             }
@@ -119,6 +122,7 @@ fun AchievementsScreen(
 fun AchievementCardPremium(
     achievement: com.example.orbblaze.domain.model.Achievement,
     isRevealed: Boolean,
+    soundManager: SoundManager,
     onRevealToggle: () -> Unit
 ) {
     val isUnlocked = achievement.isUnlocked
@@ -127,7 +131,6 @@ fun AchievementCardPremium(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (isPressed) 0.98f else 1f, label = "scale")
 
-    // Envolvemos en un Box para que la sombra se escale junto con el contenido sin romperse
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -138,12 +141,15 @@ fun AchievementCardPremium(
             .animateContentSize()
     ) {
         Surface(
-            onClick = { if (!isUnlocked) onRevealToggle() },
+            onClick = { 
+                soundManager.play(SoundType.POP)
+                if (!isUnlocked) onRevealToggle() 
+            },
             interactionSource = interactionSource,
             shape = RoundedCornerShape(28.dp),
             color = Color.White,
             shadowElevation = if (isPressed) 2.dp else 6.dp,
-            tonalElevation = 0.dp // Evita variaciones de color por elevación
+            tonalElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier.padding(16.dp),

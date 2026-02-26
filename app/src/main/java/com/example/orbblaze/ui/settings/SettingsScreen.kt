@@ -36,12 +36,12 @@ import androidx.compose.ui.unit.sp
 import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
 import com.example.orbblaze.ui.menu.ReferenceButton
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.launch
 
-// Colores del menú (redefinidos aquí para evitar errores si no están en Color.kt)
 private val SageGreen = Color(0xFF8DA094)
 private val NavyDark = Color(0xFF2D324F)
 private val StarGold = Color(0xFFF4C491)
@@ -82,7 +82,6 @@ fun SettingsScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                // ✅ TÍTULO (Estilo Menú)
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.graphicsLayer { translationY = titleFloat }
@@ -101,7 +100,6 @@ fun SettingsScreen(
                     Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
                 }
 
-                // ✅ PANEL DE OPCIONES (Estilo Menú)
                 Surface(
                     shape = RoundedCornerShape(32.dp),
                     color = Color.White,
@@ -139,13 +137,11 @@ fun SettingsScreen(
                     }
                 }
 
-                // ✅ BOTONES INFERIORES
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Botón INFO
                     ReferenceButton(
                         text = "INFO",
                         backgroundColor = NavyDark,
@@ -153,15 +149,16 @@ fun SettingsScreen(
                         icon = Icons.Default.Info,
                         iconColor = StarGold,
                         modifier = Modifier.weight(1f),
+                        soundManager = soundManager,
                         onClick = { showAboutDialog = true }
                     )
 
-                    // Botón VOLVER
                     ReferenceButton(
                         text = "VOLVER",
                         backgroundColor = Color.White,
                         contentColor = Color.Gray,
                         modifier = Modifier.weight(1f),
+                        soundManager = soundManager,
                         onClick = onBackClick
                     )
                 }
@@ -169,7 +166,7 @@ fun SettingsScreen(
         }
 
         if (showAboutDialog) {
-            SettingsAboutDialog(onDismiss = { showAboutDialog = false })
+            SettingsAboutDialog(soundManager = soundManager, onDismiss = { showAboutDialog = false })
         }
     }
 }
@@ -243,7 +240,7 @@ fun SettingsToggleRow(
 }
 
 @Composable
-fun SettingsAboutDialog(onDismiss: () -> Unit) {
+fun SettingsAboutDialog(soundManager: SoundManager, onDismiss: () -> Unit) {
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -255,6 +252,7 @@ fun SettingsAboutDialog(onDismiss: () -> Unit) {
             ) {
                 Button(
                     onClick = {
+                        soundManager.play(SoundType.POP)
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carlosnvz_"))
                         context.startActivity(intent)
                     },
@@ -265,7 +263,10 @@ fun SettingsAboutDialog(onDismiss: () -> Unit) {
                     Text("INSTAGRAM", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
-                    onClick = onDismiss,
+                    onClick = {
+                        soundManager.play(SoundType.POP)
+                        onDismiss()
+                    },
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
                     Text("CERRAR", color = Color.Gray, fontWeight = FontWeight.ExtraBold)

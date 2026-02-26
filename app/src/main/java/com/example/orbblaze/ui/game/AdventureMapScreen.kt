@@ -52,14 +52,14 @@ private val OrbTextBlue = Color(0xFF0D47A1)
 fun AdventureMapScreen(
     onLevelSelect: (Int) -> Unit,
     onBackClick: () -> Unit,
-    settingsManager: SettingsManager
+    settingsManager: SettingsManager,
+    soundManager: SoundManager // Añadido soundManager
 ) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
     val levels = AdventureLevels.levels
 
-    // ✅ RECOLECCIÓN SEGURA DE DATOS
-    val currentProgress by settingsManager.adventureProgressFlow.collectAsState(initial = -1) // -1 indica "cargando"
+    val currentProgress by settingsManager.adventureProgressFlow.collectAsState(initial = -1)
     val nodesState = remember { mutableStateListOf<LevelNodeData>() }
     var dataReady by remember { mutableStateOf(false) }
 
@@ -106,7 +106,6 @@ fun AdventureMapScreen(
                 }
             }
 
-            // Scroll automático solo la primera vez que cargan los datos
             LaunchedEffect(dataReady) {
                 val currentNode = finalNodes.find { it.state == LevelState.CURRENT }
                 if (currentNode != null) {
@@ -119,7 +118,6 @@ fun AdventureMapScreen(
                 }
             }
 
-            // Lógica de fondo dinámico
             val currentViewY = totalHeightPx - scrollState.value - (screenHeightPx / 2)
             val estimatedIndex = ((totalHeightPx - bottomPaddingPx - currentViewY) / nodeSpacingPx)
                 .coerceIn(0f, (levels.size - 1).toFloat()).toInt()
@@ -146,6 +144,7 @@ fun AdventureMapScreen(
                                 data = node,
                                 xOffset = with(density) { node.position.x.toDp() },
                                 yOffset = with(density) { node.position.y.toDp() },
+                                soundManager = soundManager,
                                 onClick = { onLevelSelect(node.id) }
                             )
                         }
@@ -153,7 +152,7 @@ fun AdventureMapScreen(
                 }
             }
         }
-        HeaderOverlay(onBackClick)
+        HeaderOverlay(onBackClick, soundManager)
     }
 }
 
@@ -182,7 +181,7 @@ private fun PathDrawer(nodes: List<LevelNodeData>) {
 }
 
 @Composable
-private fun LevelNodeItem(data: LevelNodeData, xOffset: Dp, yOffset: Dp, onClick: () -> Unit) {
+private fun LevelNodeItem(data: LevelNodeData, xOffset: Dp, yOffset: Dp, soundManager: SoundManager, onClick: () -> Unit) {
     val nodeSize = 64.dp
     val bgColor = when(data.state) {
         LevelState.LOCKED -> Color.Gray.copy(alpha = 0.5f)
@@ -195,7 +194,10 @@ private fun LevelNodeItem(data: LevelNodeData, xOffset: Dp, yOffset: Dp, onClick
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(modifier = Modifier.size(nodeSize)) {
                 Box(modifier = Modifier.matchParentSize().offset(y = 4.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.15f)))
-                Box(modifier = Modifier.matchParentSize().clip(CircleShape).background(bgColor).clickable(enabled = data.state != LevelState.LOCKED) { onClick() }, contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.matchParentSize().clip(CircleShape).background(bgColor).clickable(enabled = data.state != LevelState.LOCKED) { 
+                    soundManager.play(SoundType.POP)
+                    onClick() 
+                }, contentAlignment = Alignment.Center) {
                     if (data.state == LevelState.LOCKED) {
                         Icon(Icons.Default.Lock, null, tint = textColor, modifier = Modifier.size(24.dp))
                     } else {
@@ -203,7 +205,7 @@ private fun LevelNodeItem(data: LevelNodeData, xOffset: Dp, yOffset: Dp, onClick
                     }
                 }
             }
-            if (data.id > 30 && data.state != LevelState.LOCKED) {
+            if (data.state != LevelState.LOCKED) {
                 Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
                     repeat(3) { i ->
                         Icon(
@@ -236,9 +238,15 @@ private fun FloatingBubblesBackground(baseColor: Color) {
 }
 
 @Composable
-private fun HeaderOverlay(onBackClick: () -> Unit) {
+private fun HeaderOverlay(onBackClick: () -> Unit, soundManager: SoundManager) {
     Box(modifier = Modifier.fillMaxWidth().padding(16.dp).statusBarsPadding()) {
-        IconButton(onClick = onBackClick, modifier = Modifier.shadow(4.dp, CircleShape).background(Color.White, CircleShape).size(48.dp).align(Alignment.CenterStart)) { Icon(Icons.Default.ArrowBack, null, tint = OrbTextBlue) }
+        IconButton(
+            onClick = {
+                soundManager.play(SoundType.POP)
+                onBackClick()
+            }, 
+            modifier = Modifier.shadow(4.dp, CircleShape).background(Color.White, CircleShape).size(48.dp).align(Alignment.CenterStart)
+        ) { Icon(Icons.Default.ArrowBack, null, tint = OrbTextBlue) }
         Text("AVENTURA", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.Center))
     }
 }

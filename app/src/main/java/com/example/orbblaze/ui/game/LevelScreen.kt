@@ -176,6 +176,13 @@ fun LevelScreen(
         label = "indicator_pulse"
     )
 
+    // ✅ ANIMACIÓN OPTIMIZADA DE PARPADEO (Línea Roja Estática)
+    val redLineAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f, targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(animation = tween(800, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+        label = "danger_line_pulse"
+    )
+
     val bgColors = if (currentGameMode == GameMode.ADVENTURE) {
         when {
             currentLevelId <= 30 -> listOf(Color(0xFF81D4FA), Color(0xFF4FC3F7))
@@ -313,12 +320,13 @@ fun LevelScreen(
                     drawRect(color = Color.Red.copy(alpha = dangerAlpha * 0.3f), size = size)
                 }
 
+                // ✅ DIBUJO DE LA LÍNEA ROJA (Parpadeo Estático)
                 drawLine(
-                    color = Color.Red.copy(alpha = 0.9f),
+                    color = Color.Red.copy(alpha = redLineAlpha),
                     start = Offset(0f, redLineY),
                     end = Offset(size.width, redLineY),
                     strokeWidth = 8f,
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f))
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 20f), phase = 0f)
                 )
 
                 if (isAiming) {
@@ -421,7 +429,18 @@ fun LevelScreen(
             }
         }
 
-        GameTopBar(score = score, bestScore = highScore, coins = coins, timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null, onSettingsClick = { viewModel.togglePause() }, modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() })
+        GameTopBar(
+            score = score, 
+            bestScore = highScore, 
+            coins = coins, 
+            timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, 
+            shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null, 
+            onSettingsClick = { 
+                viewModel.togglePause() 
+            }, 
+            onSoundClick = { soundManager.play(SoundType.POP) },
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
+        )
 
         if (showQuickShop) {
             QuickShopOverlay(onDismiss = { showQuickShop = false }, onBuyFireball = { viewModel.buyFireball() })
@@ -430,20 +449,31 @@ fun LevelScreen(
         if (gameState == GameState.IDLE) {
             if (viewModel.gameMode == GameMode.ADVENTURE) {
                 val advViewModel = viewModel as? AdventureViewModel; val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
-                if (currentLevel != null) { AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { viewModel.startGame() }) }
+                if (currentLevel != null) { AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { 
+                    viewModel.startGame() 
+                }) }
             } else {
-                ModeStartOverlay(gameMode = viewModel.gameMode, highScore = highScore, onStart = { viewModel.startGame() })
+                ModeStartOverlay(gameMode = viewModel.gameMode, highScore = highScore, soundManager = soundManager, onStart = { 
+                    viewModel.startGame() 
+                })
             }
         }
 
         if (isPaused && gameState == GameState.PLAYING && !isReviveAlertActive) {
             OverlayMenu(
                 title = stringResource(id = R.string.game_pause),
-                onContinue = { viewModel.togglePause() },
-                onRestart = { viewModel.restartGame() },
-                onExit = { soundManager.forceStartMusic(); onMenuClick() },
+                onContinue = { 
+                    viewModel.togglePause() 
+                },
+                onRestart = { 
+                    viewModel.restartGame() 
+                },
+                onExit = { 
+                    soundManager.forceStartMusic(); onMenuClick() 
+                },
                 showSettings = true,
                 settingsManager = settingsManager,
+                soundManager = soundManager,
                 onVolumeChange = { vol -> viewModel.setSfxVolume(vol); soundManager.refreshSettings() }
             )
         }
@@ -452,23 +482,36 @@ fun LevelScreen(
             OverlayMenu(
                 title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over),
                 onContinue = null,
-                onRestart = { viewModel.restartGame() },
+                onRestart = { 
+                    viewModel.restartGame() 
+                },
                 onNextLevel = if (gameState == GameState.WON && currentGameMode == GameMode.ADVENTURE && currentLevelId < AdventureLevels.levels.size) {
-                    { (viewModel as? AdventureViewModel)?.loadAdventureLevel(currentLevelId + 1) }
+                    { 
+                        (viewModel as? AdventureViewModel)?.loadAdventureLevel(currentLevelId + 1) 
+                    }
                 } else null,
-                onExit = { onMenuClick() },
+                onExit = { 
+                    onMenuClick() 
+                },
                 score = score,
                 isWin = gameState == GameState.WON,
                 isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
                 currentLevelId = currentLevelId,
-                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, gameRedeemedMsg, Toast.LENGTH_SHORT).show() } } } else null,
-                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } }
+                soundManager = soundManager,
+                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { 
+                    if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, gameRedeemedMsg, Toast.LENGTH_SHORT).show() } 
+                } } else null,
+                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { 
+                    onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } 
+                } }
             )
         }
 
         if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
-            ReviveAlertOverlay(onDismiss = { (viewModel as AdventureViewModel).showReviveAlert = false; viewModel.togglePause() })
+            ReviveAlertOverlay(soundManager = soundManager, onDismiss = { 
+                (viewModel as AdventureViewModel).showReviveAlert = false; viewModel.togglePause() 
+            })
         }
 
         if (showTutorial && gameState == GameState.PLAYING && !isPaused) {
@@ -482,7 +525,8 @@ fun LevelScreen(
                         settingsManager.setTutorialCompleted(true)
                         showTutorial = false
                     }
-                }
+                },
+                soundManager = soundManager
             )
         }
 
@@ -573,6 +617,7 @@ fun QuickShopOverlay(onDismiss: () -> Unit, onBuyFireball: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)).clickable { onDismiss() }, contentAlignment = Alignment.Center) {
         Surface(modifier = Modifier.width(300.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color.White) {
             val brush = Brush.verticalGradient(listOf(Color.White, Color(0xFFF5F5F5)))
+            @Suppress("ControlFlowWithEmptyBody")
             Column(modifier = Modifier.background(brush).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(id = R.string.shop_title), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 18.sp, letterSpacing = 1.sp)
                 Spacer(Modifier.height(20.dp))
@@ -585,7 +630,7 @@ fun QuickShopOverlay(onDismiss: () -> Unit, onBuyFireball: () -> Unit) {
 }
 
 @Composable
-fun ModeStartOverlay(gameMode: GameMode, highScore: Int, onStart: () -> Unit) {
+fun ModeStartOverlay(gameMode: GameMode, highScore: Int, soundManager: SoundManager?, onStart: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Surface(
             modifier = Modifier.width(320.dp).padding(16.dp),
@@ -640,6 +685,7 @@ fun ModeStartOverlay(gameMode: GameMode, highScore: Int, onStart: () -> Unit) {
                     text = "¡JUGAR AHORA!",
                     backgroundColor = SageGreen,
                     contentColor = Color.White,
+                    soundManager = soundManager,
                     onClick = onStart
                 )
             }
@@ -648,7 +694,7 @@ fun ModeStartOverlay(gameMode: GameMode, highScore: Int, onStart: () -> Unit) {
 }
 
 @Composable
-fun ReviveAlertOverlay(onDismiss: () -> Unit) {
+fun ReviveAlertOverlay(soundManager: SoundManager, onDismiss: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
         Surface(modifier = Modifier.width(320.dp).padding(16.dp), shape = RoundedCornerShape(28.dp), color = Color(0xFF1A237E), tonalElevation = 8.dp, shadowElevation = 12.dp, border = BorderStroke(2.dp, Color.White.copy(alpha = 0.15f))) {
             Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -658,7 +704,10 @@ fun ReviveAlertOverlay(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Text(text = stringResource(id = R.string.adventure_revive_desc), color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
                 Spacer(Modifier.height(32.dp))
-                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text(stringResource(id = R.string.adventure_ready), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
+                Button(onClick = { 
+                    soundManager.play(SoundType.POP)
+                    onDismiss() 
+                }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text(stringResource(id = R.string.adventure_ready), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
             }
         }
     }
@@ -678,6 +727,7 @@ fun OverlayMenu(
     title: String, onContinue: (() -> Unit)? = null, onRestart: () -> Unit, onExit: () -> Unit,
     score: Int? = null, isWin: Boolean = false,
     showSettings: Boolean = false, settingsManager: SettingsManager? = null,
+    soundManager: SoundManager? = null,
     onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null,
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
     currentLevelId: Int = 0,
@@ -747,7 +797,10 @@ fun OverlayMenu(
                             Text("DALTONISMO", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             Switch(
                                 checked = colorBlind,
-                                onCheckedChange = { scope.launch { settingsManager.setColorBlindMode(it) } },
+                                onCheckedChange = { 
+                                    soundManager?.play(SoundType.POP)
+                                    scope.launch { settingsManager.setColorBlindMode(it) } 
+                                },
                                 colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SageGreen)
                             )
                         }
@@ -764,6 +817,7 @@ fun OverlayMenu(
                         text = mainButtonText,
                         backgroundColor = SageGreen,
                         contentColor = Color.White,
+                        soundManager = soundManager,
                         onClick = mainButtonAction
                     )
                     Spacer(Modifier.height(16.dp))
@@ -778,6 +832,7 @@ fun OverlayMenu(
                         icon = Icons.Default.Refresh,
                         iconColor = Color.Gray,
                         modifier = Modifier.weight(1f),
+                        soundManager = soundManager,
                         onClick = onRestart
                     )
                     
@@ -789,6 +844,7 @@ fun OverlayMenu(
                         icon = exitIcon,
                         iconColor = Color.Gray,
                         modifier = Modifier.weight(1f),
+                        soundManager = soundManager,
                         onClick = onExit
                     )
                 }
@@ -797,7 +853,11 @@ fun OverlayMenu(
                     onShowAd?.let { adAction ->
                         val adLabel = if (isAdventure && !isWin) stringResource(id = R.string.game_revive_ad) else stringResource(id = R.string.game_bonus_ad)
                         Spacer(Modifier.height(24.dp))
-                        TextButton(onClick = adAction) {
+                        @Suppress("ControlFlowWithEmptyBody")
+                        TextButton(onClick = {
+                            soundManager?.play(SoundType.POP)
+                            adAction()
+                        }) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.PlayArrow, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))

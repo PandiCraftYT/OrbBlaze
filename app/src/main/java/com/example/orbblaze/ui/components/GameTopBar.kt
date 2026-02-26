@@ -33,6 +33,7 @@ fun GameTopBar(
     timeLeft: Int? = null,
     shotsLeft: Int? = null,
     onSettingsClick: () -> Unit,
+    onSoundClick: () -> Unit = {}, // Parámetro añadido
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -172,7 +173,10 @@ fun GameTopBar(
                     BorderStroke(1.5.dp, Color.White.copy(alpha = 0.6f)),
                     shape = CircleShape
                 )
-                .clickable { onSettingsClick() },
+                .clickable { 
+                    onSoundClick() // Reproducir sonido
+                    onSettingsClick() 
+                },
             contentAlignment = Alignment.Center
         ) {
             Icon(

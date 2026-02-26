@@ -40,6 +40,7 @@ fun TutorialDialog(
     cannonRect: Rect?,
     nextBubbleRect: Rect?,
     scoreRect: Rect?,
+    soundManager: SoundManager?, // Parámetro añadido
     onComplete: () -> Unit
 ) {
     var currentStep by remember { mutableIntStateOf(0) }
@@ -67,8 +68,9 @@ fun TutorialDialog(
             .fillMaxSize()
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null // Sin efecto de onda para que sea más limpio
+                indication = null
             ) {
+                soundManager?.play(SoundType.POP) // Reproducir sonido
                 if (currentStep < steps.size - 1) currentStep++ else onComplete()
             }
     ) {
@@ -111,6 +113,7 @@ fun TutorialDialog(
                 color = Color.White,
                 shadowElevation = 12.dp
             ) {
+                @Suppress("ControlFlowWithEmptyBody")
                 Column(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally

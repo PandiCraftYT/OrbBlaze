@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
 import com.example.orbblaze.ui.menu.ReferenceButton
 import com.example.orbblaze.ui.theme.*
@@ -52,15 +53,16 @@ fun HighScoreScreen(
     val context = LocalContext.current
     val highScore by settingsManager.highScoreFlow.collectAsState(initial = 0)
     val highScoreTime by settingsManager.highScoreTimeFlow.collectAsState(initial = 0)
+    val adventureProgress by settingsManager.adventureProgressFlow.collectAsState(initial = 0)
     
-    val records = remember(highScore, highScoreTime) {
+    val records = remember(highScore, highScoreTime, adventureProgress) {
         listOf(
-            Triple("MODO CLÁSICO", highScore, SageGreen),
-            Triple("CONTRA TIEMPO", highScoreTime, Color(0xFF00E676)),
-            Triple("MODO AVENTURA", 0, Color(0xFFFFD700)),
-            Triple("MODO INVERSA", 0, Color(0xFFFF5252)),
-            Triple("PUZZLE DIARIO", 0, Color(0xFFBB86FC)),
-            Triple("MINIJUEGOS", 0, Color(0xFF03DAC5))
+            Triple("MODO CLÁSICO", "$highScore", SageGreen),
+            Triple("CONTRA TIEMPO", "$highScoreTime", Color(0xFF00E676)),
+            Triple("MODO AVENTURA", if(adventureProgress > 0) "NIVEL $adventureProgress" else "-", Color(0xFFFFD700)),
+            Triple("MODO INVERSA", "-", Color(0xFFFF5252)),
+            Triple("PUZZLE DIARIO", "-", Color(0xFFBB86FC)),
+            Triple("MINIJUEGOS", "-", Color(0xFF03DAC5))
         )
     }
 
@@ -112,9 +114,9 @@ fun HighScoreScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(vertical = 24.dp)
                 ) {
-                    items(records) { (modo, score, color) ->
-                        RecordCardPremium(modo, score, color) {
-                            if (score == 0) Toast.makeText(context, "¡Juega para establecer un récord!", Toast.LENGTH_SHORT).show()
+                    items(records) { (modo, value, color) ->
+                        RecordCardPremium(modo, value, color, soundManager) {
+                            if (value == "-" || value == "0") Toast.makeText(context, "¡Juega para establecer un récord!", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -125,6 +127,7 @@ fun HighScoreScreen(
                     backgroundColor = Color.White,
                     contentColor = Color.Gray,
                     modifier = Modifier.width(200.dp),
+                    soundManager = soundManager,
                     onClick = onBackClick
                 )
             }
@@ -133,18 +136,21 @@ fun HighScoreScreen(
 }
 
 @Composable
-fun RecordCardPremium(mode: String, score: Int, color: Color, onClick: () -> Unit) {
+fun RecordCardPremium(mode: String, value: String, color: Color, soundManager: SoundManager, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
     val fontScale = LocalFontScale.current
     
     Surface(
-        onClick = onClick,
+        onClick = {
+            soundManager.play(SoundType.POP)
+            onClick()
+        },
         interactionSource = interactionSource,
         shape = RoundedCornerShape(28.dp),
         color = Color.White,
-        shadowElevation = if (isPressed) 2.dp else 6.dp, // Corregido: shadowElevation nativo
+        shadowElevation = if (isPressed) 2.dp else 6.dp,
         modifier = Modifier
             .fillMaxWidth()
             .height((80 * fontScale).dp)
@@ -166,7 +172,7 @@ fun RecordCardPremium(mode: String, score: Int, color: Color, onClick: () -> Uni
                     )
                 )
                 Text(
-                    text = "PUNTUACIÓN MÁXIMA",
+                    text = if(mode == "MODO AVENTURA") "PROGRESO ACTUAL" else "PUNTUACIÓN MÁXIMA",
                     style = TextStyle(
                         color = Color.LightGray, 
                         fontSize = (10 * fontScale).sp, 
@@ -177,10 +183,10 @@ fun RecordCardPremium(mode: String, score: Int, color: Color, onClick: () -> Uni
             }
             
             Text(
-                text = if (score > 0) "$score" else "-",
+                text = value,
                 style = TextStyle(
                     color = NavyDark,
-                    fontSize = (28 * fontScale).sp,
+                    fontSize = (if(value.startsWith("NIVEL")) 20 * fontScale else 28 * fontScale).sp,
                     fontWeight = FontWeight.Black
                 )
             )

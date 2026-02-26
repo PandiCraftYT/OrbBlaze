@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.R
 import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
 
 val LocalFontScale = compositionLocalOf { 1f }
@@ -123,6 +124,7 @@ fun MenuScreen(
                         text = stringResource(id = R.string.menu_play),
                         backgroundColor = Color.White,
                         contentColor = SageGreen,
+                        soundManager = soundManager,
                         onClick = onModesClick
                     )
 
@@ -136,6 +138,7 @@ fun MenuScreen(
                             text = stringResource(id = R.string.menu_record),
                             backgroundColor = Color.White,
                             contentColor = SageGreen,
+                            soundManager = soundManager,
                             modifier = Modifier.weight(1f),
                             onClick = onScoreClick
                         )
@@ -147,6 +150,7 @@ fun MenuScreen(
                             contentColor = Color.White,
                             icon = Icons.Default.Star,
                             iconColor = StarGold,
+                            soundManager = soundManager,
                             modifier = Modifier.weight(1f),
                             onClick = onAchievementsClick
                         )
@@ -157,6 +161,7 @@ fun MenuScreen(
                         text = "AJUSTES",
                         backgroundColor = Color.White,
                         contentColor = SageGreen,
+                        soundManager = soundManager,
                         onClick = onSettingsClick
                     )
                 }
@@ -192,6 +197,7 @@ fun ReferenceButton(
     icon: ImageVector? = null,
     iconColor: Color = Color.Unspecified,
     showDot: Boolean = false,
+    soundManager: SoundManager? = null, // Sonido opcional
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -200,7 +206,10 @@ fun ReferenceButton(
     val fontScale = LocalFontScale.current
 
     Surface(
-        onClick = onClick,
+        onClick = {
+            soundManager?.play(SoundType.POP) // Reproducir POP al hacer click
+            onClick()
+        },
         interactionSource = interactionSource,
         shape = RoundedCornerShape(28.dp),
         color = backgroundColor,

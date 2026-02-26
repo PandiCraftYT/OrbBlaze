@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.R
 import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
 
 @Composable
@@ -60,12 +61,10 @@ fun GameModesScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    // Añadimos padding inferior extra para evitar que el banner de anuncios tape el botón
                     .padding(start = 32.dp, end = 32.dp, top = 32.dp, bottom = 80.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                // ✅ TÍTULO (Estilo Menú)
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.graphicsLayer { translationY = titleFloat }
@@ -84,7 +83,7 @@ fun GameModesScreen(
                     Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
                 }
 
-                // ✅ LISTA DE MODOS
+                // ✅ LISTA DE MODOS CON DESCRIPCIONES
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -93,9 +92,11 @@ fun GameModesScreen(
                     item {
                         ModeCardPremium(
                             title = "MODO CLÁSICO", 
+                            description = "¡Sobrevive todo lo que puedas!",
                             color = SageGreen, 
                             isLocked = false,
                             isPrincipal = true,
+                            soundManager = soundManager,
                             onClick = { onModeSelect("game") }
                         )
                     }
@@ -103,8 +104,10 @@ fun GameModesScreen(
                     item {
                         ModeCardPremium(
                             title = "CONTRA TIEMPO", 
+                            description = "¡Sé rápido antes de que acabe el tiempo!",
                             color = Color(0xFF00E676), 
                             isLocked = false,
+                            soundManager = soundManager,
                             onClick = { onModeSelect("time_attack") }
                         )
                     }
@@ -112,37 +115,57 @@ fun GameModesScreen(
                     item {
                         ModeCardPremium(
                             title = "MODO AVENTURA", 
+                            description = "¡Supera niveles y descubre mundos!",
                             color = Color(0xFFFFD700), 
                             isLocked = false,
+                            soundManager = soundManager,
                             onClick = { onModeSelect("adventure_map") }
                         )
                     }
                     
                     item {
-                        ModeCardPremium(title = "MODO INVERSA", color = Color(0xFFFF5252), onClick = { showLockedDialog = true })
+                        ModeCardPremium(
+                            title = "MODO INVERSA", 
+                            description = "Nuevos desafíos próximamente.",
+                            color = Color(0xFFFF5252), 
+                            soundManager = soundManager,
+                            onClick = { showLockedDialog = true }
+                        )
                     }
                     
                     item {
-                        ModeCardPremium(title = "PUZZLE DIARIO", color = Color(0xFFBB86FC), onClick = { showLockedDialog = true })
+                        ModeCardPremium(
+                            title = "PUZZLE DIARIO", 
+                            description = "Un rompecabezas nuevo cada día.",
+                            color = Color(0xFFBB86FC), 
+                            soundManager = soundManager,
+                            onClick = { showLockedDialog = true }
+                        )
                     }
                     item {
-                        ModeCardPremium(title = "MINIJUEGOS", color = Color(0xFF03DAC5), onClick = { showLockedDialog = true })
+                        ModeCardPremium(
+                            title = "MINIJUEGOS", 
+                            description = "Diversión rápida y variada.",
+                            color = Color(0xFF03DAC5), 
+                            soundManager = soundManager,
+                            onClick = { showLockedDialog = true }
+                        )
                     }
                 }
 
-                // ✅ BOTÓN VOLVER (Estilo Menú)
                 ReferenceButton(
                     text = "VOLVER",
                     backgroundColor = Color.White,
                     contentColor = Color.Gray,
                     modifier = Modifier.width(200.dp),
+                    soundManager = soundManager,
                     onClick = onBackClick
                 )
             }
         }
 
         if (showLockedDialog) {
-            OrbBlazeLockedDialog(onDismiss = { showLockedDialog = false })
+            OrbBlazeLockedDialog(soundManager = soundManager, onDismiss = { showLockedDialog = false })
         }
     }
 }
@@ -150,9 +173,11 @@ fun GameModesScreen(
 @Composable
 fun ModeCardPremium(
     title: String,
+    description: String, // Parámetro añadido
     color: Color,
     isLocked: Boolean = true,
     isPrincipal: Boolean = false,
+    soundManager: SoundManager,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -161,13 +186,16 @@ fun ModeCardPremium(
     val fontScale = LocalFontScale.current
     
     Surface(
-        onClick = onClick,
+        onClick = {
+            soundManager.play(SoundType.POP)
+            onClick()
+        },
         interactionSource = interactionSource,
         shape = RoundedCornerShape(28.dp),
         color = Color.White,
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (isPrincipal) (90 * fontScale).dp else (75 * fontScale).dp)
+            .height(if (isPrincipal) (100 * fontScale).dp else (85 * fontScale).dp) // Un poco más alto para la descripción
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .shadow(if (isPressed) 2.dp else 6.dp, RoundedCornerShape(28.dp))
     ) {
@@ -180,17 +208,28 @@ fun ModeCardPremium(
                     text = title, 
                     style = TextStyle(
                         color = if(isLocked) Color.Gray else color, 
-                        fontSize = ((if (isPrincipal) 20 else 18) * fontScale).sp, 
+                        fontSize = ((if (isPrincipal) 18 else 16) * fontScale).sp, 
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.sp
                     )
                 )
                 Text(
-                    text = if (isLocked) "PRÓXIMAMENTE" else if (isPrincipal) "MODO RECOMENDADO" else "DISPONIBLE", 
+                    text = description, 
                     style = TextStyle(
-                        color = Color.LightGray, 
+                        color = if(isLocked) Color.LightGray else Color.Gray, 
                         fontSize = (11 * fontScale).sp, 
                         fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (isLocked) "PRÓXIMAMENTE" else if (isPrincipal) "MODO RECOMENDADO" else "DISPONIBLE", 
+                    style = TextStyle(
+                        color = if(isLocked) Color.LightGray else color.copy(alpha = 0.6f), 
+                        fontSize = (9 * fontScale).sp, 
+                        fontWeight = FontWeight.Black,
                         letterSpacing = 1.sp
                     )
                 )
@@ -207,7 +246,6 @@ fun ModeCardPremium(
     }
 }
 
-// Reutilizamos el estilo de botón del menú
 @Composable
 fun ReferenceButton(
     text: String,
@@ -216,6 +254,7 @@ fun ReferenceButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     iconColor: Color = Color.Unspecified,
+    soundManager: SoundManager? = null,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -224,7 +263,10 @@ fun ReferenceButton(
     val fontScale = LocalFontScale.current
 
     Surface(
-        onClick = onClick,
+        onClick = {
+            soundManager?.play(SoundType.POP)
+            onClick()
+        },
         interactionSource = interactionSource,
         shape = RoundedCornerShape(28.dp),
         color = backgroundColor,
@@ -263,11 +305,14 @@ fun ReferenceButton(
 }
 
 @Composable
-fun OrbBlazeLockedDialog(onDismiss: () -> Unit) {
+fun OrbBlazeLockedDialog(soundManager: SoundManager, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                soundManager.play(SoundType.POP)
+                onDismiss()
+            }) {
                 Text("ENTENDIDO", color = Color(0xFF1A237E), fontWeight = FontWeight.ExtraBold)
             }
         },
