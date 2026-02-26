@@ -76,6 +76,10 @@ fun LevelScreen(
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
 
+    // Strings localizados
+    val shopNotAvailableMsg = stringResource(R.string.shop_not_available_adventure)
+    val gameRedeemedMsg = stringResource(R.string.game_redeemed)
+
     val bubbles = viewModel.bubblesByPosition
     val activeProjectile = viewModel.activeProjectile
     val score = viewModel.score
@@ -406,7 +410,7 @@ fun LevelScreen(
                     shotTick = viewModel.shotTick,
                     joyTick = viewModel.joyTick,
                     rainbowRotation = masterRainbowRotation,
-                    onShopClick = { if (currentGameMode == GameMode.ADVENTURE) { Toast.makeText(context, context.getString(R.string.shop_not_available_adventure), Toast.LENGTH_SHORT).show() } else { showQuickShop = true } },
+                    onShopClick = { if (currentGameMode == GameMode.ADVENTURE) { Toast.makeText(context, shopNotAvailableMsg, Toast.LENGTH_SHORT).show() } else { showQuickShop = true } },
                     isShopEnabled = currentGameMode != GameMode.ADVENTURE,
                     onShopPositioned = { shopRect = it },
                     onCannonPositioned = { cannonRect = it },
@@ -458,7 +462,7 @@ fun LevelScreen(
                 isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
                 currentLevelId = currentLevelId,
-                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, context.getString(R.string.game_redeemed), Toast.LENGTH_SHORT).show() } } } else null,
+                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, gameRedeemedMsg, Toast.LENGTH_SHORT).show() } } } else null,
                 onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } } }
             )
         }
