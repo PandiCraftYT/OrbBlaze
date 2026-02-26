@@ -273,15 +273,14 @@ fun LevelScreen(
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 90.dp.toPx() }
 
-        val dangerAreaHeightPx = with(density) { 360.dp.toPx() }
-        val availableHeight = totalHeight - boardTopPaddingPx - dangerAreaHeightPx
-        val finalDangerRow = (availableHeight / verticalSpacingPx).toInt().coerceAtLeast(9)
-
-        LaunchedEffect(finalDangerRow) {
-            viewModel.dynamicDangerRow = finalDangerRow
+        // ✅ LÍNEA DE PELIGRO UNIFICADA EN FILA 11
+        val dangerRow = 11
+        
+        LaunchedEffect(dangerRow) {
+            viewModel.dynamicDangerRow = dangerRow
         }
 
-        val isDangerActive = bubbles.keys.any { it.row >= (finalDangerRow - 2) }
+        val isDangerActive = bubbles.keys.any { it.row >= (dangerRow - 2) }
         val finalShakeIntensity = (if (isDangerActive) 3f else 0f) + (shakeIntensity * 0.5f)
 
         if (currentGameMode != GameMode.ADVENTURE) {
@@ -315,7 +314,7 @@ fun LevelScreen(
         Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = shakeOffset * finalShakeIntensity; translationY = shakeOffset * finalShakeIntensity }) {
 
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val redLineY = boardTopPaddingPx + (verticalSpacingPx * finalDangerRow)
+                val redLineY = boardTopPaddingPx + (verticalSpacingPx * dangerRow)
 
                 if (isDangerActive || (viewModel.gameMode == GameMode.TIME_ATTACK && timeLeft <= 10)) {
                     drawRect(color = Color.Red.copy(alpha = dangerAlpha * 0.3f), size = size)
@@ -961,14 +960,15 @@ fun OverlayMenu(
                 }
 
                 if (isAdventure && isWin && stars > 0) {
+                    val starsList = remember(stars) { List(3) { it < stars } }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        repeat(3) { i ->
+                        starsList.forEachIndexed { i, isFilled ->
                             val scale = remember { Animatable(0f) }
                             LaunchedEffect(Unit) { delay(i * 150L); scale.animateTo(1f, spring(0.6f, 300f)) }
                             Icon(
                                 imageVector = Icons.Default.Star,
                                 contentDescription = null,
-                                tint = if (i < stars) StarGold else Color.LightGray.copy(alpha = 0.3f),
+                                tint = if (isFilled) StarGold else Color.LightGray.copy(alpha = 0.3f),
                                 modifier = Modifier.size(32.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }
                             )
                         }

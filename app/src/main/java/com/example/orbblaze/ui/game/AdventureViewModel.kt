@@ -80,7 +80,6 @@ class AdventureViewModel(
         rowsDroppedCount = 0
         visualScrollOffset = 0f
         
-        // ✅ AVENTURA: No permitir bombas ni arcoíris
         nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
         cascadeJob?.cancel()
@@ -159,7 +158,6 @@ class AdventureViewModel(
     override fun onShoot(spawnX: Float, spawnY: Float) {
         if (showReviveAlert || isPaused) return
         super.onShoot(spawnX, spawnY)
-        // ✅ AVENTURA: No permitir bombas ni arcoíris en la vista previa
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
     }
 
@@ -175,7 +173,6 @@ class AdventureViewModel(
                 saveProgress()
             } else {
                 if (!bubblesByPosition.values.any { it.color == nextBubbleColor }) {
-                    // ✅ AVENTURA: No permitir bombas ni arcoíris al validar colores
                     nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
                 }
             }
@@ -208,8 +205,9 @@ class AdventureViewModel(
     }
 
     private fun checkAdventureDefeat(m: BoardMetricsPx) {
-        val dangerY = m.boardTopPadding + (m.verticalSpacing * 13)
-        if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2f) >= dangerY }) { 
+        // ✅ Sincronización Total: Usamos dynamicDangerRow que viene de la UI
+        val dangerY = m.boardTopPadding + (m.verticalSpacing * dynamicDangerRow)
+        if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2.2f) >= dangerY }) {
             val level = currentLevelObj
             if (level != null && currentLevelId > 30 && score >= level.star1Threshold) {
                 evaluateFinishingStatus()
