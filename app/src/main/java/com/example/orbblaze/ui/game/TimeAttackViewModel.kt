@@ -3,6 +3,7 @@ package com.example.orbblaze.ui.game
 import android.app.Application
 import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.domain.model.Bubble
 import com.example.orbblaze.domain.model.GridPosition
 import com.example.orbblaze.domain.model.GameConstants
@@ -11,8 +12,9 @@ import kotlinx.coroutines.launch
 
 class TimeAttackViewModel(
     application: Application,
-    settingsManager: SettingsManager
-) : GameViewModel(application, settingsManager) {
+    settingsManager: SettingsManager,
+    authManager: AuthManager
+) : GameViewModel(application, settingsManager, authManager) {
 
     init {
         changeGameMode(GameMode.TIME_ATTACK)

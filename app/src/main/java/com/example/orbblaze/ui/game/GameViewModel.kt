@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.domain.engine.HexGridHelper
 import com.example.orbblaze.domain.engine.LevelEngine
 import com.example.orbblaze.domain.engine.MatchFinder
@@ -28,7 +29,8 @@ enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP, ACHIEVEMENT 
 
 open class GameViewModel(
     application: Application,
-    protected val settingsManager: SettingsManager
+    protected val settingsManager: SettingsManager,
+    protected val authManager: AuthManager
 ) : AndroidViewModel(application) {
 
     protected val engine = LevelEngine()
@@ -136,6 +138,7 @@ open class GameViewModel(
     init {
         setupAchievements()
         observeData()
+        setupCloudAutoSync()
     }
 
     private fun observeData() {
@@ -153,6 +156,30 @@ open class GameViewModel(
                     }
                 }
             }
+        }
+    }
+
+    // 🔥 SINCRONIZACIÓN AUTOMÁTICA CON LA NUBE
+    private fun setupCloudAutoSync() {
+        viewModelScope.launch {
+            launch {
+                settingsManager.coinsFlow.collectLatest { syncToCloud() }
+            }
+            launch {
+                settingsManager.highScoreFlow.collectLatest { syncToCloud() }
+            }
+            launch {
+                settingsManager.adventureProgressFlow.collectLatest { syncToCloud() }
+            }
+        }
+    }
+
+    private suspend fun syncToCloud() {
+        // Solo guardamos en la nube si el usuario está identificado
+        val user = authManager.currentUser
+        if (user != null && !user.isAnonymous) {
+            val data = settingsManager.getSyncableData()
+            authManager.saveProgressToCloud(data)
         }
     }
 
@@ -174,7 +201,18 @@ open class GameViewModel(
     }
 
     fun addCoins(amount: Int) { 
-        viewModelScope.launch { settingsManager.setCoins(coins + amount) }
+        viewModelScope.launch { 
+            val newCoins = coins + amount
+            settingsManager.setCoins(newCoins)
+            
+            // 🔥 DISPARADOR: Si llega a 10 monedas y no tiene sesión, creamos la cuenta anónima
+            if (newCoins >= 10 && authManager.currentUser == null) {
+                authManager.signInAnonymously()
+                // Guardamos el UID para que el sistema de detección de borrado funcione
+                delay(500) // Pequeña espera para asegurar que Firebase asigne el UID
+                settingsManager.setLastKnownUid(authManager.currentUser?.uid)
+            }
+        }
     }
     
     fun spendCoins(amount: Int, onResult: (Boolean) -> Unit) { 

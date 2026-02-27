@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.game.*
 import com.example.orbblaze.ui.menu.MenuScreen
@@ -28,6 +29,7 @@ import com.example.orbblaze.ui.score.AchievementsScreen
 import com.example.orbblaze.ui.shop.ShopScreen
 import com.example.orbblaze.ui.theme.OrbBlazeTheme
 import com.example.orbblaze.ui.components.GlobalBackground
+import kotlinx.coroutines.flow.first
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,8 +45,35 @@ class MainActivity : ComponentActivity() {
                 val settingsManager = remember { SettingsManager(context) }
                 val globalSoundManager = remember { SoundManager(context, settingsManager) }
                 val adsManager = remember { AdsManager(context) }
-                val factory = remember { OrbBlazeViewModelFactory(settingsManager, application) }
+                val authManager = remember { AuthManager() }
+                val factory = remember { OrbBlazeViewModelFactory(settingsManager, authManager, application) }
                 val lifecycleOwner = LocalLifecycleOwner.current
+
+                // ✅ Sincronización inteligente al arrancar con límite de 10 monedas
+                LaunchedEffect(Unit) {
+                    val coins = settingsManager.coinsFlow.first()
+                    
+                    // Solo intentamos sesión automática si tiene progreso (>= 10 monedas) 
+                    // o si ya existe una sesión activa (ej. Google)
+                    if (coins >= 10 || authManager.currentUser != null) {
+                        val user = authManager.signInAnonymously()
+                        authManager.refreshUser()
+                        
+                        val currentUid = authManager.currentUser?.uid
+                        val lastKnownUid = settingsManager.lastKnownUidFlow.first()
+
+                        if (lastKnownUid != null && currentUid != lastKnownUid) {
+                            settingsManager.clearAllData()
+                        }
+                        
+                        settingsManager.setLastKnownUid(currentUid)
+
+                        if (user != null && !user.isAnonymous) {
+                            val cloudData = authManager.loadProgressFromCloud()
+                            cloudData?.let { settingsManager.updateFromSyncableData(it) }
+                        }
+                    }
+                }
 
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
@@ -66,10 +95,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // ✅ FONDO GLOBAL SINCRONIZADO
                 GlobalBackground {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        AppNavigation(factory, globalSoundManager, adsManager, settingsManager)
+                        AppNavigation(factory, globalSoundManager, adsManager, settingsManager, authManager)
 
                         Box(
                             modifier = Modifier
@@ -91,7 +119,8 @@ fun AppNavigation(
     factory: OrbBlazeViewModelFactory,
     soundManager: SoundManager,
     adsManager: AdsManager,
-    settingsManager: SettingsManager
+    settingsManager: SettingsManager,
+    authManager: AuthManager
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -209,6 +238,7 @@ fun AppNavigation(
             SettingsScreen(
                 soundManager = soundManager,
                 settingsManager = settingsManager,
+                authManager = authManager,
                 onBackClick = { navController.popBackStack() }
             )
         }

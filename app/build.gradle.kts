@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.android)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -20,9 +21,7 @@ android {
 
     buildTypes {
         release {
-            // ✅ Activa la minificación (R8) para reducir el peso
             isMinifyEnabled = true
-            // ✅ Elimina recursos que no se utilizan
             isShrinkResources = true
             
             proguardFiles(
@@ -31,7 +30,6 @@ android {
             )
         }
         debug {
-            // Mantener desactivado en debug para compilaciones rápidas
             isMinifyEnabled = false
             isShrinkResources = false
         }
@@ -43,7 +41,6 @@ android {
     buildFeatures {
         compose = true
     }
-    // Migración a compilerOptions como sugiere el aviso de deprecación de AGP 9.0
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
@@ -64,14 +61,17 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.compose.ui.geometry)
     
-    // ✅ Navigation Compose
     implementation(libs.androidx.navigation.compose)
-
-    // ✅ Google Mobile Ads SDK
     implementation("com.google.android.gms:play-services-ads:23.6.0")
-
-    // ✅ DataStore
     implementation(libs.androidx.datastore.preferences)
+
+    // ✅ Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    
+    // ✅ Google Sign In
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

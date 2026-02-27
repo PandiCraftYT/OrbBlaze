@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "16414219373",
+    "project_id": "orbblaze",
+    "storage_bucket": "orbblaze.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:16414219373:android:a3aedf6a6c5cfcf92c7364",
+        "android_client_info": {
+          "package_name": "com.example.orbblaze"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "16414219373-894a9nq0riq41ar7ht2em99nsmurvrue.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.orbblaze",
+            "certificate_hash": "9ccae405a7b4b8b241b115fbf5030434467be6b6"
+          }
+        },
+        {
+          "client_id": "16414219373-43f70abac7dp5v3tbvvq6lndspdcsh0i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAr76rPOLZxEaRovByHNiAakw1zKBMTj0Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "16414219373-43f70abac7dp5v3tbvvq6lndspdcsh0i.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

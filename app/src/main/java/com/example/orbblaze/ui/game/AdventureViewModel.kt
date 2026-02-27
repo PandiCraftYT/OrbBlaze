@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.domain.model.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -16,8 +17,9 @@ import kotlinx.coroutines.launch
 
 class AdventureViewModel(
     application: Application,
-    settingsManager: SettingsManager
-) : GameViewModel(application, settingsManager) {
+    settingsManager: SettingsManager,
+    authManager: AuthManager
+) : GameViewModel(application, settingsManager, authManager) {
     
     var currentLevelId by mutableIntStateOf(1)
         private set
