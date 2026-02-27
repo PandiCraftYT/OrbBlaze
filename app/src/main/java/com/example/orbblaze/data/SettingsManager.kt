@@ -26,7 +26,9 @@ class SettingsManager(private val context: Context) {
         val ADVENTURE_PROGRESS = intPreferencesKey("adventure_progress")
         val TUTORIAL_COMPLETED = booleanPreferencesKey("tutorial_completed")
         val COLOR_BLIND_MODE = booleanPreferencesKey("color_blind_mode")
-        val LAST_KNOWN_UID = stringPreferencesKey("last_known_uid") // 🔥 Nueva clave
+        val LAST_KNOWN_UID = stringPreferencesKey("last_known_uid")
+        val NAME_CHANGES_COUNT = intPreferencesKey("name_changes_count")
+        val NAME_CHANGE_ADS_WATCHED = intPreferencesKey("name_change_ads_watched") // 🔥 Persistencia de Ads
     }
 
     val lastKnownUidFlow: Flow<String?> = context.dataStore.data.map { it[LAST_KNOWN_UID] }
@@ -34,6 +36,16 @@ class SettingsManager(private val context: Context) {
         context.dataStore.edit { prefs ->
             if (uid == null) prefs.remove(LAST_KNOWN_UID) else prefs[LAST_KNOWN_UID] = uid
         }
+    }
+
+    val nameChangesCountFlow: Flow<Int> = context.dataStore.data.map { it[NAME_CHANGES_COUNT] ?: 0 }
+    suspend fun setNameChangesCount(count: Int) {
+        context.dataStore.edit { it[NAME_CHANGES_COUNT] = count }
+    }
+
+    val nameChangeAdsWatchedFlow: Flow<Int> = context.dataStore.data.map { it[NAME_CHANGE_ADS_WATCHED] ?: 0 }
+    suspend fun setNameChangeAdsWatched(count: Int) {
+        context.dataStore.edit { it[NAME_CHANGE_ADS_WATCHED] = count }
     }
 
     // --- FLUJOS PROTEGIDOS ---

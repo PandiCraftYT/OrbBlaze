@@ -49,12 +49,10 @@ class MainActivity : ComponentActivity() {
                 val factory = remember { OrbBlazeViewModelFactory(settingsManager, authManager, application) }
                 val lifecycleOwner = LocalLifecycleOwner.current
 
-                // ✅ Sincronización inteligente al arrancar con límite de 10 monedas
+                // ✅ Sincronización inteligente al arrancar
                 LaunchedEffect(Unit) {
                     val coins = settingsManager.coinsFlow.first()
                     
-                    // Solo intentamos sesión automática si tiene progreso (>= 10 monedas) 
-                    // o si ya existe una sesión activa (ej. Google)
                     if (coins >= 10 || authManager.currentUser != null) {
                         val user = authManager.signInAnonymously()
                         authManager.refreshUser()
@@ -239,6 +237,7 @@ fun AppNavigation(
                 soundManager = soundManager,
                 settingsManager = settingsManager,
                 authManager = authManager,
+                adsManager = adsManager,
                 onBackClick = { navController.popBackStack() }
             )
         }

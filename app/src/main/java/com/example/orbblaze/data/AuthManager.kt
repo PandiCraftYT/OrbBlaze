@@ -1,12 +1,14 @@
 package com.example.orbblaze.data
 
 import android.content.Context
+import android.net.Uri
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.userProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -147,13 +149,37 @@ class AuthManager {
         }
     }
 
-    /**
-     * Elimina físicamente el documento de progreso de Firestore para el usuario actual.
-     */
     suspend fun deleteCloudProgress(): Boolean {
         val user = auth.currentUser ?: return false
         return try {
             db.collection("users").document(user.uid).delete().await()
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Actualiza el perfil del usuario (nombre y foto) en Firebase Auth y Firestore.
+     */
+    suspend fun updateProfile(displayName: String?, photoUrl: String?): Boolean {
+        val user = auth.currentUser ?: return false
+        return try {
+            val profileUpdates = userProfileChangeRequest {
+                displayName?.let { this.displayName = it }
+                photoUrl?.let { this.photoUri = Uri.parse(it) }
+            }
+            user.updateProfile(profileUpdates).await()
+            
+            // También guardamos estos datos en Firestore para que persistan mejor
+            val profileData = mutableMapOf<String, Any>()
+            displayName?.let { profileData["displayName"] = it }
+            photoUrl?.let { profileData["photoUrl"] = it }
+            
+            db.collection("users").document(user.uid).update(profileData).await()
+            
+            _user.value = auth.currentUser // Forzar actualización de la UI
             true
         } catch (e: Exception) {
             e.printStackTrace()
