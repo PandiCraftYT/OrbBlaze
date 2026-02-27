@@ -9,9 +9,14 @@ import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.userProfileChangeRequest
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class AuthManager {
@@ -38,6 +43,11 @@ class AuthManager {
     val isUserAnonymous: Boolean
         get() = auth.currentUser?.isAnonymous ?: true
 
+    fun getPlayerId(): String {
+        val uid = auth.currentUser?.uid ?: return "INVITADO"
+        return "ORB-${uid.takeLast(6).uppercase()}"
+    }
+
     suspend fun signInAnonymously(): FirebaseUser? {
         return try {
             if (auth.currentUser == null) {
@@ -57,13 +67,12 @@ class AuthManager {
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             val user = auth.currentUser ?: signInAnonymously()
-            
             if (user != null) {
                 val result = user.linkWithCredential(credential).await()
                 _user.value = result.user
                 Result.success(result.user)
             } else {
-                Result.failure(Exception("No se pudo establecer una sesión activa"))
+                Result.failure(Exception("No hay sesión activa"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -77,7 +86,6 @@ class AuthManager {
             _user.value = result.user
             result.user
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         }
     }
@@ -99,54 +107,164 @@ class AuthManager {
                 val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
                 val googleSignInClient = GoogleSignIn.getClient(context, gso)
                 googleSignInClient.signOut()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
     suspend fun refreshUser() {
         try {
-            val user = auth.currentUser
-            if (user != null) {
-                user.reload().await()
-                _user.value = auth.currentUser
-            }
+            auth.currentUser?.reload()?.await()
+            _user.value = auth.currentUser
         } catch (e: Exception) {
-            handleAuthError(e)
+            if (e.message?.contains("user-not-found") == true) {
+                _sessionError.value = "Sesión expirada"
+                auth.signOut()
+                _user.value = null
+            }
         }
     }
 
-    private fun handleAuthError(e: Exception) {
-        if (e.message?.contains("user-not-found") == true || e.message?.contains("no longer valid") == true) {
-            _sessionError.value = "Tu cuenta de Google ya no es válida o ha sido eliminada."
-            auth.signOut()
-            _user.value = null
-        }
-    }
+    // --- SISTEMA DE AMIGOS ---
 
-    suspend fun saveProgressToCloud(data: Map<String, Any>): Boolean {
-        val user = auth.currentUser ?: return false
-        if (user.isAnonymous) return false 
+    suspend fun findUserByPlayerId(playerId: String): Map<String, Any>? {
+        val cleanId = playerId.trim().uppercase()
         return try {
-            db.collection("users").document(user.uid).set(data).await()
+            val snapshot = db.collection("users")
+                .whereEqualTo("playerId", cleanId)
+                .get().await()
+            val doc = snapshot.documents.firstOrNull()
+            doc?.data?.plus("uid" to doc.id)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun sendFriendRequest(toUid: String): Boolean {
+        val fromUid = auth.currentUser?.uid ?: return false
+        if (fromUid == toUid) return false
+        return try {
+            val request = mapOf(
+                "fromUid" to fromUid,
+                "fromName" to (auth.currentUser?.displayName ?: "Jugador"),
+                "fromPhoto" to auth.currentUser?.photoUrl?.toString(),
+                "status" to "pending",
+                "timestamp" to FieldValue.serverTimestamp()
+            )
+            db.collection("users").document(toUid).collection("friend_requests").document(fromUid).set(request).await()
+            true
+        } catch (e: Exception) { false }
+    }
+
+    fun getFriendRequests(): Flow<List<Map<String, Any>>> = callbackFlow {
+        val uid = auth.currentUser?.uid ?: return@callbackFlow
+        val listener = db.collection("users").document(uid).collection("friend_requests")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val requests = snapshot.documents.mapNotNull { it.data?.plus("fromUid" to it.id) }
+                    trySend(requests)
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun acceptFriendRequest(friendUid: String): Boolean {
+        val myUid = auth.currentUser?.uid ?: return false
+        return try {
+            db.runBatch { batch ->
+                batch.set(db.collection("users").document(myUid), mapOf("friends" to FieldValue.arrayUnion(friendUid)), SetOptions.merge())
+                batch.set(db.collection("users").document(friendUid), mapOf("friends" to FieldValue.arrayUnion(myUid)), SetOptions.merge())
+                batch.delete(db.collection("users").document(myUid).collection("friend_requests").document(friendUid))
+            }.await()
             true
         } catch (e: Exception) {
-            handleAuthError(e)
+            e.printStackTrace()
             false
         }
     }
 
+    suspend fun rejectFriendRequest(friendUid: String): Boolean {
+        val myUid = auth.currentUser?.uid ?: return false
+        return try {
+            db.collection("users").document(myUid).collection("friend_requests").document(friendUid).delete().await()
+            true
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Elimina a un amigo de la lista.
+     */
+    suspend fun removeFriend(friendUid: String): Boolean {
+        val myUid = auth.currentUser?.uid ?: return false
+        return try {
+            db.runBatch { batch ->
+                batch.update(db.collection("users").document(myUid), "friends", FieldValue.arrayRemove(friendUid))
+                batch.update(db.collection("users").document(myUid), "favoriteFriends", FieldValue.arrayRemove(friendUid))
+                batch.update(db.collection("users").document(friendUid), "friends", FieldValue.arrayRemove(myUid))
+                batch.update(db.collection("users").document(friendUid), "favoriteFriends", FieldValue.arrayRemove(myUid))
+            }.await()
+            true
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Alterna un amigo como favorito.
+     */
+    suspend fun toggleFavoriteFriend(friendUid: String, isFavorite: Boolean): Boolean {
+        val myUid = auth.currentUser?.uid ?: return false
+        return try {
+            val update = if (isFavorite) FieldValue.arrayUnion(friendUid) else FieldValue.arrayRemove(friendUid)
+            db.collection("users").document(myUid).update("favoriteFriends", update).await()
+            true
+        } catch (e: Exception) { false }
+    }
+
+    fun getFriends(): Flow<List<Map<String, Any>>> = callbackFlow {
+        val uid = auth.currentUser?.uid ?: return@callbackFlow
+        val listener = db.collection("users").document(uid)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null && snapshot.exists()) {
+                    val friendUids = snapshot.get("friends") as? List<String> ?: emptyList()
+                    val favoriteUids = snapshot.get("favoriteFriends") as? List<String> ?: emptyList()
+                    
+                    if (friendUids.isEmpty()) {
+                        trySend(emptyList())
+                    } else {
+                        db.collection("users").whereIn(com.google.firebase.firestore.FieldPath.documentId(), friendUids)
+                            .get().addOnSuccessListener { friendsSnapshot ->
+                                val friendsData = friendsSnapshot.documents.mapNotNull { doc ->
+                                    doc.data?.plus("uid" to doc.id)?.plus("isFavorite" to favoriteUids.contains(doc.id))
+                                }
+                                trySend(friendsData)
+                            }
+                    }
+                } else {
+                    trySend(emptyList())
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    // --- PERSISTENCIA ---
+
+    suspend fun saveProgressToCloud(data: Map<String, Any>): Boolean {
+        val user = auth.currentUser ?: return false
+        val extendedData = data.toMutableMap()
+        extendedData["displayName"] = user.displayName ?: "Jugador"
+        extendedData["isAnonymous"] = user.isAnonymous
+        extendedData["playerId"] = getPlayerId()
+        user.photoUrl?.let { extendedData["photoUrl"] = it.toString() }
+        return try {
+            db.collection("users").document(user.uid).set(extendedData, SetOptions.merge()).await()
+            true
+        } catch (e: Exception) { false }
+    }
+
     suspend fun loadProgressFromCloud(): Map<String, Any>? {
         val user = auth.currentUser ?: return null
-        if (user.isAnonymous) return null
         return try {
-            val document = db.collection("users").document(user.uid).get().await()
-            if (document.exists()) document.data else null
-        } catch (e: Exception) {
-            handleAuthError(e)
-            null
-        }
+            val doc = db.collection("users").document(user.uid).get().await()
+            doc.data
+        } catch (e: Exception) { null }
     }
 
     suspend fun deleteCloudProgress(): Boolean {
@@ -154,36 +272,24 @@ class AuthManager {
         return try {
             db.collection("users").document(user.uid).delete().await()
             true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
+        } catch (e: Exception) { false }
     }
 
-    /**
-     * Actualiza el perfil del usuario (nombre y foto) en Firebase Auth y Firestore.
-     */
     suspend fun updateProfile(displayName: String?, photoUrl: String?): Boolean {
         val user = auth.currentUser ?: return false
         return try {
-            val profileUpdates = userProfileChangeRequest {
+            val updates = userProfileChangeRequest {
                 displayName?.let { this.displayName = it }
                 photoUrl?.let { this.photoUri = Uri.parse(it) }
             }
-            user.updateProfile(profileUpdates).await()
-            
-            // También guardamos estos datos en Firestore para que persistan mejor
-            val profileData = mutableMapOf<String, Any>()
-            displayName?.let { profileData["displayName"] = it }
-            photoUrl?.let { profileData["photoUrl"] = it }
-            
-            db.collection("users").document(user.uid).update(profileData).await()
-            
-            _user.value = auth.currentUser // Forzar actualización de la UI
+            user.updateProfile(updates).await()
+            val data = mutableMapOf<String, Any>()
+            displayName?.let { data["displayName"] = it }
+            photoUrl?.let { data["photoUrl"] = it }
+            data["playerId"] = getPlayerId()
+            db.collection("users").document(user.uid).set(data, SetOptions.merge()).await()
+            _user.value = auth.currentUser
             true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
-        }
+        } catch (e: Exception) { false }
     }
 }

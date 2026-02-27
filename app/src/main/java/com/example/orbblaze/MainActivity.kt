@@ -2,6 +2,7 @@ package com.example.orbblaze
 
 import android.app.Activity
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,6 +25,8 @@ import com.example.orbblaze.ui.menu.MenuScreen
 import com.example.orbblaze.ui.menu.GameModesScreen
 import com.example.orbblaze.ui.menu.SplashScreen
 import com.example.orbblaze.ui.settings.SettingsScreen
+import com.example.orbblaze.ui.settings.ProfileScreen
+import com.example.orbblaze.ui.social.FriendsScreen
 import com.example.orbblaze.ui.score.HighScoreScreen
 import com.example.orbblaze.ui.score.AchievementsScreen
 import com.example.orbblaze.ui.shop.ShopScreen
@@ -49,23 +52,17 @@ class MainActivity : ComponentActivity() {
                 val factory = remember { OrbBlazeViewModelFactory(settingsManager, authManager, application) }
                 val lifecycleOwner = LocalLifecycleOwner.current
 
-                // ✅ Sincronización inteligente al arrancar
                 LaunchedEffect(Unit) {
                     val coins = settingsManager.coinsFlow.first()
-                    
                     if (coins >= 10 || authManager.currentUser != null) {
                         val user = authManager.signInAnonymously()
                         authManager.refreshUser()
-                        
                         val currentUid = authManager.currentUser?.uid
                         val lastKnownUid = settingsManager.lastKnownUidFlow.first()
-
                         if (lastKnownUid != null && currentUid != lastKnownUid) {
                             settingsManager.clearAllData()
                         }
-                        
                         settingsManager.setLastKnownUid(currentUid)
-
                         if (user != null && !user.isAnonymous) {
                             val cloudData = authManager.loadProgressFromCloud()
                             cloudData?.let { settingsManager.updateFromSyncableData(it) }
@@ -151,9 +148,26 @@ fun AppNavigation(
                 onScoreClick = { navController.navigate("score") },
                 onAchievementsClick = { navController.navigate("achievements") },
                 onSettingsClick = { navController.navigate("settings") },
+                onProfileClick = { navController.navigate("profile") },
+                onFriendsClick = { navController.navigate("friends") },
                 onExitClick = { activity?.finish() },
                 soundManager = soundManager,
+                authManager = authManager,
                 onSecretClick = { sharedViewModel.unlockAchievement("secret_popper") }
+            )
+        }
+        composable("profile") {
+            ProfileScreen(
+                authManager = authManager,
+                settingsManager = settingsManager,
+                adsManager = adsManager,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable("friends") {
+            FriendsScreen(
+                authManager = authManager,
+                onBackClick = { navController.popBackStack() }
             )
         }
         composable("adventure_map") {
@@ -237,7 +251,6 @@ fun AppNavigation(
                 soundManager = soundManager,
                 settingsManager = settingsManager,
                 authManager = authManager,
-                adsManager = adsManager,
                 onBackClick = { navController.popBackStack() }
             )
         }

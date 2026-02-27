@@ -5,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -12,6 +13,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -26,23 +30,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.orbblaze.R
+import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
 
 val LocalFontScale = compositionLocalOf { 1f }
 
-// Colores de la referencia
+// Colores públicos para el paquete
 val SageGreen = Color(0xFF8DA094)
-val NavyDark = Color(0xFFFFC107)
-val StarGold = Color(0xFFFFFFFF)
+val NavyDark = Color(0xFF2D324F)
+val StarGold = Color(0xFFF4C491)
 
 @Composable
 fun MenuScreen(
@@ -51,12 +59,16 @@ fun MenuScreen(
     onScoreClick: () -> Unit,
     onAchievementsClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    onFriendsClick: () -> Unit,
     onExitClick: () -> Unit,
     soundManager: SoundManager,
+    authManager: AuthManager,
     @Suppress("UNUSED_PARAMETER") onSecretClick: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
     var showExitDialog by remember { mutableStateOf(false) }
+    val currentUser by authManager.user.collectAsState()
 
     LaunchedEffect(Unit) { soundManager.startMusic() }
     BackHandler { showExitDialog = true }
@@ -73,9 +85,7 @@ fun MenuScreen(
         label = "bg_scroll"
     )
 
-    BoxWithConstraints(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val totalWidth = constraints.maxWidth.toFloat()
         val totalHeight = constraints.maxHeight.toFloat()
         val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
@@ -89,95 +99,102 @@ fun MenuScreen(
         }
 
         CompositionLocalProvider(LocalFontScale provides fontScale) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .padding(horizontal = 32.dp, vertical = 48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
-            ) {
-                // TÍTULO
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.graphicsLayer { translationY = titleFloat }) {
-                    Text(
-                        text = stringResource(id = R.string.app_name).uppercase(),
-                        textAlign = TextAlign.Center,
-                        style = TextStyle(
-                            fontSize = (75 * fontScale).sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 2.sp,
-                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
-                        )
-                    )
-                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
-                }
+            Box(modifier = Modifier.fillMaxSize()) {
 
-                // CONTENEDOR DE BOTONES REESTRUCTURADO
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .systemBarsPadding()
+                        .padding(horizontal = 32.dp, vertical = 48.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    // BOTÓN JUGAR
-                    ReferenceButton(
-                        text = stringResource(id = R.string.menu_play),
-                        backgroundColor = Color.White,
-                        contentColor = SageGreen,
-                        soundManager = soundManager,
-                        onClick = onModesClick
-                    )
+                    // TÍTULO
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.graphicsLayer { translationY = titleFloat }) {
+                        Text(
+                            text = stringResource(id = R.string.app_name).uppercase(),
+                            textAlign = TextAlign.Center,
+                            style = TextStyle(
+                                fontSize = (75 * fontScale).sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 2.sp,
+                                shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                            )
+                        )
+                        Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
+                    }
 
-                    // FILA: RÉCORDS | LOGROS
-                    Row(
+                    // BLOQUE DE BOTONES REESTRUCTURADO
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // BOTÓN RÉCORDS
+                        // JUGAR
                         ReferenceButton(
-                            text = stringResource(id = R.string.menu_record),
+                            text = stringResource(id = R.string.menu_play),
                             backgroundColor = Color.White,
                             contentColor = SageGreen,
                             soundManager = soundManager,
-                            modifier = Modifier.weight(1f),
-                            onClick = onScoreClick
+                            onClick = onModesClick
                         )
 
-                        // BOTÓN LOGROS (Azul con estrella dorada)
+                        // RÉCORDS Y LOGROS
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            ReferenceButton(
+                                text = stringResource(id = R.string.menu_record),
+                                backgroundColor = Color.White,
+                                contentColor = SageGreen,
+                                soundManager = soundManager,
+                                modifier = Modifier.weight(1f),
+                                onClick = onScoreClick
+                            )
+                            ReferenceButton(
+                                text = "LOGROS",
+                                backgroundColor = Color(0xFF2D324F),
+                                contentColor = Color.White,
+                                icon = Icons.Default.Star,
+                                iconColor = StarGold,
+                                soundManager = soundManager,
+                                modifier = Modifier.weight(1f),
+                                onClick = onAchievementsClick
+                            )
+                        }
+
+                        // PERFIL Y AMIGOS (Sin iconos)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            ReferenceButton(
+                                text = "PERFIL",
+                                backgroundColor = Color.White,
+                                contentColor = SageGreen,
+                                soundManager = soundManager,
+                                modifier = Modifier.weight(1f),
+                                onClick = onProfileClick
+                            )
+                            ReferenceButton(
+                                text = "AMIGOS",
+                                backgroundColor = Color.White,
+                                contentColor = SageGreen,
+                                soundManager = soundManager,
+                                modifier = Modifier.weight(1f),
+                                onClick = onFriendsClick
+                            )
+                        }
+
+                        // AJUSTES (Blanco sólido, sin icono)
                         ReferenceButton(
-                            text = "LOGROS",
-                            backgroundColor = NavyDark,
-                            contentColor = Color.White,
-                            icon = Icons.Default.Star,
-                            iconColor = StarGold,
+                            text = "AJUSTES",
+                            backgroundColor = Color.White,
+                            contentColor = SageGreen,
                             soundManager = soundManager,
-                            modifier = Modifier.weight(1f),
-                            onClick = onAchievementsClick
+                            onClick = onSettingsClick
                         )
                     }
 
-                    // BOTÓN AJUSTES
-                    ReferenceButton(
-                        text = "AJUSTES",
-                        backgroundColor = Color.White,
-                        contentColor = SageGreen,
-                        soundManager = soundManager,
-                        onClick = onSettingsClick
-                    )
-                }
-
-                // PIE DE PÁGINA (Solo versión)
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "VERSION 1.0.7",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        letterSpacing = 1.sp
-                    )
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(text = "VERSION 1.0.7", color = Color.White.copy(alpha = 0.6f), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
+                    }
                 }
             }
         }
@@ -197,7 +214,7 @@ fun ReferenceButton(
     icon: ImageVector? = null,
     iconColor: Color = Color.Unspecified,
     showDot: Boolean = false,
-    soundManager: SoundManager? = null, // Sonido opcional
+    soundManager: SoundManager? = null,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -207,13 +224,13 @@ fun ReferenceButton(
 
     Surface(
         onClick = {
-            soundManager?.play(SoundType.POP) // Reproducir POP al hacer click
+            soundManager?.play(SoundType.POP)
             onClick()
         },
         interactionSource = interactionSource,
         shape = RoundedCornerShape(28.dp),
         color = backgroundColor,
-        shadowElevation = if (isPressed) 2.dp else 4.dp,
+        shadowElevation = 0.dp, // ✅ Sombra eliminada para diseño flat y limpio
         modifier = modifier
             .fillMaxWidth()
             .height((64 * fontScale).dp)
@@ -225,32 +242,13 @@ fun ReferenceButton(
             horizontalArrangement = Arrangement.Center
         ) {
             if (showDot) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(contentColor)
-                )
+                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(contentColor))
                 Spacer(Modifier.width(12.dp))
             } else if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
             }
-            
-            Text(
-                text = text.uppercase(),
-                style = TextStyle(
-                    fontSize = (20 * fontScale).sp,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor,
-                    letterSpacing = 1.sp
-                )
-            )
+            Text(text = text.uppercase(), style = TextStyle(fontSize = (18 * fontScale).sp, fontWeight = FontWeight.Bold, color = contentColor, letterSpacing = 1.sp))
         }
     }
 }
