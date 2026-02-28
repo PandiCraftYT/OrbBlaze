@@ -3,9 +3,6 @@ package com.example.orbblaze.ui.settings
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -17,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Login
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.ui.components.rememberGoogleSignInHandler
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
@@ -58,6 +57,9 @@ fun SettingsScreen(
 
     val currentUser by authManager.user.collectAsState()
     val isAnonymous = currentUser?.isAnonymous ?: true
+
+    // ✅ Usamos el manejador centralizado de login
+    val handleSignIn = rememberGoogleSignInHandler(authManager, settingsManager)
 
     val titleFloat by infiniteTransition.animateFloat(
         initialValue = -8f, targetValue = 8f,
@@ -98,12 +100,32 @@ fun SettingsScreen(
                         SettingsToggleRow("VIBRACIÓN", isVibrationEnabled, activeColor = SageGreen) { scope.launch { settingsManager.setVibrationEnabled(it) } }
                         SettingsToggleRow("DALTONISMO", isColorBlindMode, activeColor = NavyDark) { scope.launch { settingsManager.setColorBlindMode(it) } }
 
-                        // ✅ BOTÓN CERRAR SESIÓN (Solo si no es anónimo)
-                        if (!isAnonymous) {
-                            Spacer(Modifier.height(8.dp))
-                            HorizontalDivider(color = Color.Black.copy(alpha = 0.05f), thickness = 1.dp)
-                            Spacer(Modifier.height(8.dp))
-                            
+                        // ✅ BOTÓN SESIÓN CENTRALIZADO
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider(color = Color.Black.copy(alpha = 0.05f), thickness = 1.dp)
+                        Spacer(Modifier.height(8.dp))
+                        
+                        if (isAnonymous) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { handleSignIn() } // 🔥 Llama al manejador centralizado
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "INICIAR SESIÓN", 
+                                    style = TextStyle(fontSize = (14 * fontScale).sp, fontWeight = FontWeight.Bold, color = Color(0xFF4285F4))
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.Login,
+                                    contentDescription = null,
+                                    tint = Color(0xFF4285F4),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        } else {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

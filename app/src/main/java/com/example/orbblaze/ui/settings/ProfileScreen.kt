@@ -5,8 +5,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -19,7 +17,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,7 +44,7 @@ import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.SettingsManager
-import com.example.orbblaze.ui.components.GlobalBackground
+import com.example.orbblaze.ui.components.rememberGoogleSignInHandler
 import com.example.orbblaze.ui.game.AdsManager
 import kotlinx.coroutines.launch
 
@@ -66,7 +63,6 @@ fun ProfileScreen(
     
     val currentUser by authManager.user.collectAsState()
     val isAnonymous = currentUser?.isAnonymous ?: true
-    val sessionError by authManager.sessionError.collectAsState()
 
     // Estadísticas
     val allStars by settingsManager.allStarsFlow.collectAsState(initial = emptyMap())
@@ -81,51 +77,10 @@ fun ProfileScreen(
     var showPayDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
-    val webClientId = "16414219373-43f70abac7dp5v3tbvvq6lndspdcsh0i.apps.googleusercontent.com"
-
     // Sincronizar al entrar
     LaunchedEffect(currentUser) {
         if (currentUser != null && !isAnonymous) {
             authManager.saveProgressToCloud(settingsManager.getSyncableData())
-        }
-    }
-
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
-                val idToken = account?.idToken
-                if (idToken != null) {
-                    scope.launch {
-                        val currentLocalProgress = settingsManager.getSyncableData()
-                        val linkResult = authManager.linkWithGoogle(idToken)
-                        if (linkResult.isSuccess) {
-                            authManager.saveProgressToCloud(currentLocalProgress)
-                            val cloudData = authManager.loadProgressFromCloud()
-                            cloudData?.let { settingsManager.updateFromSyncableData(it) }
-                        } else {
-                            val errorMsg = linkResult.exceptionOrNull()?.message?.lowercase() ?: ""
-                            if (errorMsg.contains("associated") || errorMsg.contains("already-in-use") || errorMsg.contains("collision")) {
-                                authManager.deleteCurrentUser()
-                                val user = authManager.signInWithGoogle(idToken)
-                                if (user != null) {
-                                    val cloudData = authManager.loadProgressFromCloud()
-                                    if (cloudData != null && cloudData.isNotEmpty()) {
-                                        settingsManager.updateFromSyncableData(cloudData)
-                                    } else {
-                                        authManager.saveProgressToCloud(currentLocalProgress)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Toast.makeText(context, "Error en Google Sign In", Toast.LENGTH_SHORT).show()
-            }
         }
     }
 
@@ -144,7 +99,11 @@ fun ProfileScreen(
                 )
             )
             
-            Spacer(Modifier.height(40.dp))
+            if (isAnonymous) {
+                Spacer(Modifier.weight(1f))
+            } else {
+                Spacer(Modifier.height(40.dp))
+            }
 
             Surface(
                 modifier = Modifier.fillMaxWidth().shadow(15.dp, RoundedCornerShape(32.dp)),
@@ -153,24 +112,12 @@ fun ProfileScreen(
                 border = BorderStroke(2.dp, Color.White.copy(alpha = 0.5f))
             ) {
                 if (isAnonymous) {
-                    Column(Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Lock, null, tint = Color(0xFFEF4444), modifier = Modifier.size(56.dp))
+                    Column(Modifier.padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Lock, null, tint = Color.LightGray, modifier = Modifier.size(64.dp))
                         Spacer(Modifier.height(16.dp))
-                        Text("CUENTA NO VINCULADA", color = Color(0xFFEF4444), fontWeight = FontWeight.Black, fontSize = 16.sp)
-                        Text("Protege tu progreso sincronizando con Google", color = Color.Gray, fontSize = 13.sp, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(24.dp))
-                        Button(
-                            onClick = {
-                                val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken(webClientId).requestEmail().build()
-                                val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                googleSignInLauncher.launch(client.signInIntent)
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4))
-                        ) {
-                            Text("CONECTAR AHORA", fontWeight = FontWeight.Bold)
-                        }
+                        Text("¡CONECTA TU CUENTA!", textAlign = TextAlign.Center, color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Debes iniciar sesión con Google para tener un perfil y guardar tu progreso.", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 13.sp)
                     }
                 } else {
                     Row(
@@ -211,35 +158,22 @@ fun ProfileScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { 
                                 if (nameChangesCount >= 1) showPayDialog = true else { newName = currentUser?.displayName ?: ""; showNameEditor = true }
                             }) {
-                                Text(
-                                    text = currentUser?.displayName ?: "Jugador", 
-                                    fontWeight = FontWeight.Black, 
-                                    fontSize = 20.sp,
-                                    color = NavyDark,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Text(text = currentUser?.displayName ?: "Jugador", fontWeight = FontWeight.Black, fontSize = 20.sp, color = NavyDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(Modifier.width(6.dp))
                                 Icon(Icons.Default.Edit, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
                             }
                             
-                            // ID CON OPCIÓN DE COPIAR
                             val playerId = authManager.getPlayerId()
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .padding(top = 2.dp)
-                                    .clickable {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("Player ID", playerId)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "ID copiado al portapapeles", Toast.LENGTH_SHORT).show()
-                                    }
+                                modifier = Modifier.padding(top = 2.dp).clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = ClipData.newPlainText("Player ID", playerId)
+                                    clipboard.setPrimaryClip(clip)
+                                    Toast.makeText(context, "ID copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                                }
                             ) {
-                                Text(
-                                    text = "ID: $playerId",
-                                    style = TextStyle(fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                                )
+                                Text(text = "ID: $playerId", style = TextStyle(fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp))
                                 Spacer(Modifier.width(6.dp))
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copiar ID", tint = Color.LightGray, modifier = Modifier.size(14.dp))
                             }
@@ -256,30 +190,26 @@ fun ProfileScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-
-            Surface(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                shape = RoundedCornerShape(32.dp),
-                color = Color.White.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Lock, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(40.dp))
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "PRÓXIMAMENTE:\nLOGROS GLOBALES", 
-                            textAlign = TextAlign.Center, 
-                            color = Color.White.copy(alpha = 0.8f), 
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
+            if (!isAnonymous) {
+                Spacer(Modifier.height(24.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    shape = RoundedCornerShape(32.dp),
+                    color = Color.White.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Lock, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(40.dp))
+                            Spacer(Modifier.height(12.dp))
+                            Text("PRÓXIMAMENTE:\nLOGROS GLOBALES", textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.8f), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
                     }
                 }
+                Spacer(Modifier.height(24.dp))
+            } else {
+                Spacer(Modifier.weight(1f))
             }
-
-            Spacer(Modifier.height(24.dp))
             
             Button(
                 onClick = onBackClick,
@@ -369,7 +299,7 @@ fun ProfileStatItem(icon: ImageVector, text: String, color: Color) {
 
 @Composable
 fun AvatarPickerDialog(onDismiss: () -> Unit, onAvatarSelected: (String) -> Unit) {
-    val avatars = listOf(
+    val playStyleAvatars = listOf(
         "https://api.dicebear.com/7.x/avataaars/png?seed=Felix",
         "https://api.dicebear.com/7.x/avataaars/png?seed=Aneka",
         "https://api.dicebear.com/7.x/pixel-art/png?seed=Gamer1",
@@ -377,20 +307,58 @@ fun AvatarPickerDialog(onDismiss: () -> Unit, onAvatarSelected: (String) -> Unit
         "https://api.dicebear.com/7.x/avataaars/png?seed=Luna",
         "https://api.dicebear.com/7.x/pixel-art/png?seed=Gamer2"
     )
+
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(32.dp), color = Color.White) {
-            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("ELIGE TU AVATAR", fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color(0xFF2D324F))
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "SELECCIONA TU AVATAR",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    color = NavyDark
+                )
+                
                 Spacer(Modifier.height(20.dp))
-                LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.height(300.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(avatars) { url: String ->
-                        Box(modifier = Modifier.size(100.dp).clip(CircleShape).border(1.dp, Color.LightGray.copy(alpha = 0.5f), CircleShape).clickable { onAvatarSelected(url) }) {
-                            AsyncImage(model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.height(320.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(playStyleAvatars) { url ->
+                        Box(
+                            modifier = Modifier
+                                .size(110.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(Color(0xFFF5F5F5))
+                                .border(2.dp, Color.LightGray.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+                                .clickable { onAvatarSelected(url) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AsyncImage(
+                                model = url,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize().padding(8.dp),
+                                contentScale = ContentScale.Fit,
+                                placeholder = painterResource(R.drawable.ic_launcher_background)
+                            )
                         }
                     }
                 }
+                
                 Spacer(Modifier.height(20.dp))
-                TextButton(onClick = onDismiss) { Text("CERRAR", color = Color.Gray, fontWeight = FontWeight.Bold) }
+                
+                TextButton(onClick = onDismiss) {
+                    Text("CANCELAR", color = Color.Gray, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

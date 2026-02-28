@@ -268,6 +268,7 @@ fun RequestsList(authManager: AuthManager) {
     val requests by authManager.getFriendRequests().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var selectedRequestProfile by remember { mutableStateOf<Map<String, Any>?>(null) }
 
     if (requests.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) {
@@ -283,6 +284,14 @@ fun RequestsList(authManager: AuthManager) {
                 RequestCard(
                     name = req["fromName"] as? String ?: "Jugador",
                     photoUrl = req["fromPhoto"] as? String,
+                    onClick = {
+                        scope.launch {
+                            val profile = authManager.getUserProfile(req["fromUid"] as String)
+                            if (profile != null) {
+                                selectedRequestProfile = profile
+                            }
+                        }
+                    },
                     onAccept = {
                         scope.launch {
                             val success = authManager.acceptFriendRequest(req["fromUid"] as String)
@@ -298,6 +307,33 @@ fun RequestsList(authManager: AuthManager) {
                 )
             }
         }
+    }
+
+    if (selectedRequestProfile != null) {
+        FriendProfileDialog(
+            data = selectedRequestProfile!!,
+            onDismiss = { selectedRequestProfile = null },
+            isMe = false,
+            isFriend = false,
+            isRequest = true,
+            onToggleFavorite = { },
+            onRemove = { },
+            onAddFriend = { },
+            onAcceptRequest = {
+                scope.launch {
+                    val success = authManager.acceptFriendRequest(selectedRequestProfile!!["uid"] as String)
+                    if (success) Toast.makeText(context, "¡Amigo agregado!", Toast.LENGTH_SHORT).show()
+                    selectedRequestProfile = null
+                }
+            },
+            onRejectRequest = {
+                scope.launch {
+                    val success = authManager.rejectFriendRequest(selectedRequestProfile!!["uid"] as String)
+                    if (success) Toast.makeText(context, "Solicitud rechazada", Toast.LENGTH_SHORT).show()
+                    selectedRequestProfile = null
+                }
+            }
+        )
     }
 }
 
@@ -363,9 +399,12 @@ fun FriendProfileDialog(
     onDismiss: () -> Unit, 
     isMe: Boolean,
     isFriend: Boolean,
+    isRequest: Boolean = false,
     onToggleFavorite: () -> Unit, 
     onRemove: () -> Unit,
-    onAddFriend: () -> Unit
+    onAddFriend: () -> Unit,
+    onAcceptRequest: () -> Unit = {},
+    onRejectRequest: () -> Unit = {}
 ) {
     val name = data["displayName"] as? String ?: "Jugador"
     val photoUrl = data["photoUrl"] as? String
@@ -407,6 +446,25 @@ fun FriendProfileDialog(
                             Button(onClick = onRemove, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2))) {
                                 Icon(Icons.Default.Delete, null, tint = Color.Red)
                                 Text("BORRAR", color = Color.Red, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
+                            }
+                        }
+                    } else if (isRequest) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = onRejectRequest,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2))
+                            ) {
+                                Icon(Icons.Default.Close, null, tint = Color.Red)
+                                Text("RECHAZAR", color = Color.Red, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
+                            }
+                            Button(
+                                onClick = onAcceptRequest,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9))
+                            ) {
+                                Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50))
+                                Text("ACEPTAR", color = Color(0xFF4CAF50), fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
                             }
                         }
                     } else {
@@ -453,8 +511,8 @@ fun FriendCard(name: String, photoUrl: String?, isFavorite: Boolean, onClick: ()
 }
 
 @Composable
-fun RequestCard(name: String, photoUrl: String?, onAccept: () -> Unit, onReject: () -> Unit) {
-    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White, border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f)), shadowElevation = 2.dp) {
+fun RequestCard(name: String, photoUrl: String?, onClick: () -> Unit, onAccept: () -> Unit, onReject: () -> Unit) {
+    Surface(modifier = Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(20.dp), color = Color.White, border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f)), shadowElevation = 2.dp) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(model = photoUrl, contentDescription = null, modifier = Modifier.size(45.dp).clip(CircleShape).background(Color.LightGray.copy(alpha = 0.2f)), contentScale = ContentScale.Crop, error = painterResource(R.drawable.ic_launcher_background))
             Spacer(Modifier.width(12.dp))

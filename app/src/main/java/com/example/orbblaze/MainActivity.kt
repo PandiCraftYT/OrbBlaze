@@ -2,24 +2,36 @@ package com.example.orbblaze
 
 import android.app.Activity
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.domain.usecase.SyncUserDataUseCase
 import com.example.orbblaze.ui.game.*
 import com.example.orbblaze.ui.menu.MenuScreen
 import com.example.orbblaze.ui.menu.GameModesScreen
@@ -32,9 +44,20 @@ import com.example.orbblaze.ui.score.AchievementsScreen
 import com.example.orbblaze.ui.shop.ShopScreen
 import com.example.orbblaze.ui.theme.OrbBlazeTheme
 import com.example.orbblaze.ui.components.GlobalBackground
-import kotlinx.coroutines.flow.first
+import com.example.orbblaze.ui.components.SyncIndicator
+import com.example.orbblaze.ui.components.AchievementNotification
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var settingsManager: SettingsManager
+    @Inject lateinit var globalSoundManager: SoundManager
+    @Inject lateinit var adsManager: AdsManager
+    @Inject lateinit var authManager: AuthManager
+    @Inject lateinit var syncUserDataUseCase: SyncUserDataUseCase
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -42,32 +65,16 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             OrbBlazeTheme {
-                val context = LocalContext.current
-                val application = context.applicationContext as android.app.Application
-
-                val settingsManager = remember { SettingsManager(context) }
-                val globalSoundManager = remember { SoundManager(context, settingsManager) }
-                val adsManager = remember { AdsManager(context) }
-                val authManager = remember { AuthManager() }
-                val factory = remember { OrbBlazeViewModelFactory(settingsManager, authManager, application) }
                 val lifecycleOwner = LocalLifecycleOwner.current
+                val navController = rememberNavController()
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
+                
+                val isLevel = currentRoute in listOf("game", "time_attack", "adventure_game", "game_adventure")
+                val showBanner = currentRoute != "splash" && currentRoute != null
 
                 LaunchedEffect(Unit) {
-                    val coins = settingsManager.coinsFlow.first()
-                    if (coins >= 10 || authManager.currentUser != null) {
-                        val user = authManager.signInAnonymously()
-                        authManager.refreshUser()
-                        val currentUid = authManager.currentUser?.uid
-                        val lastKnownUid = settingsManager.lastKnownUidFlow.first()
-                        if (lastKnownUid != null && currentUid != lastKnownUid) {
-                            settingsManager.clearAllData()
-                        }
-                        settingsManager.setLastKnownUid(currentUid)
-                        if (user != null && !user.isAnonymous) {
-                            val cloudData = authManager.loadProgressFromCloud()
-                            cloudData?.let { settingsManager.updateFromSyncableData(it) }
-                        }
-                    }
+                    syncUserDataUseCase.processInitialSync()
                 }
 
                 DisposableEffect(lifecycleOwner) {
@@ -91,16 +98,37 @@ class MainActivity : ComponentActivity() {
                 }
 
                 GlobalBackground {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AppNavigation(factory, globalSoundManager, adsManager, settingsManager, authManager)
+                    val sharedViewModel: GameViewModel = hiltViewModel()
 
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .navigationBarsPadding()
-                                .fillMaxWidth()
-                        ) {
-                            adsManager.BannerAd()
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        
+                        Box(modifier = Modifier.weight(1f)) {
+                            AppNavigation(
+                                navController = navController,
+                                soundManager = globalSoundManager, 
+                                adsManager = adsManager, 
+                                settingsManager = settingsManager, 
+                                authManager = authManager, 
+                                sharedViewModel = sharedViewModel
+                            )
+
+                            // Feedback overlays
+                            AchievementNotification(sharedViewModel.activeAchievement)
+                            SyncIndicator(syncUserDataUseCase)
+
+                            // ✅ EN NIVELES: La cápsula blanca flota de ADORNO (Overlay)
+                            // Al estar dentro del Box, no empuja el contenido hacia arriba.
+                            if (showBanner && isLevel) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                                    AdBannerCapsule(adsManager)
+                                }
+                            }
+                        }
+
+                        // ✅ EN MENÚS: La cápsula blanca actúa como BARRERA
+                        // Al estar en la Column fuera del weight(1f), reserva su espacio físico.
+                        if (showBanner && !isLevel) {
+                            AdBannerCapsule(adsManager)
                         }
                     }
                 }
@@ -109,22 +137,45 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Componente reutilizable con el diseño de cápsula blanca estilo botón para el anuncio.
+ */
+@Composable
+fun AdBannerCapsule(adsManager: AdsManager) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .navigationBarsPadding(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White,
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.2f))
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            adsManager.BannerAd()
+        }
+    }
+}
+
 @Composable
 fun AppNavigation(
-    factory: OrbBlazeViewModelFactory,
+    navController: NavHostController,
     soundManager: SoundManager,
     adsManager: AdsManager,
     settingsManager: SettingsManager,
-    authManager: AuthManager
+    authManager: AuthManager,
+    sharedViewModel: GameViewModel
 ) {
-    val navController = rememberNavController()
     val context = LocalContext.current
     val activity = context as? Activity
 
-    val classicVm: ClassicViewModel = viewModel(factory = factory)
-    val timeAttackVm: TimeAttackViewModel = viewModel(factory = factory)
-    val adventureVm: AdventureViewModel = viewModel(factory = factory)
-    val sharedViewModel: GameViewModel = viewModel(factory = factory)
+    val classicVm: ClassicViewModel = hiltViewModel()
+    val timeAttackVm: TimeAttackViewModel = hiltViewModel()
+    val adventureVm: AdventureViewModel = hiltViewModel()
 
     LaunchedEffect(navController.currentBackStackEntry) {
         soundManager.refreshSettings()
@@ -212,6 +263,17 @@ fun AppNavigation(
                 viewModel = classicVm,
                 soundManager = soundManager,
                 onMenuClick = { navController.navigate("menu") { popUpTo("menu") { inclusive = true } } },
+                onShopClick = { navController.navigate("shop") },
+                onShowAd = { onReward ->
+                    activity?.let { adsManager.showRewardedAd(it, onReward) }
+                }
+            )
+        }
+        composable("game_adventure") {
+             LevelScreen(
+                viewModel = adventureVm,
+                soundManager = soundManager,
+                onMenuClick = { navController.popBackStack() },
                 onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward ->
                     activity?.let { adsManager.showRewardedAd(it, onReward) }

@@ -7,14 +7,21 @@ import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.domain.model.Bubble
 import com.example.orbblaze.domain.model.GridPosition
 import com.example.orbblaze.domain.model.GameConstants
+import com.example.orbblaze.domain.usecase.SyncUserDataUseCase
+import com.example.orbblaze.domain.usecase.UnlockAchievementUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class TimeAttackViewModel(
+@HiltViewModel
+class TimeAttackViewModel @Inject constructor(
     application: Application,
     settingsManager: SettingsManager,
-    authManager: AuthManager
-) : GameViewModel(application, settingsManager, authManager) {
+    authManager: AuthManager,
+    syncUserDataUseCase: SyncUserDataUseCase,
+    unlockAchievementUseCase: UnlockAchievementUseCase
+) : GameViewModel(application, settingsManager, authManager, syncUserDataUseCase, unlockAchievementUseCase) {
 
     init {
         changeGameMode(GameMode.TIME_ATTACK)
@@ -68,7 +75,7 @@ class TimeAttackViewModel(
         }
         
         bubblesByPosition = newGrid
-        removeFloatingBubbles(newGrid)
+        removeFloatingBubbles(newGrid.toMutableMap())
         metrics?.let { checkGameConditions(it) }
     }
 

@@ -9,17 +9,24 @@ import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.domain.model.*
+import com.example.orbblaze.domain.usecase.SyncUserDataUseCase
+import com.example.orbblaze.domain.usecase.UnlockAchievementUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class AdventureViewModel(
+@HiltViewModel
+class AdventureViewModel @Inject constructor(
     application: Application,
     settingsManager: SettingsManager,
-    authManager: AuthManager
-) : GameViewModel(application, settingsManager, authManager) {
+    authManager: AuthManager,
+    syncUserDataUseCase: SyncUserDataUseCase,
+    unlockAchievementUseCase: UnlockAchievementUseCase
+) : GameViewModel(application, settingsManager, authManager, syncUserDataUseCase, unlockAchievementUseCase) {
     
     var currentLevelId by mutableIntStateOf(1)
         private set
@@ -85,6 +92,10 @@ class AdventureViewModel(
         nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
         cascadeJob?.cancel()
+        
+        // ✅ LOGROS DE PROGRESO AVENTURA
+        if (currentLevelId >= 10) unlockAchievement("adventure_explorer")
+        if (currentLevelId >= 30) unlockAchievement("adventure_veteran")
     }
 
     private fun charToColor(char: Char): BubbleColor? = when(char) {
@@ -173,6 +184,9 @@ class AdventureViewModel(
                 gameState = GameState.WON
                 soundEvent = SoundType.WIN
                 saveProgress()
+                
+                // ✅ LOGRO CLUTCH WIN (Si es el último tiro)
+                if (shotsRemaining == 0) unlockAchievement("clutch_win")
             } else {
                 if (!bubblesByPosition.values.any { it.color == nextBubbleColor }) {
                     nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition, allowSpecials = false)
@@ -189,6 +203,11 @@ class AdventureViewModel(
                 gameState = GameState.WON
                 soundEvent = SoundType.WIN
                 saveProgress()
+                
+                // ✅ LOGRO ESTRELLAS
+                if (starsEarned == 3) unlockAchievement("perfect_star")
+                // ✅ LOGRO CLUTCH WIN
+                if (shotsRemaining == 0) unlockAchievement("clutch_win")
             } else {
                 gameState = GameState.LOST
                 soundEvent = SoundType.LOSE
@@ -198,6 +217,8 @@ class AdventureViewModel(
                 gameState = GameState.WON
                 soundEvent = SoundType.WIN
                 saveProgress()
+                
+                if (shotsRemaining == 0) unlockAchievement("clutch_win")
             } else {
                 gameState = GameState.LOST
                 soundEvent = SoundType.LOSE
@@ -207,7 +228,6 @@ class AdventureViewModel(
     }
 
     private fun checkAdventureDefeat(m: BoardMetricsPx) {
-        // ✅ Sincronización Total: Usamos dynamicDangerRow que viene de la UI
         val dangerY = m.boardTopPadding + (m.verticalSpacing * dynamicDangerRow)
         if (bubblesByPosition.keys.any { getBubbleCenter(it).second + (m.bubbleDiameter/2.2f) >= dangerY }) {
             val level = currentLevelObj

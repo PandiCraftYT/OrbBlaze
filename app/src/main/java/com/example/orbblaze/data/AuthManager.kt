@@ -5,7 +5,6 @@ import android.net.Uri
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.userProfileChangeRequest
@@ -124,7 +123,7 @@ class AuthManager {
         }
     }
 
-    // --- SISTEMA DE AMIGOS ---
+    // --- SISTEMA DE AMIGOS SEGURO ---
 
     suspend fun findUserByPlayerId(playerId: String): Map<String, Any>? {
         val cleanId = playerId.trim().uppercase()
@@ -134,9 +133,14 @@ class AuthManager {
                 .get().await()
             val doc = snapshot.documents.firstOrNull()
             doc?.data?.plus("uid" to doc.id)
-        } catch (e: Exception) {
-            null
-        }
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getUserProfile(uid: String): Map<String, Any>? {
+        return try {
+            val doc = db.collection("users").document(uid).get().await()
+            doc.data?.plus("uid" to doc.id)
+        } catch (e: Exception) { null }
     }
 
     suspend fun sendFriendRequest(toUid: String): Boolean {
@@ -150,17 +154,36 @@ class AuthManager {
                 "status" to "pending",
                 "timestamp" to FieldValue.serverTimestamp()
             )
+            // Escribimos en la colección del destinatario
             db.collection("users").document(toUid).collection("friend_requests").document(fromUid).set(request).await()
             true
         } catch (e: Exception) { false }
     }
 
     fun getFriendRequests(): Flow<List<Map<String, Any>>> = callbackFlow {
-        val uid = auth.currentUser?.uid ?: return@callbackFlow
+        val uid = auth.currentUser?.uid
+        if (uid == null) { trySend(emptyList()); close(); return@callbackFlow }
+        
         val listener = db.collection("users").document(uid).collection("friend_requests")
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
                 if (snapshot != null) {
-                    val requests = snapshot.documents.mapNotNull { it.data?.plus("fromUid" to it.id) }
+                    val requests = snapshot.documents.mapNotNull { doc ->
+                        val data = doc.data?.plus("fromUid" to doc.id)
+                        
+                        // ✅ AUTO-PROCESAMIENTO DE CONFIRMACIONES
+                        // Si recibimos una confirmación de que alguien aceptó nuestra solicitud previa
+                        if (data?.get("status") == "accepted_confirmation") {
+                            val friendId = doc.id
+                            // 1. Nos añadimos a nosotros mismos
+                            db.collection("users").document(uid).update("friends", FieldValue.arrayUnion(friendId))
+                            // 2. Borramos la confirmación
+                            db.collection("users").document(uid).collection("friend_requests").document(friendId).delete()
+                            null // No mostrar en la lista de solicitudes
+                        } else {
+                            data
+                        }
+                    }
                     trySend(requests)
                 }
             }
@@ -171,9 +194,19 @@ class AuthManager {
         val myUid = auth.currentUser?.uid ?: return false
         return try {
             db.runBatch { batch ->
+                // 1. Añadir a mi lista de amigos
                 batch.set(db.collection("users").document(myUid), mapOf("friends" to FieldValue.arrayUnion(friendUid)), SetOptions.merge())
-                batch.set(db.collection("users").document(friendUid), mapOf("friends" to FieldValue.arrayUnion(myUid)), SetOptions.merge())
+                
+                // 2. Borrar la solicitud entrante
                 batch.delete(db.collection("users").document(myUid).collection("friend_requests").document(friendUid))
+                
+                // 3. Notificar al otro enviando una "confirmación" a su buzón
+                val confirmation = mapOf(
+                    "fromUid" to myUid,
+                    "status" to "accepted_confirmation",
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+                batch.set(db.collection("users").document(friendUid).collection("friend_requests").document(myUid), confirmation)
             }.await()
             true
         } catch (e: Exception) {
@@ -190,25 +223,18 @@ class AuthManager {
         } catch (e: Exception) { false }
     }
 
-    /**
-     * Elimina a un amigo de la lista.
-     */
     suspend fun removeFriend(friendUid: String): Boolean {
         val myUid = auth.currentUser?.uid ?: return false
         return try {
             db.runBatch { batch ->
                 batch.update(db.collection("users").document(myUid), "friends", FieldValue.arrayRemove(friendUid))
                 batch.update(db.collection("users").document(myUid), "favoriteFriends", FieldValue.arrayRemove(friendUid))
-                batch.update(db.collection("users").document(friendUid), "friends", FieldValue.arrayRemove(myUid))
-                batch.update(db.collection("users").document(friendUid), "favoriteFriends", FieldValue.arrayRemove(myUid))
+                // Nota: El amigo deberá borrarnos manualmente o esperar a una futura Cloud Function
             }.await()
             true
         } catch (e: Exception) { false }
     }
 
-    /**
-     * Alterna un amigo como favorito.
-     */
     suspend fun toggleFavoriteFriend(friendUid: String, isFavorite: Boolean): Boolean {
         val myUid = auth.currentUser?.uid ?: return false
         return try {
@@ -219,9 +245,12 @@ class AuthManager {
     }
 
     fun getFriends(): Flow<List<Map<String, Any>>> = callbackFlow {
-        val uid = auth.currentUser?.uid ?: return@callbackFlow
+        val uid = auth.currentUser?.uid
+        if (uid == null) { trySend(emptyList()); close(); return@callbackFlow }
+        
         val listener = db.collection("users").document(uid)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
                 if (snapshot != null && snapshot.exists()) {
                     val friendUids = snapshot.get("friends") as? List<String> ?: emptyList()
                     val favoriteUids = snapshot.get("favoriteFriends") as? List<String> ?: emptyList()
@@ -229,22 +258,18 @@ class AuthManager {
                     if (friendUids.isEmpty()) {
                         trySend(emptyList())
                     } else {
-                        db.collection("users").whereIn(com.google.firebase.firestore.FieldPath.documentId(), friendUids)
+                        db.collection("users").whereIn(com.google.firebase.firestore.FieldPath.documentId(), friendUids.take(10))
                             .get().addOnSuccessListener { friendsSnapshot ->
                                 val friendsData = friendsSnapshot.documents.mapNotNull { doc ->
                                     doc.data?.plus("uid" to doc.id)?.plus("isFavorite" to favoriteUids.contains(doc.id))
                                 }
                                 trySend(friendsData)
-                            }
+                            }.addOnFailureListener { trySend(emptyList()) }
                     }
-                } else {
-                    trySend(emptyList())
-                }
+                } else { trySend(emptyList()) }
             }
         awaitClose { listener.remove() }
     }
-
-    // --- PERSISTENCIA ---
 
     suspend fun saveProgressToCloud(data: Map<String, Any>): Boolean {
         val user = auth.currentUser ?: return false
@@ -265,14 +290,6 @@ class AuthManager {
             val doc = db.collection("users").document(user.uid).get().await()
             doc.data
         } catch (e: Exception) { null }
-    }
-
-    suspend fun deleteCloudProgress(): Boolean {
-        val user = auth.currentUser ?: return false
-        return try {
-            db.collection("users").document(user.uid).delete().await()
-            true
-        } catch (e: Exception) { false }
     }
 
     suspend fun updateProfile(displayName: String?, photoUrl: String?): Boolean {
