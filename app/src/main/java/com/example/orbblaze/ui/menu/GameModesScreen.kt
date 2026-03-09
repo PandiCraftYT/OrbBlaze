@@ -1,10 +1,7 @@
 package com.example.orbblaze.ui.menu
 
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -12,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,15 +21,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.orbblaze.R
+import com.example.orbblaze.ui.components.ReferenceButton
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
@@ -51,43 +48,75 @@ fun GameModesScreen(
         label = "title_float"
     )
 
-    BoxWithConstraints(
+    val configuration = LocalConfiguration.current
+    val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
+
+    Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
-        
         CompositionLocalProvider(LocalFontScale provides fontScale) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    .padding(start = 32.dp, end = 32.dp, top = 32.dp, bottom = 80.dp),
+                    .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                // Header con botón de volver estático y título con movimiento
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "ELIGE TU MODO",
-                        textAlign = TextAlign.Center,
-                        style = TextStyle(
-                            fontSize = (42 * fontScale).sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 2.sp,
-                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                    IconButton(
+                        onClick = { 
+                            soundManager.play(SoundType.POP)
+                            onBackClick() 
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .shadow(4.dp, CircleShape)
+                            .background(Color.White, CircleShape)
+                            .size((48 * fontScale).dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = NavyDark,
+                            modifier = Modifier.size((28 * fontScale).dp)
                         )
-                    )
-                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                    ) {
+                        Text(
+                            text = "ELIGE TU MODO",
+                            textAlign = TextAlign.Center,
+                            style = TextStyle(
+                                fontSize = (38 * fontScale).sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 2.sp,
+                                shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                            )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .width(80.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.5f))
+                        )
+                    }
                 }
 
-                // ✅ LISTA DE MODOS CON DESCRIPCIONES
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(vertical = 24.dp)
+                    contentPadding = PaddingValues(vertical = 12.dp)
                 ) {
                     item {
                         ModeCardPremium(
@@ -152,15 +181,6 @@ fun GameModesScreen(
                         )
                     }
                 }
-
-                ReferenceButton(
-                    text = "VOLVER",
-                    backgroundColor = Color.White,
-                    contentColor = Color.Gray,
-                    modifier = Modifier.width(200.dp),
-                    soundManager = soundManager,
-                    onClick = onBackClick
-                )
             }
         }
 
@@ -173,7 +193,7 @@ fun GameModesScreen(
 @Composable
 fun ModeCardPremium(
     title: String,
-    description: String, // Parámetro añadido
+    description: String,
     color: Color,
     isLocked: Boolean = true,
     isPrincipal: Boolean = false,
@@ -195,7 +215,7 @@ fun ModeCardPremium(
         color = Color.White,
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (isPrincipal) (100 * fontScale).dp else (85 * fontScale).dp) // Un poco más alto para la descripción
+            .height(if (isPrincipal) (100 * fontScale).dp else (85 * fontScale).dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .shadow(if (isPressed) 2.dp else 6.dp, RoundedCornerShape(28.dp))
     ) {
@@ -242,64 +262,6 @@ fun ModeCardPremium(
             } else {
                 Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = color.copy(alpha = 0.5f), modifier = Modifier.size(24.dp))
             }
-        }
-    }
-}
-
-@Composable
-fun ReferenceButton(
-    text: String,
-    backgroundColor: Color,
-    contentColor: Color,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-    iconColor: Color = Color.Unspecified,
-    soundManager: SoundManager? = null,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
-    val fontScale = LocalFontScale.current
-
-    Surface(
-        onClick = {
-            soundManager?.play(SoundType.POP)
-            onClick()
-        },
-        interactionSource = interactionSource,
-        shape = RoundedCornerShape(28.dp),
-        color = backgroundColor,
-        modifier = modifier
-            .fillMaxWidth()
-            .height((64 * fontScale).dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .shadow(if (isPressed) 2.dp else 4.dp, RoundedCornerShape(28.dp))
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            
-            Text(
-                text = text.uppercase(),
-                style = TextStyle(
-                    fontSize = (16 * fontScale).sp,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor,
-                    letterSpacing = 1.sp
-                )
-            )
         }
     }
 }

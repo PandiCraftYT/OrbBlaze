@@ -11,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.data.LeaderboardManager
 import com.example.orbblaze.domain.engine.HexGridHelper
 import com.example.orbblaze.domain.engine.LevelEngine
 import com.example.orbblaze.domain.engine.MatchFinder
@@ -34,7 +35,8 @@ open class GameViewModel @Inject constructor(
     protected val settingsManager: SettingsManager,
     protected val authManager: AuthManager,
     protected val syncUserDataUseCase: SyncUserDataUseCase,
-    protected val unlockAchievementUseCase: UnlockAchievementUseCase
+    protected val unlockAchievementUseCase: UnlockAchievementUseCase,
+    protected val leaderboardManager: LeaderboardManager
 ) : AndroidViewModel(application) {
 
     protected val engine = LevelEngine()
@@ -374,6 +376,19 @@ open class GameViewModel @Inject constructor(
             if (score > currentHigh) { 
                 if (isTimeMode) settingsManager.setHighScoreTime(score) else settingsManager.setHighScore(score)
                 addCoins(10) 
+                
+                // 🔥 SUBIR AL RANKING GLOBAL
+                val user = authManager.currentUser
+                if (user != null) {
+                    val modeStr = if (isTimeMode) "TIME_ATTACK" else "CLASSIC"
+                    leaderboardManager.updateScore(
+                        userId = user.uid,
+                        username = user.displayName ?: "Jugador",
+                        score = score,
+                        avatarUrl = user.photoUrl?.toString(),
+                        mode = modeStr
+                    )
+                }
             }
             
             if (score >= 100) unlockAchievement("first_blood")

@@ -6,8 +6,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
-import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.data.LeaderboardManager
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.*
 import com.example.orbblaze.domain.usecase.SyncUserDataUseCase
 import com.example.orbblaze.domain.usecase.UnlockAchievementUseCase
@@ -25,8 +26,9 @@ class AdventureViewModel @Inject constructor(
     settingsManager: SettingsManager,
     authManager: AuthManager,
     syncUserDataUseCase: SyncUserDataUseCase,
-    unlockAchievementUseCase: UnlockAchievementUseCase
-) : GameViewModel(application, settingsManager, authManager, syncUserDataUseCase, unlockAchievementUseCase) {
+    unlockAchievementUseCase: UnlockAchievementUseCase,
+    leaderboardManager: LeaderboardManager
+) : GameViewModel(application, settingsManager, authManager, syncUserDataUseCase, unlockAchievementUseCase, leaderboardManager) {
     
     var currentLevelId by mutableIntStateOf(1)
         private set

@@ -5,11 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.data.LeaderboardManager
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.usecase.SyncUserDataUseCase
 import com.example.orbblaze.ui.game.*
@@ -57,6 +53,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var adsManager: AdsManager
     @Inject lateinit var authManager: AuthManager
     @Inject lateinit var syncUserDataUseCase: SyncUserDataUseCase
+    @Inject lateinit var leaderboardManager: LeaderboardManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +106,7 @@ class MainActivity : ComponentActivity() {
                                 adsManager = adsManager, 
                                 settingsManager = settingsManager, 
                                 authManager = authManager, 
+                                leaderboardManager = leaderboardManager,
                                 sharedViewModel = sharedViewModel
                             )
 
@@ -116,8 +114,6 @@ class MainActivity : ComponentActivity() {
                             AchievementNotification(sharedViewModel.activeAchievement)
                             SyncIndicator(syncUserDataUseCase)
 
-                            // ✅ EN NIVELES: La cápsula blanca flota de ADORNO (Overlay)
-                            // Al estar dentro del Box, no empuja el contenido hacia arriba.
                             if (showBanner && isLevel) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                                     AdBannerCapsule(adsManager)
@@ -125,8 +121,6 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        // ✅ EN MENÚS: La cápsula blanca actúa como BARRERA
-                        // Al estar en la Column fuera del weight(1f), reserva su espacio físico.
                         if (showBanner && !isLevel) {
                             AdBannerCapsule(adsManager)
                         }
@@ -137,9 +131,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/**
- * Componente reutilizable con el diseño de cápsula blanca estilo botón para el anuncio.
- */
 @Composable
 fun AdBannerCapsule(adsManager: AdsManager) {
     Surface(
@@ -168,6 +159,7 @@ fun AppNavigation(
     adsManager: AdsManager,
     settingsManager: SettingsManager,
     authManager: AuthManager,
+    leaderboardManager: LeaderboardManager,
     sharedViewModel: GameViewModel
 ) {
     val context = LocalContext.current
@@ -191,10 +183,6 @@ fun AppNavigation(
         }
         composable("menu") {
             MenuScreen(
-                onPlayClick = {
-                    classicVm.loadLevel()
-                    navController.navigate("game")
-                },
                 onModesClick = { navController.navigate("modes") },
                 onScoreClick = { navController.navigate("score") },
                 onAchievementsClick = { navController.navigate("achievements") },
@@ -203,7 +191,6 @@ fun AppNavigation(
                 onFriendsClick = { navController.navigate("friends") },
                 onExitClick = { activity?.finish() },
                 soundManager = soundManager,
-                authManager = authManager,
                 onSecretClick = { sharedViewModel.unlockAchievement("secret_popper") }
             )
         }
@@ -212,12 +199,14 @@ fun AppNavigation(
                 authManager = authManager,
                 settingsManager = settingsManager,
                 adsManager = adsManager,
+                soundManager = soundManager,
                 onBackClick = { navController.popBackStack() }
             )
         }
         composable("friends") {
             FriendsScreen(
                 authManager = authManager,
+                soundManager = soundManager,
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -239,7 +228,6 @@ fun AppNavigation(
                 onMenuClick = {
                     navController.popBackStack()
                 },
-                onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward ->
                     activity?.let { adsManager.showRewardedAd(it, onReward) }
                 }
@@ -263,7 +251,6 @@ fun AppNavigation(
                 viewModel = classicVm,
                 soundManager = soundManager,
                 onMenuClick = { navController.navigate("menu") { popUpTo("menu") { inclusive = true } } },
-                onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward ->
                     activity?.let { adsManager.showRewardedAd(it, onReward) }
                 }
@@ -274,7 +261,6 @@ fun AppNavigation(
                 viewModel = adventureVm,
                 soundManager = soundManager,
                 onMenuClick = { navController.popBackStack() },
-                onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward ->
                     activity?.let { adsManager.showRewardedAd(it, onReward) }
                 }
@@ -285,7 +271,6 @@ fun AppNavigation(
                 viewModel = timeAttackVm,
                 soundManager = soundManager,
                 onMenuClick = { navController.navigate("menu") { popUpTo("menu") { inclusive = true } } },
-                onShopClick = { navController.navigate("shop") },
                 onShowAd = { onReward ->
                     activity?.let { adsManager.showRewardedAd(it, onReward) }
                 }
@@ -298,6 +283,7 @@ fun AppNavigation(
             HighScoreScreen(
                 soundManager = soundManager,
                 settingsManager = settingsManager,
+                leaderboardManager = leaderboardManager,
                 onBackClick = { navController.popBackStack() }
             )
         }

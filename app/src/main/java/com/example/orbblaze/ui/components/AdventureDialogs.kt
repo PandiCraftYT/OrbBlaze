@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -20,11 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.domain.model.LevelObjective
-import com.example.orbblaze.ui.menu.ReferenceButton
-
-// Colores del menú
-private val SageGreen = Color(0xFF8DA094)
-private val NavyDark = Color(0xFF2D324F)
+import com.example.orbblaze.ui.theme.*
 
 @Composable
 fun AdventureStartDialog(

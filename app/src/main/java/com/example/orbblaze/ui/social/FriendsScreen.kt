@@ -2,6 +2,7 @@ package com.example.orbblaze.ui.social
 
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -24,8 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -38,6 +43,9 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
+import com.example.orbblaze.ui.menu.LocalFontScale
 import kotlinx.coroutines.launch
 
 private val NavyDark = Color(0xFF2D324F)
@@ -46,6 +54,7 @@ private val StarGold = Color(0xFFFFD700)
 @Composable
 fun FriendsScreen(
     authManager: AuthManager,
+    soundManager: SoundManager,
     onBackClick: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -55,28 +64,73 @@ fun FriendsScreen(
     val friends by authManager.getFriends().collectAsState(initial = emptyList())
     val friendUids = remember(friends) { friends.map { it["uid"] as String } }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "community_animations")
+    val titleFloat by infiniteTransition.animateFloat(
+        initialValue = -8f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "title_float"
+    )
+
+    val configuration = LocalConfiguration.current
+    val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .systemBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 24.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Text(
-            "COMUNIDAD",
-            style = TextStyle(
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                shadow = androidx.compose.ui.graphics.Shadow(
-                    color = Color.Black.copy(alpha = 0.3f),
-                    offset = androidx.compose.ui.geometry.Offset(0f, 4f),
-                    blurRadius = 12f
+        // Header con botón de volver estático y título con movimiento
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            IconButton(
+                onClick = { 
+                    soundManager.play(SoundType.POP)
+                    onBackClick() 
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .shadow(4.dp, CircleShape)
+                    .background(Color.White, CircleShape)
+                    .size((48 * fontScale).dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = NavyDark,
+                    modifier = Modifier.size((28 * fontScale).dp)
                 )
-            )
-        )
+            }
 
-        Spacer(Modifier.height(24.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { translationY = titleFloat }
+            ) {
+                Text(
+                    text = "COMUNIDAD",
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(
+                        fontSize = (38 * fontScale).sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 2.sp,
+                        shadow = Shadow(Color.Black.copy(alpha = 0.15f), androidx.compose.ui.geometry.Offset(0f, 8f), 12f)
+                    )
+                )
+                Box(
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .width(80.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.5f))
+                )
+            }
+        }
 
         TabRow(
             selectedTabIndex = selectedTab,
@@ -93,7 +147,10 @@ fun FriendsScreen(
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
-                    onClick = { selectedTab = index },
+                    onClick = { 
+                        selectedTab = index 
+                        soundManager.play(SoundType.POP)
+                    },
                     text = {
                         Text(
                             title,
@@ -105,8 +162,6 @@ fun FriendsScreen(
                 )
             }
         }
-
-        Spacer(Modifier.height(16.dp))
 
         Surface(
             modifier = Modifier
@@ -124,23 +179,6 @@ fun FriendsScreen(
                     2 -> SearchFriendsTab(authManager, friendUids)
                 }
             }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Button(
-            onClick = onBackClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .shadow(10.dp, RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White,
-                contentColor = NavyDark
-            )
-        ) {
-            Text("VOLVER AL MENÚ", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
         }
     }
 }

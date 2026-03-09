@@ -1,20 +1,20 @@
 package com.example.orbblaze.ui.score
 
-import android.widget.Toast
-import androidx.compose.animation.*
+import android.util.Log
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,45 +25,48 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.data.LeaderboardManager
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.domain.model.LeaderboardEntry
+import com.example.orbblaze.ui.components.ReferenceButton
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
-import com.example.orbblaze.ui.menu.ReferenceButton
 import com.example.orbblaze.ui.theme.*
-
-// Colores del menú
-private val SageGreen = Color(0xFF8DA094)
-private val NavyDark = Color(0xFF2D324F)
-private val StarGold = Color(0xFFF4C491)
+import kotlinx.coroutines.flow.catch
 
 @Composable
 fun HighScoreScreen(
     soundManager: SoundManager,
     settingsManager: SettingsManager,
+    leaderboardManager: LeaderboardManager,
     onBackClick: () -> Unit
 ) {
-    val context = LocalContext.current
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Clásico, 1: Contra Tiempo, 2: Aventura
+    
     val highScore by settingsManager.highScoreFlow.collectAsState(initial = 0)
     val highScoreTime by settingsManager.highScoreTimeFlow.collectAsState(initial = 0)
     val adventureProgress by settingsManager.adventureProgressFlow.collectAsState(initial = 0)
+
+    val classicLeaderboard by produceState<List<LeaderboardEntry>?>(initialValue = null, leaderboardManager) {
+        leaderboardManager.getLeaderboard("CLASSIC").catch { 
+            Log.e("HighScoreScreen", "Error cargando Classic: ${it.message}")
+            emit(emptyList()) 
+        }.collect { value = it }
+    }
     
-    val records = remember(highScore, highScoreTime, adventureProgress) {
-        listOf(
-            Triple("MODO CLÁSICO", "$highScore", SageGreen),
-            Triple("CONTRA TIEMPO", "$highScoreTime", Color(0xFF00E676)),
-            Triple("MODO AVENTURA", if(adventureProgress > 0) "NIVEL $adventureProgress" else "-", Color(0xFFFFD700)),
-            Triple("MODO INVERSA", "-", Color(0xFFFF5252)),
-            Triple("PUZZLE DIARIO", "-", Color(0xFFBB86FC)),
-            Triple("MINIJUEGOS", "-", Color(0xFF03DAC5))
-        )
+    val timeAttackLeaderboard by produceState<List<LeaderboardEntry>?>(initialValue = null, leaderboardManager) {
+        leaderboardManager.getLeaderboard("TIME_ATTACK").catch { 
+            Log.e("HighScoreScreen", "Error cargando Time Attack: ${it.message}")
+            emit(emptyList()) 
+        }.collect { value = it }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "score_animations")
@@ -73,123 +76,171 @@ fun HighScoreScreen(
         label = "title_float"
     )
 
-    BoxWithConstraints(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
-        
+    val configuration = LocalConfiguration.current
+    val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
+
+    Box(modifier = Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalFontScale provides fontScale) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    .padding(start = 32.dp, end = 32.dp, top = 32.dp, bottom = 80.dp),
+                    .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // ✅ TÍTULO (Estilo Menú)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                // Header con botón de volver estático y título con movimiento
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "RÉCORDS",
-                        textAlign = TextAlign.Center,
-                        style = TextStyle(
-                            fontSize = (42 * fontScale).sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 2.sp,
-                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                    IconButton(
+                        onClick = { 
+                            soundManager.play(SoundType.POP)
+                            onBackClick() 
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .shadow(4.dp, CircleShape)
+                            .background(Color.White, CircleShape)
+                            .size((48 * fontScale).dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = NavyDark,
+                            modifier = Modifier.size((28 * fontScale).dp)
                         )
-                    )
-                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
-                }
+                    }
 
-                // ✅ LISTA DE RÉCORDS
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(vertical = 24.dp)
-                ) {
-                    items(records) { (modo, value, color) ->
-                        RecordCardPremium(modo, value, color, soundManager) {
-                            if (value == "-" || value == "0") Toast.makeText(context, "¡Juega para establecer un récord!", Toast.LENGTH_SHORT).show()
-                        }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                    ) {
+                        Text(
+                            text = "RÉCORDS",
+                            textAlign = TextAlign.Center,
+                            style = TextStyle(
+                                fontSize = (38 * fontScale).sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 2.sp,
+                                shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                            )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .width(80.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.5f))
+                        )
                     }
                 }
 
-                // ✅ BOTÓN VOLVER (Estilo Menú)
-                ReferenceButton(
-                    text = "VOLVER",
-                    backgroundColor = Color.White,
-                    contentColor = Color.Gray,
-                    modifier = Modifier.width(200.dp),
-                    soundManager = soundManager,
-                    onClick = onBackClick
-                )
+                Surface(color = Color.White.copy(alpha = 0.1f), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        TabItem(text = "CLÁSICO", isSelected = selectedTab == 0, modifier = Modifier.weight(1f)) { selectedTab = 0; soundManager.play(SoundType.POP) }
+                        TabItem(text = "C/TIEMPO", isSelected = selectedTab == 1, modifier = Modifier.weight(1f)) { selectedTab = 1; soundManager.play(SoundType.POP) }
+                        TabItem(text = "AVENTURA", isSelected = selectedTab == 2, modifier = Modifier.weight(1f)) { selectedTab = 2; soundManager.play(SoundType.POP) }
+                    }
+                }
+
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    val leaderboard = when(selectedTab) {
+                        0 -> classicLeaderboard
+                        1 -> timeAttackLeaderboard
+                        else -> emptyList()
+                    }
+                    
+                    val myRecord = when(selectedTab) {
+                        0 -> highScore.toString()
+                        1 -> highScoreTime.toString()
+                        else -> "NIVEL $adventureProgress"
+                    }
+                    
+                    val modeColor = when(selectedTab) {
+                        0 -> SageGreen
+                        1 -> Color(0xFF00E676)
+                        else -> Color(0xFFFFD700)
+                    }
+
+                    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
+                        item {
+                            Text("MI RÉCORD", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
+                            MyRecordCard(value = myRecord, color = modeColor, fontScale = fontScale)
+                        }
+
+                        if (selectedTab != 2) {
+                            item {
+                                Spacer(Modifier.height(12.dp))
+                                Text("TOP MUNDIAL", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
+                            }
+                            
+                            if (leaderboard == null) {
+                                item { 
+                                    Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) { 
+                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp)) 
+                                    } 
+                                }
+                            } else if (leaderboard.isEmpty()) {
+                                item { 
+                                    Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) { 
+                                        Text("No hay puntuaciones globales aún", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) 
+                                    } 
+                                }
+                            } else {
+                                itemsIndexed(leaderboard) { index, entry ->
+                                    LeaderboardRow(rank = index + 1, entry = entry, fontScale = fontScale)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun RecordCardPremium(mode: String, value: String, color: Color, soundManager: SoundManager, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
-    val fontScale = LocalFontScale.current
-    
-    Surface(
-        onClick = {
-            soundManager.play(SoundType.POP)
-            onClick()
-        },
-        interactionSource = interactionSource,
-        shape = RoundedCornerShape(28.dp),
-        color = Color.White,
-        shadowElevation = if (isPressed) 2.dp else 6.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height((80 * fontScale).dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = mode,
-                    style = TextStyle(
-                        color = color, 
-                        fontSize = (18 * fontScale).sp, 
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
-                    )
-                )
-                Text(
-                    text = if(mode == "MODO AVENTURA") "PROGRESO ACTUAL" else "PUNTUACIÓN MÁXIMA",
-                    style = TextStyle(
-                        color = Color.LightGray, 
-                        fontSize = (10 * fontScale).sp, 
-                        fontWeight = FontWeight.Bold, 
-                        letterSpacing = 1.sp
-                    )
-                )
+fun TabItem(text: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val backgroundColor by animateColorAsState(if (isSelected) Color.White else Color.Transparent, label = "bg")
+    val contentColor by animateColorAsState(if (isSelected) NavyDark else Color.White.copy(alpha = 0.6f), label = "content")
+    Box(modifier = modifier.fillMaxHeight().padding(4.dp).clip(RoundedCornerShape(20.dp)).background(backgroundColor).clickable { onClick() }, contentAlignment = Alignment.Center) {
+        Text(text, color = contentColor, fontWeight = FontWeight.Black, fontSize = 11.sp)
+    }
+}
+
+@Composable
+fun MyRecordCard(value: String, color: Color, fontScale: Float) {
+    Surface(color = Color.White, shape = RoundedCornerShape(28.dp), shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth().height((85 * fontScale).dp)) {
+        Row(modifier = Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Star, null, tint = color, modifier = Modifier.size(24.dp))
             }
-            
-            Text(
-                text = value,
-                style = TextStyle(
-                    color = NavyDark,
-                    fontSize = (if(value.startsWith("NIVEL")) 20 * fontScale else 28 * fontScale).sp,
-                    fontWeight = FontWeight.Black
-                )
-            )
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("PUNTUACIÓN ACTUAL", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(value, color = NavyDark, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            }
+        }
+    }
+}
+
+@Composable
+fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, fontScale: Float) {
+    val rankColor = when(rank) {
+        1 -> Color(0xFFFFD700) 
+        2 -> Color(0xFFC0C0C0) 
+        3 -> Color(0xFFCD7F32) 
+        else -> Color.Gray.copy(alpha = 0.3f)
+    }
+    Surface(color = Color.White.copy(alpha = 0.9f), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height((65 * fontScale).dp)) {
+        Row(modifier = Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("#$rank", color = rankColor, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.width(45.dp))
+            Text(entry.username.uppercase(), color = NavyDark, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Text("${entry.score}", color = SageGreen, fontWeight = FontWeight.Black, fontSize = 18.sp)
         }
     }
 }

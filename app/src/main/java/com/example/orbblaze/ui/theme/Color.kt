@@ -15,10 +15,14 @@ val BgTop = Color(0xFF87CEFA)    // Azul cielo claro
 val BgBottom = Color(0xFFB0E0E6) // Azul polvo
 
 // ✅ CORRECCIÓN: Definimos GameBackground para que Theme.kt no falle.
-// Lo igualamos al color del cielo para mantener la coherencia.
 val GameBackground = BgTop
 
 // --- COLORES DEL PANDA ---
 val PandaWhite = Color(0xFFF8F8FF) // Blanco Fantasma
 val PandaBlack = Color(0xFF2D2D2D) // Negro Suave
 val PandaCheek = Color(0xFFFFB6C1) // Rosado
+
+// --- COLORES COMPARTIDOS DE UI ---
+val SageGreen = Color(0xFF8DA094)
+val NavyDark = Color(0xFF2D324F)
+val StarGold = Color(0xFFF4C491)

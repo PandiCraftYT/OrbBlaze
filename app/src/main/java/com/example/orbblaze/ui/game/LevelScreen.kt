@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -49,7 +47,6 @@ import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.*
 import com.example.orbblaze.ui.components.*
-import com.example.orbblaze.ui.menu.ReferenceButton
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -57,18 +54,12 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
-// Reutilizamos los colores del menú
-private val SageGreen = Color(0xFF8DA094)
-private val NavyDark = Color(0xFF2D324F)
-private val StarGold = Color(0xFFF4C491)
-
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun LevelScreen(
     viewModel: GameViewModel,
     soundManager: SoundManager,
     onMenuClick: () -> Unit = {},
-    onShopClick: () -> Unit = {},
     onShowAd: (onReward: (Int) -> Unit) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -78,7 +69,6 @@ fun LevelScreen(
 
     // Strings localizados
     val shopNotAvailableMsg = stringResource(R.string.shop_not_available_adventure)
-    val gameRedeemedMsg = stringResource(R.string.game_redeemed)
 
     val bubbles = viewModel.bubblesByPosition
     val activeProjectile = viewModel.activeProjectile
@@ -100,10 +90,8 @@ fun LevelScreen(
     val fireballsBoughtCount = viewModel.fireballsBoughtCount
     val currentGameMode = viewModel.gameMode
     val shakeIntensity = viewModel.shakeIntensity
-    val activeAchievement = viewModel.activeAchievement
 
     var showQuickShop by remember { mutableStateOf(false) }
-    var hasRedeemedCoins by remember { mutableStateOf(false) }
     var isAiming by remember { mutableStateOf(false) }
 
     var shopRect by remember { mutableStateOf<Rect?>(null) }
@@ -267,7 +255,6 @@ fun LevelScreen(
         val totalHeight = constraints.maxHeight.toFloat()
         val bubbleDiameterPx = totalWidth / (columnsCount + 0.5f)
         val verticalSpacingPx = bubbleDiameterPx * 0.866f
-        val horizontalSpacingPx = bubbleDiameterPx
         val boardStartPadding = bubbleDiameterPx * 0.5f
 
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
@@ -298,7 +285,7 @@ fun LevelScreen(
             val barrelLengthPx = with(density) { 95.dp.toPx() }
             
             viewModel.setBoardMetrics(BoardMetricsPx(
-                horizontalSpacing = horizontalSpacingPx, 
+                horizontalSpacing = bubbleDiameterPx, 
                 bubbleDiameter = bubbleDiameterPx, 
                 verticalSpacing = verticalSpacingPx, 
                 boardTopPadding = boardTopPaddingPx, 
@@ -515,7 +502,6 @@ fun LevelScreen(
                 },
                 showSettings = true,
                 settingsManager = settingsManager,
-                soundManager = soundManager,
                 onVolumeChange = { vol -> viewModel.setSfxVolume(vol); soundManager.refreshSettings() }
             )
         }
@@ -539,20 +525,15 @@ fun LevelScreen(
                 isWin = gameState == GameState.WON,
                 isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
-                currentLevelId = currentLevelId,
-                soundManager = soundManager,
-                onRedeemCoins = if(!hasRedeemedCoins && currentGameMode != GameMode.ADVENTURE) { { 
-                    if (score >= 100) { viewModel.addCoins(score / 100); hasRedeemedCoins = true; Toast.makeText(context, gameRedeemedMsg, Toast.LENGTH_SHORT).show() } 
-                } } else null,
                 onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { 
-                    onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.LOST) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } 
+                    onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } 
                 } }
             )
         }
 
         if (viewModel is AdventureViewModel && viewModel.showReviveAlert) {
             ReviveAlertOverlay(soundManager = soundManager, onDismiss = { 
-                (viewModel as AdventureViewModel).showReviveAlert = false; viewModel.togglePause() 
+                viewModel.showReviveAlert = false; viewModel.togglePause() 
             })
         }
 
@@ -571,88 +552,10 @@ fun LevelScreen(
                 soundManager = soundManager
             )
         }
-
-        AchievementNotification(achievement = activeAchievement)
     }
 }
 
 private fun Int.mapProgress(total: Int): Float = if (total <= 1) 0f else this.toFloat() / (total - 1)
-
-@Composable
-fun AchievementNotification(achievement: Achievement?) {
-    AnimatedVisibility(
-        visible = achievement != null,
-        enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { -it }),
-        exit = fadeOut(tween(400)),
-        modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
-        label = "achievement_anim"
-    ) {
-        if (achievement != null) {
-            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-                Surface(
-                    color = Color.White,
-                    shape = RoundedCornerShape(28.dp),
-                    shadowElevation = 10.dp,
-                    modifier = Modifier.widthIn(max = 350.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Icono Izquierda (Caja redondeada con estrella)
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(StarGold.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = StarGold,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        Spacer(Modifier.width(12.dp))
-
-                        // Texto Central (Título + Descripción)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = achievement.title.uppercase(),
-                                style = TextStyle(
-                                    color = NavyDark,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 0.5.sp
-                                )
-                            )
-                            Text(
-                                text = achievement.description,
-                                style = TextStyle(
-                                    color = Color.Gray,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                        }
-
-                        Spacer(Modifier.width(8.dp))
-
-                        // Estrellita derecha (decorativa)
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = StarGold.copy(alpha = 0.5f),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun QuickShopOverlay(
@@ -919,10 +822,8 @@ fun OverlayMenu(
     title: String, onContinue: (() -> Unit)? = null, onRestart: () -> Unit, onExit: () -> Unit,
     score: Int? = null, isWin: Boolean = false,
     showSettings: Boolean = false, settingsManager: SettingsManager? = null,
-    soundManager: SoundManager? = null,
-    onVolumeChange: (Float) -> Unit = {}, onRedeemCoins: (() -> Unit)? = null,
+    onVolumeChange: (Float) -> Unit = {},
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
-    currentLevelId: Int = 0,
     onNextLevel: (() -> Unit)? = null
 ) {
     val isPause = title == stringResource(id = R.string.game_pause)
@@ -991,7 +892,6 @@ fun OverlayMenu(
                             Switch(
                                 checked = colorBlind,
                                 onCheckedChange = { 
-                                    soundManager?.play(SoundType.POP)
                                     scope.launch { settingsManager.setColorBlindMode(it) } 
                                 },
                                 colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SageGreen)
@@ -1010,7 +910,6 @@ fun OverlayMenu(
                         text = mainButtonText,
                         backgroundColor = SageGreen,
                         contentColor = Color.White,
-                        soundManager = soundManager,
                         onClick = mainButtonAction
                     )
                     Spacer(Modifier.height(16.dp))
@@ -1025,7 +924,6 @@ fun OverlayMenu(
                         icon = Icons.Default.Refresh,
                         iconColor = Color.Gray,
                         modifier = Modifier.weight(1f),
-                        soundManager = soundManager,
                         onClick = onRestart
                     )
                     
@@ -1037,7 +935,6 @@ fun OverlayMenu(
                         icon = exitIcon,
                         iconColor = Color.Gray,
                         modifier = Modifier.weight(1f),
-                        soundManager = soundManager,
                         onClick = onExit
                     )
                 }
@@ -1046,9 +943,7 @@ fun OverlayMenu(
                     onShowAd?.let { adAction ->
                         val adLabel = if (isAdventure && !isWin) stringResource(id = R.string.game_revive_ad) else stringResource(id = R.string.game_bonus_ad)
                         Spacer(Modifier.height(24.dp))
-                        @Suppress("ControlFlowWithEmptyBody")
                         TextButton(onClick = {
-                            soundManager?.play(SoundType.POP)
                             adAction()
                         }) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

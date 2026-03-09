@@ -2,8 +2,9 @@ package com.example.orbblaze.ui.game
 
 import android.app.Application
 import androidx.lifecycle.viewModelScope
-import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.data.LeaderboardManager
+import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.Bubble
 import com.example.orbblaze.domain.model.GridPosition
 import com.example.orbblaze.domain.model.GameConstants
@@ -20,8 +21,9 @@ class TimeAttackViewModel @Inject constructor(
     settingsManager: SettingsManager,
     authManager: AuthManager,
     syncUserDataUseCase: SyncUserDataUseCase,
-    unlockAchievementUseCase: UnlockAchievementUseCase
-) : GameViewModel(application, settingsManager, authManager, syncUserDataUseCase, unlockAchievementUseCase) {
+    unlockAchievementUseCase: UnlockAchievementUseCase,
+    leaderboardManager: LeaderboardManager
+) : GameViewModel(application, settingsManager, authManager, syncUserDataUseCase, unlockAchievementUseCase, leaderboardManager) {
 
     init {
         changeGameMode(GameMode.TIME_ATTACK)

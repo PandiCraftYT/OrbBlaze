@@ -1,22 +1,15 @@
 package com.example.orbblaze.ui.game
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -40,7 +33,7 @@ fun TutorialDialog(
     cannonRect: Rect?,
     nextBubbleRect: Rect?,
     scoreRect: Rect?,
-    soundManager: SoundManager?, // Parámetro añadido
+    soundManager: SoundManager?,
     onComplete: () -> Unit
 ) {
     var currentStep by remember { mutableIntStateOf(0) }
@@ -70,7 +63,7 @@ fun TutorialDialog(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                soundManager?.play(SoundType.POP) // Reproducir sonido
+                soundManager?.play(SoundType.POP)
                 if (currentStep < steps.size - 1) currentStep++ else onComplete()
             }
     ) {
@@ -113,7 +106,6 @@ fun TutorialDialog(
                 color = Color.White,
                 shadowElevation = 12.dp
             ) {
-                @Suppress("ControlFlowWithEmptyBody")
                 Column(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -150,5 +142,3 @@ fun TutorialDialog(
         }
     }
 }
-
-fun Rect.inflate(amount: Float): Rect = Rect(left - amount, top - amount, right + amount, bottom + amount)

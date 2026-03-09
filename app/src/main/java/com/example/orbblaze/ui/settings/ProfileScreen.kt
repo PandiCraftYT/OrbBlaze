@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,8 +31,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -46,6 +50,9 @@ import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.ui.components.rememberGoogleSignInHandler
 import com.example.orbblaze.ui.game.AdsManager
+import com.example.orbblaze.ui.game.SoundManager
+import com.example.orbblaze.ui.game.SoundType
+import com.example.orbblaze.ui.menu.LocalFontScale
 import kotlinx.coroutines.launch
 
 private val NavyDark = Color(0xFF2D324F)
@@ -56,6 +63,7 @@ fun ProfileScreen(
     authManager: AuthManager,
     settingsManager: SettingsManager,
     adsManager: AdsManager,
+    soundManager: SoundManager,
     onBackClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -84,25 +92,74 @@ fun ProfileScreen(
         }
     }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "profile_animations")
+    val titleFloat by infiniteTransition.animateFloat(
+        initialValue = -8f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "title_float"
+    )
+
+    val configuration = LocalConfiguration.current
+    val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
+
     Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text(
-                "MI PERFIL",
-                style = TextStyle(
-                    fontSize = 32.sp, 
-                    fontWeight = FontWeight.Black, 
-                    color = Color.White,
-                    shadow = Shadow(Color.Black.copy(alpha = 0.3f), Offset(0f, 4f), 12f)
-                )
-            )
+            // Header con botón de volver estático y título con movimiento
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                IconButton(
+                    onClick = { 
+                        soundManager.play(SoundType.POP)
+                        onBackClick() 
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .shadow(4.dp, CircleShape)
+                        .background(Color.White, CircleShape)
+                        .size((48 * fontScale).dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Volver",
+                        tint = NavyDark,
+                        modifier = Modifier.size((28 * fontScale).dp)
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                ) {
+                    Text(
+                        text = "MI PERFIL",
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(
+                            fontSize = (38 * fontScale).sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 2.sp,
+                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                        )
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .width(80.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.5f))
+                    )
+                }
+            }
             
             if (isAnonymous) {
-                Spacer(Modifier.weight(1f))
-            } else {
-                Spacer(Modifier.height(40.dp))
+                Spacer(Modifier.weight(0.2f))
             }
 
             Surface(
@@ -191,7 +248,6 @@ fun ProfileScreen(
             }
 
             if (!isAnonymous) {
-                Spacer(Modifier.height(24.dp))
                 Surface(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     shape = RoundedCornerShape(32.dp),
@@ -206,18 +262,8 @@ fun ProfileScreen(
                         }
                     }
                 }
-                Spacer(Modifier.height(24.dp))
             } else {
                 Spacer(Modifier.weight(1f))
-            }
-            
-            Button(
-                onClick = onBackClick,
-                modifier = Modifier.fillMaxWidth().height(60.dp).shadow(10.dp, RoundedCornerShape(24.dp)),
-                shape = RoundedCornerShape(24.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = NavyDark)
-            ) {
-                Text("VOLVER AL MENÚ", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
             }
         }
     }

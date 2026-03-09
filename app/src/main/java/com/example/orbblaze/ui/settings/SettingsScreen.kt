@@ -1,20 +1,18 @@
 package com.example.orbblaze.ui.settings
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Login
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -33,14 +32,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.ui.components.ReferenceButton
 import com.example.orbblaze.ui.components.rememberGoogleSignInHandler
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
-import com.example.orbblaze.ui.menu.ReferenceButton
-import com.example.orbblaze.ui.menu.SageGreen
-import com.example.orbblaze.ui.menu.NavyDark
-import com.example.orbblaze.ui.menu.StarGold
+import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.launch
 
 @Composable
@@ -73,20 +70,64 @@ fun SettingsScreen(
     val isMusicMuted by settingsManager.musicMutedFlow.collectAsState(initial = false)
     val isColorBlindMode by settingsManager.colorBlindModeFlow.collectAsState(initial = false)
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
+    val configuration = LocalConfiguration.current
+    val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
+
+    Box(modifier = Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalFontScale provides fontScale) {
             Column(
-                modifier = Modifier.fillMaxSize().systemBarsPadding().padding(start = 32.dp, end = 32.dp, top = 32.dp, bottom = 40.dp),
+                modifier = Modifier.fillMaxSize().systemBarsPadding().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                // Header con botón de volver estático y título con movimiento
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "CONFIGURACIÓN", textAlign = TextAlign.Center, style = TextStyle(fontSize = (42 * fontScale).sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 2.sp, shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)))
-                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
+                    IconButton(
+                        onClick = { 
+                            soundManager.play(SoundType.POP)
+                            onBackClick() 
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .shadow(4.dp, CircleShape)
+                            .background(Color.White, CircleShape)
+                            .size((48 * fontScale).dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = NavyDark,
+                            modifier = Modifier.size((28 * fontScale).dp)
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.graphicsLayer { translationY = titleFloat }
+                    ) {
+                        Text(
+                            text = "CONFIGURACIÓN",
+                            textAlign = TextAlign.Center,
+                            style = TextStyle(
+                                fontSize = (38 * fontScale).sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 2.sp,
+                                shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                            )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .width(80.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.5f))
+                        )
+                    }
                 }
 
                 Surface(shape = RoundedCornerShape(32.dp), color = Color.White, modifier = Modifier.fillMaxWidth().weight(1f, fill = false).shadow(8.dp, RoundedCornerShape(32.dp))) {
@@ -109,7 +150,7 @@ fun SettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { handleSignIn() } // 🔥 Llama al manejador centralizado
+                                    .clickable { handleSignIn() } 
                                     .padding(vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
@@ -119,7 +160,7 @@ fun SettingsScreen(
                                     style = TextStyle(fontSize = (14 * fontScale).sp, fontWeight = FontWeight.Bold, color = Color(0xFF4285F4))
                                 )
                                 Icon(
-                                    imageVector = Icons.Default.Login,
+                                    imageVector = Icons.AutoMirrored.Filled.Login,
                                     contentDescription = null,
                                     tint = Color(0xFF4285F4),
                                     modifier = Modifier.size(24.dp)
@@ -156,10 +197,7 @@ fun SettingsScreen(
                     }
                 }
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ReferenceButton(text = "INFO", backgroundColor = NavyDark, contentColor = Color.White, icon = Icons.Default.Info, iconColor = StarGold, modifier = Modifier.weight(1f), soundManager = soundManager, onClick = { showAboutDialog = true })
-                    ReferenceButton(text = "VOLVER", backgroundColor = Color.White, contentColor = Color.Gray, modifier = Modifier.weight(1f), soundManager = soundManager, onClick = onBackClick)
-                }
+                ReferenceButton(text = "INFO SOBRE EL JUEGO", backgroundColor = NavyDark, contentColor = Color.White, icon = Icons.Default.Info, iconColor = StarGold, modifier = Modifier.fillMaxWidth().height(60.dp), soundManager = soundManager, onClick = { showAboutDialog = true })
             }
         }
         if (showAboutDialog) SettingsAboutDialog(soundManager = soundManager, onDismiss = { showAboutDialog = false })

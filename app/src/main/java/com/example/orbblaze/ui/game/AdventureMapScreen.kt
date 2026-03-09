@@ -10,7 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -22,9 +22,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +65,16 @@ fun AdventureMapScreen(
     val nodesState = remember { mutableStateListOf<LevelNodeData>() }
     var dataReady by remember { mutableStateOf(false) }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "adv_animations")
+    val titleFloat by infiniteTransition.animateFloat(
+        initialValue = -8f, targetValue = 8f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "title_float"
+    )
+
+    val configuration = LocalConfiguration.current
+    val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
+
     LaunchedEffect(currentProgress) {
         if (currentProgress == -1) return@LaunchedEffect
         
@@ -80,14 +92,14 @@ fun AdventureMapScreen(
         dataReady = true
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(OrbBlueBg)) {
+    Box(modifier = Modifier.fillMaxSize().background(OrbBlueBg)) {
         if (!dataReady) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color.White)
             }
         } else {
-            val screenWidthPx = with(density) { maxWidth.toPx() }
-            val screenHeightPx = with(density) { maxHeight.toPx() }
+            val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+            val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
             val centerXPx = screenWidthPx / 2
             
             val nodeSpacing = 160.dp
@@ -152,7 +164,7 @@ fun AdventureMapScreen(
                 }
             }
         }
-        HeaderOverlay(onBackClick, soundManager)
+        HeaderOverlay(onBackClick, soundManager, titleFloat, fontScale)
     }
 }
 
@@ -161,7 +173,7 @@ private fun PathDrawer(nodes: List<LevelNodeData>) {
     val infiniteTransition = rememberInfiniteTransition(label = "cascade")
     val phase by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 400f,
-        animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing), RepeatMode.Restart), label = "phase"
+        animationSpec = infiniteRepeatable(tween(3000, easing = FastOutSlowInEasing), RepeatMode.Restart), label = "phase"
     )
 
     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -238,15 +250,61 @@ private fun FloatingBubblesBackground(baseColor: Color) {
 }
 
 @Composable
-private fun HeaderOverlay(onBackClick: () -> Unit, soundManager: SoundManager) {
-    Box(modifier = Modifier.fillMaxWidth().padding(16.dp).statusBarsPadding()) {
+private fun HeaderOverlay(
+    onBackClick: () -> Unit, 
+    soundManager: SoundManager,
+    titleFloat: Float,
+    fontScale: Float
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp)
+            .statusBarsPadding(),
+        contentAlignment = Alignment.Center
+    ) {
         IconButton(
             onClick = {
                 soundManager.play(SoundType.POP)
                 onBackClick()
             }, 
-            modifier = Modifier.shadow(4.dp, CircleShape).background(Color.White, CircleShape).size(48.dp).align(Alignment.CenterStart)
-        ) { Icon(Icons.Default.ArrowBack, null, tint = OrbTextBlue) }
-        Text("AVENTURA", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.Center))
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .shadow(4.dp, CircleShape)
+                .background(Color.White, CircleShape)
+                .size((48 * fontScale).dp)
+        ) { 
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack, 
+                contentDescription = "Volver", 
+                tint = OrbTextBlue,
+                modifier = Modifier.size((28 * fontScale).dp)
+            ) 
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.graphicsLayer { translationY = titleFloat }
+        ) {
+            Text(
+                text = "AVENTURA",
+                textAlign = TextAlign.Center,
+                style = TextStyle(
+                    fontSize = (38 * fontScale).sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 2.sp,
+                    shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                )
+            )
+            Box(
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .width(80.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.5f))
+            )
+        }
     }
 }

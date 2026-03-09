@@ -1,60 +1,39 @@
 package com.example.orbblaze.ui.menu
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.orbblaze.R
-import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.ui.components.ReferenceButton
 import com.example.orbblaze.ui.game.SoundManager
-import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
 
 val LocalFontScale = compositionLocalOf { 1f }
 
-// Colores públicos para el paquete
-val SageGreen = Color(0xFF8DA094)
-val NavyDark = Color(0xFF2D324F)
-val StarGold = Color(0xFFF4C491)
-
 @Composable
 fun MenuScreen(
-    onPlayClick: () -> Unit,
     onModesClick: () -> Unit,
     onScoreClick: () -> Unit,
     onAchievementsClick: () -> Unit,
@@ -63,12 +42,10 @@ fun MenuScreen(
     onFriendsClick: () -> Unit,
     onExitClick: () -> Unit,
     soundManager: SoundManager,
-    authManager: AuthManager,
     @Suppress("UNUSED_PARAMETER") onSecretClick: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "menu_animations")
     var showExitDialog by remember { mutableStateOf(false) }
-    val currentUser by authManager.user.collectAsState()
 
     LaunchedEffect(Unit) { soundManager.startMusic() }
     BackHandler { showExitDialog = true }
@@ -85,170 +62,118 @@ fun MenuScreen(
         label = "bg_scroll"
     )
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val totalWidth = constraints.maxWidth.toFloat()
-        val totalHeight = constraints.maxHeight.toFloat()
-        val fontScale = (maxWidth.value / 411f).coerceIn(0.6f, 1.5f)
-        
+    val configuration = LocalConfiguration.current
+    val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
+
+    Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val color1 = Color.White.copy(alpha = 0.15f)
             val color2 = Color.White.copy(alpha = 0.08f)
-            drawCircle(color = color1, radius = 150.dp.toPx(), center = Offset(x = (backgroundOffset % (totalWidth + 400.dp.toPx())) - 200.dp.toPx(), y = 150.dp.toPx()))
-            drawCircle(color = color2, radius = 250.dp.toPx(), center = Offset(x = ((backgroundOffset * 0.7f) % (totalWidth + 600.dp.toPx())) - 300.dp.toPx(), y = totalHeight * 0.4f))
-            drawCircle(color = color1, radius = 120.dp.toPx(), center = Offset(x = totalWidth - ((backgroundOffset * 1.2f) % (totalWidth + 300.dp.toPx())), y = totalHeight * 0.7f))
+            drawCircle(color = color1, radius = 150.dp.toPx(), center = Offset(x = (backgroundOffset % (size.width + 400.dp.toPx())) - 200.dp.toPx(), y = 150.dp.toPx()))
+            drawCircle(color = color2, radius = 250.dp.toPx(), center = Offset(x = ((backgroundOffset * 0.7f) % (size.width + 600.dp.toPx())) - 300.dp.toPx(), y = size.height * 0.4f))
+            drawCircle(color = color1, radius = 120.dp.toPx(), center = Offset(x = size.width - ((backgroundOffset * 1.2f) % (size.width + 300.dp.toPx())), y = size.height * 0.7f))
         }
 
         CompositionLocalProvider(LocalFontScale provides fontScale) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+                    .padding(horizontal = 32.dp, vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // TÍTULO
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.graphicsLayer { translationY = titleFloat }) {
+                    Text(
+                        text = stringResource(id = R.string.app_name).uppercase(),
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(
+                            fontSize = (75 * fontScale).sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 2.sp,
+                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                        )
+                    )
+                    Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
+                }
 
+                // BLOQUE DE BOTONES REESTRUCTURADO
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .systemBarsPadding()
-                        .padding(horizontal = 32.dp, vertical = 48.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceEvenly
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // TÍTULO
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.graphicsLayer { translationY = titleFloat }) {
-                        Text(
-                            text = stringResource(id = R.string.app_name).uppercase(),
-                            textAlign = TextAlign.Center,
-                            style = TextStyle(
-                                fontSize = (75 * fontScale).sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White,
-                                letterSpacing = 2.sp,
-                                shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
-                            )
-                        )
-                        Box(modifier = Modifier.padding(top = 4.dp).width(100.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.5f)))
-                    }
+                    // JUGAR
+                    ReferenceButton(
+                        text = stringResource(id = R.string.menu_play),
+                        backgroundColor = Color.White,
+                        contentColor = SageGreen,
+                        soundManager = soundManager,
+                        onClick = onModesClick
+                    )
 
-                    // BLOQUE DE BOTONES REESTRUCTURADO
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // JUGAR
+                    // RÉCORDS Y LOGROS
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         ReferenceButton(
-                            text = stringResource(id = R.string.menu_play),
+                            text = stringResource(id = R.string.menu_record),
                             backgroundColor = Color.White,
                             contentColor = SageGreen,
                             soundManager = soundManager,
-                            onClick = onModesClick
+                            modifier = Modifier.weight(1f),
+                            onClick = onScoreClick
                         )
-
-                        // RÉCORDS Y LOGROS
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ReferenceButton(
-                                text = stringResource(id = R.string.menu_record),
-                                backgroundColor = Color.White,
-                                contentColor = SageGreen,
-                                soundManager = soundManager,
-                                modifier = Modifier.weight(1f),
-                                onClick = onScoreClick
-                            )
-                            ReferenceButton(
-                                text = "LOGROS",
-                                backgroundColor = Color(0xFF2D324F),
-                                contentColor = Color.White,
-                                icon = Icons.Default.Star,
-                                iconColor = StarGold,
-                                soundManager = soundManager,
-                                modifier = Modifier.weight(1f),
-                                onClick = onAchievementsClick
-                            )
-                        }
-
-                        // PERFIL Y AMIGOS (Sin iconos)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            ReferenceButton(
-                                text = "PERFIL",
-                                backgroundColor = Color.White,
-                                contentColor = SageGreen,
-                                soundManager = soundManager,
-                                modifier = Modifier.weight(1f),
-                                onClick = onProfileClick
-                            )
-                            ReferenceButton(
-                                text = "AMIGOS",
-                                backgroundColor = Color.White,
-                                contentColor = SageGreen,
-                                soundManager = soundManager,
-                                modifier = Modifier.weight(1f),
-                                onClick = onFriendsClick
-                            )
-                        }
-
-                        // AJUSTES (Blanco sólido, sin icono)
                         ReferenceButton(
-                            text = "AJUSTES",
+                            text = "LOGROS",
+                            backgroundColor = NavyDark,
+                            contentColor = Color.White,
+                            icon = Icons.Default.Star,
+                            iconColor = StarGold,
+                            soundManager = soundManager,
+                            modifier = Modifier.weight(1f),
+                            onClick = onAchievementsClick
+                        )
+                    }
+
+                    // PERFIL Y AMIGOS (Sin iconos)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ReferenceButton(
+                            text = "PERFIL",
                             backgroundColor = Color.White,
                             contentColor = SageGreen,
                             soundManager = soundManager,
-                            onClick = onSettingsClick
+                            modifier = Modifier.weight(1f),
+                            onClick = onProfileClick
+                        )
+                        ReferenceButton(
+                            text = "AMIGOS",
+                            backgroundColor = Color.White,
+                            contentColor = SageGreen,
+                            soundManager = soundManager,
+                            modifier = Modifier.weight(1f),
+                            onClick = onFriendsClick
                         )
                     }
 
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(text = "VERSION 1.0.7", color = Color.White.copy(alpha = 0.6f), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
-                    }
+                    // AJUSTES (Blanco sólido, sin icono)
+                    ReferenceButton(
+                        text = "AJUSTES",
+                        backgroundColor = Color.White,
+                        contentColor = SageGreen,
+                        soundManager = soundManager,
+                        onClick = onSettingsClick
+                    )
+                }
+
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(text = "VERSION 1.0.7", color = Color.White.copy(alpha = 0.6f), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
                 }
             }
         }
 
         if (showExitDialog) {
             OrbBlazeExitDialog(onConfirm = onExitClick, onDismiss = { showExitDialog = false })
-        }
-    }
-}
-
-@Composable
-fun ReferenceButton(
-    text: String,
-    backgroundColor: Color,
-    contentColor: Color,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-    iconColor: Color = Color.Unspecified,
-    showDot: Boolean = false,
-    soundManager: SoundManager? = null,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
-    val fontScale = LocalFontScale.current
-
-    Surface(
-        onClick = {
-            soundManager?.play(SoundType.POP)
-            onClick()
-        },
-        interactionSource = interactionSource,
-        shape = RoundedCornerShape(28.dp),
-        color = backgroundColor,
-        shadowElevation = 0.dp, // ✅ Sombra eliminada para diseño flat y limpio
-        modifier = modifier
-            .fillMaxWidth()
-            .height((64 * fontScale).dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-    ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (showDot) {
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(contentColor))
-                Spacer(Modifier.width(12.dp))
-            } else if (icon != null) {
-                Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(text = text.uppercase(), style = TextStyle(fontSize = (18 * fontScale).sp, fontWeight = FontWeight.Bold, color = contentColor, letterSpacing = 1.sp))
         }
     }
 }
