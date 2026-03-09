@@ -1,8 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // AGP 9.0 built-in Kotlin means we no longer need the kotlin-android plugin
     alias(libs.plugins.kotlin.compose)
-    id("kotlin-kapt")
+    alias(libs.plugins.legacy.kapt)
     alias(libs.plugins.hilt.android)
     id("com.google.gms.google-services")
 }
@@ -40,11 +40,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    kotlinOptions {
-        jvmTarget = "21"
-    }
     buildFeatures {
         compose = true
+    }
+}
+
+// Migrate to compilerOptions as per AGP 9.0 / Kotlin migration
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
 
@@ -84,6 +88,8 @@ dependencies {
     // ✅ Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
+    kapt(libs.kotlinx.metadata.jvm)
+    // Fixed: changed hyphen to dot for version catalog accessor
     implementation(libs.androidx.hilt.navigation.compose)
 
     testImplementation(libs.junit)

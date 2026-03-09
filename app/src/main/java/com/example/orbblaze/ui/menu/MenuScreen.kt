@@ -105,7 +105,7 @@ fun MenuScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // JUGAR
+                    // JUGAR (Principal)
                     ReferenceButton(
                         text = stringResource(id = R.string.menu_play),
                         backgroundColor = Color.White,
@@ -136,7 +136,7 @@ fun MenuScreen(
                         )
                     }
 
-                    // PERFIL Y AMIGOS (Sin iconos)
+                    // PERFIL Y AMIGOS
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         ReferenceButton(
                             text = "PERFIL",
@@ -156,7 +156,7 @@ fun MenuScreen(
                         )
                     }
 
-                    // AJUSTES (Blanco sólido, sin icono)
+                    // AJUSTES
                     ReferenceButton(
                         text = "AJUSTES",
                         backgroundColor = Color.White,
@@ -167,7 +167,7 @@ fun MenuScreen(
                 }
 
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(text = "VERSION 1.0.7", color = Color.White.copy(alpha = 0.6f), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
+                    Text(text = "VERSION 1.0.8", color = Color.White.copy(alpha = 0.6f), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
                 }
             }
         }

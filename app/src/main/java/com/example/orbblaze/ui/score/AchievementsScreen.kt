@@ -3,6 +3,7 @@ package com.example.orbblaze.ui.score
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -66,11 +68,11 @@ fun AchievementsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 40.dp),
+                    .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 0.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Header con botón de volver estático y título con movimiento
+                // Header
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -84,13 +86,13 @@ fun AchievementsScreen(
                             .align(Alignment.CenterStart)
                             .shadow(4.dp, CircleShape)
                             .background(Color.White, CircleShape)
-                            .size((48 * fontScale).dp)
+                            .size((44 * fontScale).dp)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Volver",
                             tint = NavyDark,
-                            modifier = Modifier.size((28 * fontScale).dp)
+                            modifier = Modifier.size((24 * fontScale).dp)
                         )
                     }
 
@@ -118,12 +120,20 @@ fun AchievementsScreen(
                                 .background(Color.White.copy(alpha = 0.5f))
                         )
                     }
+
+                    // Pulido Firebase: Icono de sincronización
+                    Icon(
+                        imageVector = Icons.Default.CloudDone,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.align(Alignment.CenterEnd).size(20.dp).padding(end = 8.dp)
+                    )
                 }
 
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 60.dp, top = 12.dp)
                 ) {
                     items(displayList) { achievement ->
                         AchievementCardPremium(
@@ -150,77 +160,83 @@ fun AchievementCardPremium(
     val fontScale = LocalFontScale.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) 0.98f else 1f, label = "scale")
+    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
 
+    // EL TRUCO: Box con padding externo para que la sombra no se corte
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp) // Espacio vital para la sombra
             .graphicsLayer { 
                 scaleX = scale
                 scaleY = scale
             }
+            .shadow(
+                elevation = if (isPressed) 4.dp else 12.dp,
+                shape = RoundedCornerShape(28.dp),
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.4f),
+                spotColor = Color.Black.copy(alpha = 0.4f)
+            )
+            .background(Color.White, shape = RoundedCornerShape(28.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = { 
+                    soundManager.play(SoundType.POP)
+                    if (!isUnlocked) onRevealToggle() 
+                }
+            )
             .animateContentSize()
     ) {
-        Surface(
-            onClick = { 
-                soundManager.play(SoundType.POP)
-                if (!isUnlocked) onRevealToggle() 
-            },
-            interactionSource = interactionSource,
-            shape = RoundedCornerShape(28.dp),
-            color = Color.White,
-            shadowElevation = if (isPressed) 2.dp else 6.dp,
-            tonalElevation = 0.dp
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .size((56 * fontScale).dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isUnlocked) StarGold.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.05f)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size((56 * fontScale).dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isUnlocked) StarGold.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.05f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isUnlocked) Icons.Default.Star else Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = if (isUnlocked) StarGold else Color.LightGray,
-                        modifier = Modifier.size((28 * fontScale).dp)
+                Icon(
+                    imageVector = if (isUnlocked) Icons.Default.Star else Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = if (isUnlocked) StarGold else Color.LightGray,
+                    modifier = Modifier.size((28 * fontScale).dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = achievement.title.uppercase(),
+                    style = TextStyle(
+                        fontSize = (16 * fontScale).sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isUnlocked) NavyDark else Color.Gray,
+                        letterSpacing = 0.5.sp
                     )
-                }
-                
-                Spacer(modifier = Modifier.width(16.dp))
-                
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = achievement.title.uppercase(),
-                        style = TextStyle(
-                            fontSize = (16 * fontScale).sp,
-                            fontWeight = FontWeight.Black,
-                            color = if (isUnlocked) NavyDark else Color.Gray,
-                            letterSpacing = 0.5.sp
-                        )
+                )
+                Text(
+                    text = if (isUnlocked || isRevealed) achievement.description else "TOCA PARA PISTA",
+                    style = TextStyle(
+                        fontSize = (12 * fontScale).sp,
+                        color = if (isUnlocked) Color.Gray else Color.LightGray,
+                        fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = if (isUnlocked || isRevealed) achievement.description else "TOCA PARA PISTA",
-                        style = TextStyle(
-                            fontSize = (12 * fontScale).sp,
-                            color = if (isUnlocked) Color.Gray else Color.LightGray,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                }
-                
-                if (isUnlocked) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = null,
-                        tint = StarGold,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                )
+            }
+            
+            if (isUnlocked) {
+                Icon(
+                    imageVector = Icons.Default.Star,
+                    contentDescription = null,
+                    tint = StarGold,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
