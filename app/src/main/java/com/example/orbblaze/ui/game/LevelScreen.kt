@@ -100,6 +100,10 @@ fun LevelScreen(
     val isRematchAcceptedByOpponent = duelViewModel?.isRematchAcceptedByOpponent ?: false
     val isShowingVS = duelViewModel?.isShowingVS ?: false
     val matchLoadingProgress = duelViewModel?.matchLoadingProgress ?: 0f
+    
+    val roomState by duelViewModel?.room?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(null) }
+    val myId = viewModel.authManager.currentUser?.uid ?: ""
+    val myPlayerState = roomState?.players?.get(myId)
 
     var showQuickShop by remember { mutableStateOf(false) }
     var isAiming by remember { mutableStateOf(false) }
@@ -456,25 +460,60 @@ fun LevelScreen(
             }
         }
 
-        if (opponentState != null) {
-            OpponentBoard(
-                modifier = Modifier.align(Alignment.CenterStart).offset(y = (-100).dp),
-                opponent = opponentState
+        if (duelViewModel == null) {
+            GameTopBar(
+                score = score, 
+                bestScore = highScore, 
+                coins = coins, 
+                timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, 
+                shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null, 
+                onSettingsClick = { viewModel.togglePause() }, 
+                onSoundClick = { soundManager.play(SoundType.POP) },
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
+            )
+        } else {
+            // REDISEÑO DUELO: TODA LA PANTALLA
+            DuelTopBar(
+                myScore = score,
+                myDanger = (bubbles.keys.maxOfOrNull { it.row }?.toFloat() ?: 0f) / dangerRow.toFloat(),
+                myAvatar = viewModel.authManager.currentUser?.photoUrl?.toString(),
+                opponent = opponentState,
+                onSettingsClick = { viewModel.togglePause() },
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()
             )
         }
 
-        GameTopBar(
-            score = score, 
-            bestScore = highScore, 
-            coins = coins, 
-            timeLeft = if (viewModel.gameMode == GameMode.TIME_ATTACK) timeLeft else null, 
-            shotsLeft = if (viewModel.gameMode == GameMode.ADVENTURE) (viewModel as? AdventureViewModel)?.shotsRemaining else null, 
-            onSettingsClick = { 
-                viewModel.togglePause() 
-            }, 
-            onSoundClick = { soundManager.play(SoundType.POP) },
-            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
-        )
+        // Reacción del oponente
+        if (opponentState?.currentReaction != null) {
+            PlayerReactionDisplay(
+                emoji = opponentState?.currentReaction,
+                timestamp = opponentState?.reactionTimestamp ?: 0L,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 100.dp, end = 20.dp)
+            )
+        }
+        
+        // Mi propia reacción
+        if (myPlayerState?.currentReaction != null) {
+            PlayerReactionDisplay(
+                emoji = myPlayerState.currentReaction,
+                timestamp = myPlayerState.reactionTimestamp,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 100.dp, start = 20.dp)
+            )
+        }
+
+        // Selector de emojis
+        if (duelViewModel != null && gameState == GameState.PLAYING && !isPaused) {
+            EmojiReactionPicker(
+                onEmojiSelected = { emoji -> duelViewModel.sendReaction(emoji) },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp)
+            )
+        }
 
         if (showQuickShop) {
             QuickShopOverlay(
@@ -518,6 +557,7 @@ fun LevelScreen(
         }
 
         if (gameState == GameState.WON || gameState == GameState.LOST) {
+            val opp = opponentState
             OverlayMenu(
                 title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over),
                 onContinue = null,
@@ -540,6 +580,8 @@ fun LevelScreen(
                 isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
                 isDuel = duelViewModel != null,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
+                opponentStats = if (duelViewModel != null && opp != null) opp else null,
+                myStats = if (duelViewModel != null && myPlayerState != null) myPlayerState else null,
                 onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else if(duelViewModel != null) null else { { 
                     onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } 
                 } }
@@ -959,7 +1001,9 @@ fun OverlayMenu(
     onNextLevel: (() -> Unit)? = null,
     isDuel: Boolean = false,
     onRematch: (() -> Unit)? = null,
-    isRematchAccepted: Boolean = false
+    isRematchAccepted: Boolean = false,
+    opponentStats: com.example.orbblaze.data.PlayerState? = null,
+    myStats: com.example.orbblaze.data.PlayerState? = null
 ) {
     val isPause = title == stringResource(id = R.string.game_pause)
     val scope = rememberCoroutineScope()
@@ -970,10 +1014,10 @@ fun OverlayMenu(
             shape = RoundedCornerShape(40.dp),
             color = Color.White,
             shadowElevation = 12.dp,
-            modifier = Modifier.width(320.dp)
+            modifier = Modifier.width(360.dp)
         ) {
             Column(
-                modifier = Modifier.padding(32.dp),
+                modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -989,20 +1033,12 @@ fun OverlayMenu(
                 
                 Spacer(Modifier.height(24.dp))
 
-                if (score != null && !isDuel) {
+                if (isDuel && opponentStats != null && myStats != null) {
+                    DuelResultsTable(myStats, opponentStats, isWin)
+                    Spacer(Modifier.height(24.dp))
+                } else if (score != null) {
                     Text("PUNTUACIÓN", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Text("$score", color = NavyDark, fontSize = 48.sp, fontWeight = FontWeight.Black)
-                    Spacer(Modifier.height(24.dp))
-                }
-
-                if (isDuel) {
-                    Text(
-                        text = if (isWin) "¡ERES EL MEJOR!" else "¡MÁS SUERTE LA PRÓXIMA!",
-                        color = if (isWin) SageGreen else Color.Red,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Black,
-                        textAlign = TextAlign.Center
-                    )
                     Spacer(Modifier.height(24.dp))
                 }
 
@@ -1109,23 +1145,33 @@ fun OverlayMenu(
                         onClick = onExit
                     )
                 }
-
-                if (!isPause) {
-                    onShowAd?.let { adAction ->
-                        val adLabel = if (isAdventure && !isWin) stringResource(id = R.string.game_revive_ad) else stringResource(id = R.string.game_bonus_ad)
-                        Spacer(Modifier.height(24.dp))
-                        TextButton(onClick = {
-                            adAction()
-                        }) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.PlayArrow, null, tint = Color.Gray, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(adLabel, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                            }
-                        }
-                    }
-                }
             }
+        }
+    }
+}
+
+@Composable
+fun DuelResultsTable(my: com.example.orbblaze.data.PlayerState, opp: com.example.orbblaze.data.PlayerState, isWin: Boolean) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        ResultRow("PUNTUACIÓN", "${if(my.score == -1) 0 else my.score}", "${if(opp.score == -1) 0 else opp.score}", isWin)
+        Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.3f))
+        ResultRow("BURBUJAS", "${my.bubblesPopped}", "${opp.bubblesPopped}", my.bubblesPopped >= opp.bubblesPopped)
+        Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.3f))
+        ResultRow("MAX COMBO", "x${my.maxCombo}", "x${opp.maxCombo}", my.maxCombo >= opp.maxCombo)
+        Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.3f))
+        ResultRow("ATAQUES", "${my.attacksSent}", "${opp.attacksSent}", my.attacksSent >= opp.attacksSent)
+    }
+}
+
+@Composable
+fun ResultRow(label: String, myVal: String, oppVal: String, isBetter: Boolean) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+            Text(myVal, color = if(isBetter) SageGreen else NavyDark, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        }
+        Text(label, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+            Text(oppVal, color = if(!isBetter) SageGreen else NavyDark, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
     }
 }

@@ -14,8 +14,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
     private val db = FirebaseFirestore.getInstance()
     private val roomsCollection = db.collection("gameRooms")
 
-    private var roomListener: ListenerRegistration? = null
-
     fun findOrCreateRoom(targetRoomId: String? = null): Flow<GameRoom?> = callbackFlow {
         val currentUser = authManager.currentUser ?: run { 
             trySend(null)
@@ -28,6 +26,8 @@ class MatchmakingManager(private val authManager: AuthManager) {
             displayName = currentUser.displayName ?: "Jugador",
             avatarUrl = currentUser.photoUrl?.toString()
         )
+
+        var roomListener: ListenerRegistration? = null
 
         try {
             var roomId: String? = null
@@ -56,7 +56,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
 
             // 2. Búsqueda de sala abierta (Matchmaking normal)
             if (roomId == null && targetRoomId == null) {
-                // Consulta limpia: solo por estado y cantidad de jugadores
                 val openRoomsQuery = roomsCollection
                     .whereEqualTo("status", "WAITING")
                     .whereEqualTo("playerCount", 1)
@@ -73,7 +72,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
                         val roomSnap = transaction.get(roomRef)
                         if (roomSnap.exists()) {
                             val players = roomSnap.get("players") as? Map<*, *>
-                            // Evitar unirse a su propia sala si quedó abierta por error
                             if (players?.containsKey(currentUser.uid) == true) return@runTransaction false
 
                             val currentCount = roomSnap.getLong("playerCount") ?: 0
@@ -104,7 +102,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
             }
 
             // 4. Escuchar cambios en la sala asignada
-            val finalRoomId = roomId ?: return@callbackFlow
+            val finalRoomId = roomId
             roomListener = roomsCollection.document(finalRoomId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
@@ -129,7 +127,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
     }
 
     suspend fun leaveRoom(roomId: String) {
-        roomListener?.remove()
         val myId = authManager.currentUser?.uid ?: return
         try {
             db.runTransaction { transaction ->
@@ -166,7 +163,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
 
     suspend fun updatePlayerState(roomId: String, score: Int, attack: String?) {
         val myId = authManager.currentUser?.uid ?: return
-        val updates = mutableMapOf<String, Any>(
+        val updates = mutableMapOf(
             "players.$myId.score" to score,
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -195,11 +192,26 @@ class MatchmakingManager(private val authManager: AuthManager) {
                         transaction.update(roomRef, "players.$uid.score", 0)
                         transaction.update(roomRef, "players.$uid.rematchReady", false)
                         transaction.update(roomRef, "players.$uid.lastAttack", null)
+                        transaction.update(roomRef, "players.$uid.currentReaction", null)
                     }
                 } else if (ready) {
                     transaction.update(roomRef, "status", "REMATCH_REQUESTED")
                 }
             }.await()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    suspend fun sendReaction(roomId: String, emoji: String) {
+        val myId = authManager.currentUser?.uid ?: return
+        try {
+            roomsCollection.document(roomId).update(
+                mapOf(
+                    "players.$myId.currentReaction" to emoji,
+                    "players.$myId.reactionTimestamp" to System.currentTimeMillis()
+                )
+            ).await()
         } catch (e: Exception) {
             e.printStackTrace()
         }

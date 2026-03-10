@@ -66,15 +66,23 @@ class DuelViewModel @Inject constructor(
                             handleMatchEnd(isWin = true, gameRoom.roomId)
                         }
 
-                        if (gameRoom.status == "REMATCH_REQUESTED") {
-                             if (newOpponentState?.rematchReady == true) {
+                        // ✅ Detectar si el oponente aceptó revancha
+                        if (gameRoom.status == "REMATCH_REQUESTED" || gameRoom.status == "PLAYING") {
+                             if (newOpponentState?.rematchReady == true || gameRoom.status == "PLAYING") {
                                  isRematchAcceptedByOpponent = true
                              }
                         }
 
-                        if (gameRoom.status == "PLAYING" && gameState == GameState.IDLE && !isShowingVS) {
-                            _opponent.value = newOpponentState
-                            startVSPresentation()
+                        // ✅ Iniciar el juego (o revancha)
+                        if (gameRoom.status == "PLAYING" && !isShowingVS) {
+                            if (gameState == GameState.IDLE || gameState == GameState.WON || gameState == GameState.LOST) {
+                                // Si venimos de una partida finalizada, reseteamos el tablero localmente
+                                if (gameState != GameState.IDLE) {
+                                    restartGame()
+                                }
+                                _opponent.value = newOpponentState
+                                startVSPresentation()
+                            }
                         }
                         
                         if (_opponent.value?.lastAttack != newOpponentState?.lastAttack) {
@@ -128,16 +136,32 @@ class DuelViewModel @Inject constructor(
         startDifficultyBalanceLoop()
     }
 
+    override fun restartGame() {
+        loadLevel(initialRows = 6)
+        gameState = GameState.IDLE
+        isRematchAcceptedByOpponent = false
+        showRematchRequest = false
+    }
+
     private fun startDifficultyBalanceLoop() {
         balanceJob?.cancel()
         balanceJob = viewModelScope.launch {
             var secondsPassed = 0
+            var interval = 30 // Segundos iniciales
             while (gameState == GameState.PLAYING) {
                 delay(1000)
                 secondsPassed++
-                if (secondsPassed % 30 == 0) {
+                
+                if (secondsPassed >= interval) {
                     addRows(1)
                     triggerShake(5f)
+                    spawnFloatingText(metrics?.screenWidth?.div(2) ?: 0f, metrics?.boardTopPadding ?: 0f, "¡MUERTE SÚBITA!")
+                    secondsPassed = 0
+                    
+                    // Acelerar el proceso gradualmente hasta un mínimo de 10 segundos
+                    if (interval > 10) {
+                        interval -= 2
+                    }
                 }
             }
         }
@@ -176,12 +200,39 @@ class DuelViewModel @Inject constructor(
         super.onPostSnap()
         viewModelScope.launch {
             val roomId = _room.value?.roomId ?: return@launch
+            
+            // Calcular nivel de peligro basado en la fila más baja ocupada
+            val lowestRow = bubblesByPosition.keys.maxOfOrNull { it.row } ?: 0
+            val dangerLevel = (lowestRow.toFloat() / dynamicDangerRow).coerceIn(0f, 1f)
+
             val attack = when {
-                comboMultiplier >= 4 -> "ROW_2"
-                comboMultiplier >= 2 -> "ROW_1"
+                comboMultiplier >= 4 -> {
+                    attacksSentInMatch += 2
+                    "ROW_2"
+                }
+                comboMultiplier >= 2 -> {
+                    attacksSentInMatch += 1
+                    "ROW_1"
+                }
                 else -> null
             }
-            matchmakingManager.updatePlayerState(roomId, score, attack)
+            
+            // Actualizar estado completo en Firebase
+            val myId = authManager.currentUser?.uid ?: return@launch
+            val updates = mutableMapOf<String, Any>(
+                "players.$myId.score" to score,
+                "players.$myId.dangerLevel" to dangerLevel,
+                "players.$myId.bubblesPopped" to bubblesPoppedInMatch,
+                "players.$myId.maxCombo" to maxComboInMatch,
+                "players.$myId.attacksSent" to attacksSentInMatch,
+                "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            )
+            attack?.let { updates["players.$myId.lastAttack"] = it }
+            
+            matchmakingManager.updatePlayerState(roomId, score, attack) // Mantenemos por compatibilidad
+
+            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("gameRooms").document(roomId).update(updates)
         }
     }
 
@@ -224,6 +275,13 @@ class DuelViewModel @Inject constructor(
                     isWin = isWin
                 )
             }
+        }
+    }
+
+    fun sendReaction(emoji: String) {
+        val roomId = _room.value?.roomId ?: return
+        viewModelScope.launch {
+            matchmakingManager.sendReaction(roomId, emoji)
         }
     }
 

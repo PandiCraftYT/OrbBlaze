@@ -57,6 +57,9 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
             soundMap[SoundType.LOSE] = pool.load(context, R.raw.sfx_lose, 1)
             soundMap[SoundType.STICK] = pool.load(context, R.raw.sfx_stick, 1)
             soundMap[SoundType.ACHIEVEMENT] = pool.load(context, R.raw.sfx_logros, 1)
+            
+            // Sonido cuando encuentra oponente
+            soundMap[SoundType.MATCH_FOUND] = pool.load(context, R.raw.sfx_match_found, 1)
         } catch (e: Exception) {
             Log.e("SoundManager", "Error loading sounds", e)
         }
@@ -110,6 +113,13 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
         }
     }
 
+    fun switchToMatchmakingMusic() {
+        if (currentMusicResId != R.raw.matchmaking_song) {
+            initMusic(R.raw.matchmaking_song)
+            if (shouldPlayMusic) mediaPlayer?.start()
+        }
+    }
+
     fun setMusicSpeed(speed: Float) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
@@ -142,6 +152,11 @@ class SoundManager(val context: Context, private val settingsManager: SettingsMa
     }
 
     fun play(type: SoundType) {
+        if (type == SoundType.MATCHMAKING_START) {
+            switchToMatchmakingMusic()
+            return
+        }
+
         val pool = soundPool ?: return
         val soundId = soundMap[type] ?: return
         pool.play(soundId, sfxVolume, sfxVolume, 1, 0, 1f)

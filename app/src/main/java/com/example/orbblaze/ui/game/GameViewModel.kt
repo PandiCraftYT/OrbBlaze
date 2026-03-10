@@ -27,7 +27,10 @@ import kotlin.math.*
 
 enum class GameState { IDLE, PLAYING, WON, LOST }
 enum class GameMode { CLASSIC, TIME_ATTACK, ADVENTURE, DUEL } 
-enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP, ACHIEVEMENT }
+enum class SoundType { 
+    SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP, ACHIEVEMENT,
+    MATCHMAKING_START, MATCH_FOUND 
+}
 
 @HiltViewModel
 open class GameViewModel @Inject constructor(
@@ -140,6 +143,14 @@ open class GameViewModel @Inject constructor(
     var trajectoryPoints by mutableStateOf<List<Offset>>(emptyList())
         protected set
 
+    // Estadísticas para pantalla de resultados
+    var bubblesPoppedInMatch by mutableIntStateOf(0)
+        protected set
+    var maxComboInMatch by mutableIntStateOf(0)
+        protected set
+    var attacksSentInMatch by mutableIntStateOf(0)
+        protected set
+
     init {
         setupAchievements()
         observeData()
@@ -227,6 +238,9 @@ open class GameViewModel @Inject constructor(
     open fun startGame() { 
         gameState = GameState.PLAYING
         comboMultiplier = 1
+        bubblesPoppedInMatch = 0
+        maxComboInMatch = 0
+        attacksSentInMatch = 0
         fireballsBoughtCount = 0
         nextBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
         previewBubbleColor = engine.getSmartProjectileColor(bubblesByPosition)
@@ -246,6 +260,9 @@ open class GameViewModel @Inject constructor(
         
         score = 0
         comboMultiplier = 1
+        bubblesPoppedInMatch = 0
+        maxComboInMatch = 0
+        attacksSentInMatch = 0
         fireballsBoughtCount = 0
         gameState = GameState.IDLE
         isPaused = false
@@ -354,6 +371,7 @@ open class GameViewModel @Inject constructor(
     open fun onShoot(spawnX: Float, spawnY: Float) {
         if (gameState != GameState.PLAYING || isPaused || activeProjectile != null) return
         shotTick++; soundEvent = SoundType.SHOOT
+        shotsFiredCount++
         viewModelScope.launch {
             if (settingsManager.vibrationEnabledFlow.first()) vibrationEvent = true
         }
@@ -471,6 +489,7 @@ open class GameViewModel @Inject constructor(
             soundEvent = SoundType.POP; 
             val pts = (toRemove.size * 10) * comboMultiplier
             score += pts
+            bubblesPoppedInMatch += toRemove.size
             triggerShake(pts.toFloat() / 50f)
             toRemove.forEach { pos -> newGrid.remove(pos); val (cx, cy) = getBubbleCenter(pos); spawnExplosion(cx, cy, BubbleColor.entries.random()) }
             bubblesByPosition = newGrid; removeFloatingBubbles(newGrid.toMutableMap())
@@ -578,6 +597,7 @@ open class GameViewModel @Inject constructor(
             }
             
             comboMultiplier = if (matched) comboMultiplier + 1 else 1
+            if (comboMultiplier > maxComboInMatch) maxComboInMatch = comboMultiplier
             if (comboMultiplier >= 5) unlockAchievement("combo_king")
             
             bubblesByPosition = newGrid
@@ -610,6 +630,7 @@ open class GameViewModel @Inject constructor(
 
     private fun processMatches(matches: Set<GridPosition>, grid: MutableMap<GridPosition, Bubble>, x: Float, y: Float, visualColor: BubbleColor) {
         soundEvent = SoundType.POP; val count = matches.size
+        bubblesPoppedInMatch += count
         
         if (count >= 6) unlockAchievement("combo_master")
         if (count >= 10) unlockAchievement("bubble_tsunami")
@@ -649,6 +670,7 @@ open class GameViewModel @Inject constructor(
         val (cx, cy) = getBubbleCenter(center)
         affected.forEach { pos -> grid[pos]?.let { spawnExplosion(getBubbleCenter(pos).first, getBubbleCenter(pos).second, it.color); grid.remove(pos) } }
         val points = (affected.size * 50) * comboMultiplier
+        bubblesPoppedInMatch += affected.size
         score += points; spawnFloatingText(cx, cy, "+$points"); updateHighScore(); joyTick++
     }
 
@@ -656,7 +678,7 @@ open class GameViewModel @Inject constructor(
         viewModelScope.launch {
             val floating = withContext(Dispatchers.Default) { engine.findFloatingBubbles(grid, rowsDroppedCount) }
             if (floating.isEmpty()) return@launch
-            
+            bubblesPoppedInMatch += floating.size
             if (floating.size >= 15) unlockAchievement("avalanche")
             
             if (floating.size >= 10) triggerShake(floating.size * 0.3f)

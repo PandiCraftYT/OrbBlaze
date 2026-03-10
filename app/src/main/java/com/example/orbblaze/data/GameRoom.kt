@@ -8,9 +8,17 @@ data class PlayerState(
     val displayName: String = "Jugador",
     val avatarUrl: String? = null,
     val score: Int = 0,
+    val dangerLevel: Float = 0f, // 0.0 a 1.0 (cuánto ha llenado el tablero)
     val isReady: Boolean = false,
     val lastAttack: String? = null,
-    val rematchReady: Boolean = false
+    val rematchReady: Boolean = false,
+    val currentReaction: String? = null,
+    val reactionTimestamp: Long = 0L,
+    
+    // Estadísticas detalladas
+    val bubblesPopped: Int = 0,
+    val maxCombo: Int = 0,
+    val attacksSent: Int = 0
 )
 
 data class GameRoom(
