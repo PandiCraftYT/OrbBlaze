@@ -20,6 +20,7 @@ class LeaderboardManager @Inject constructor() {
     fun getLeaderboard(mode: String): Flow<List<LeaderboardEntry>> = callbackFlow {
         val collection = when (mode) {
             "TIME_ATTACK" -> "leaderboard_time_attack"
+            "DUEL" -> "leaderboard_duel"
             else -> "leaderboard_classic"
         }
 
@@ -56,6 +57,7 @@ class LeaderboardManager @Inject constructor() {
     suspend fun updateScore(userId: String, username: String, score: Int, avatarUrl: String?, mode: String) {
         val collection = when (mode) {
             "TIME_ATTACK" -> "leaderboard_time_attack"
+            "DUEL" -> "leaderboard_duel"
             else -> "leaderboard_classic"
         }
 
@@ -74,6 +76,35 @@ class LeaderboardManager @Inject constructor() {
             Log.d("LeaderboardManager", "Puntuación subida con éxito")
         } catch (e: Exception) {
             Log.e("LeaderboardManager", "Error al subir puntuación: ${e.message}")
+        }
+    }
+
+    suspend fun updateDuelRating(userId: String, username: String, avatarUrl: String?, isWin: Boolean) {
+        val docRef = firestore.collection("leaderboard_duel").document(userId)
+        
+        try {
+            firestore.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                val currentScore = if (snapshot.exists()) {
+                    snapshot.getLong("score")?.toInt() ?: 1000
+                } else {
+                    1000
+                }
+                
+                val pointsChange = if (isWin) 25 else -20
+                val newScore = (currentScore + pointsChange).coerceAtLeast(0)
+                
+                val entry = mapOf(
+                    "username" to username,
+                    "score" to newScore,
+                    "avatarUrl" to avatarUrl,
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+                
+                transaction.set(docRef, entry, SetOptions.merge())
+            }.await()
+        } catch (e: Exception) {
+            Log.e("LeaderboardManager", "Error al actualizar rating de duelo: ${e.message}")
         }
     }
 }

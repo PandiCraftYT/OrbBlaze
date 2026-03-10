@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
@@ -32,17 +33,21 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.*
@@ -67,7 +72,6 @@ fun LevelScreen(
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
 
-    // Strings localizados
     val shopNotAvailableMsg = stringResource(R.string.shop_not_available_adventure)
 
     val bubbles = viewModel.bubblesByPosition
@@ -91,6 +95,12 @@ fun LevelScreen(
     val currentGameMode = viewModel.gameMode
     val shakeIntensity = viewModel.shakeIntensity
 
+    val duelViewModel = viewModel as? DuelViewModel
+    val opponentState by duelViewModel?.opponent?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(null) }
+    val isRematchAcceptedByOpponent = duelViewModel?.isRematchAcceptedByOpponent ?: false
+    val isShowingVS = duelViewModel?.isShowingVS ?: false
+    val matchLoadingProgress = duelViewModel?.matchLoadingProgress ?: 0f
+
     var showQuickShop by remember { mutableStateOf(false) }
     var isAiming by remember { mutableStateOf(false) }
 
@@ -111,7 +121,6 @@ fun LevelScreen(
         }
     }
 
-    // ✅ CAMBIO DE MÚSICA AL ENTRAR Y VOLVER AL MENÚ AL SALIR
     DisposableEffect(Unit) {
         soundManager.switchToLevelMusic()
         onDispose {
@@ -125,10 +134,8 @@ fun LevelScreen(
 
     val currentLevelId = (viewModel as? AdventureViewModel)?.currentLevelId ?: 1
     
-    // ✅ OPTIMIZACIÓN: Transición infinita única y centralizada
     val infiniteTransition = rememberInfiniteTransition(label = "game_fx")
 
-    // ✅ OPTIMIZACIÓN: El fondo solo se anima si el juego NO está pausado
     val backgroundOffset by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 2000f,
         animationSpec = infiniteRepeatable(
@@ -138,7 +145,6 @@ fun LevelScreen(
         label = "bg_scroll"
     )
 
-    // ✅ OPTIMIZACIÓN: Valores de animación para VisualBubble (Centralizados)
     val breathingScale by infiniteTransition.animateFloat(
         initialValue = 0.985f, targetValue = 1.015f,
         animationSpec = infiniteRepeatable(animation = tween(2500, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
@@ -165,7 +171,6 @@ fun LevelScreen(
         label = "indicator_pulse"
     )
 
-    // ✅ ANIMACIÓN OPTIMIZADA DE PARPADEO (Línea Roja Estática)
     val redLineAlpha by infiniteTransition.animateFloat(
         initialValue = 0.3f, targetValue = 1.0f,
         animationSpec = infiniteRepeatable(animation = tween(800, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
@@ -180,6 +185,8 @@ fun LevelScreen(
             currentLevelId <= 90 -> listOf(Color(0xFF0277BD), Color(0xFFE1F5FE))
             else -> listOf(Color(0xFF0D47A1), Color(0xFF000000))
         }
+    } else if (duelViewModel != null) {
+        listOf(Color(0xFF4A148C), Color(0xFF1A237E)) 
     } else {
         listOf(BgTop, BgBottom)
     }
@@ -219,8 +226,8 @@ fun LevelScreen(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
             .background(Brush.verticalGradient(colors = listOf(animatedBgTop, animatedBgBottom)))
-            .pointerInput(gameState, isPaused, showQuickShop, showTutorial) {
-                if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial) return@pointerInput
+            .pointerInput(gameState, isPaused, showQuickShop, showTutorial, isShowingVS) {
+                if (gameState != GameState.PLAYING || isPaused || showQuickShop || showTutorial || isShowingVS) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(); val startPos = down.position
                     val centerX = size.width / 2; val pandaTopY = size.height - 280.dp.toPx()
@@ -260,7 +267,6 @@ fun LevelScreen(
         val statusBarHeightPx = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value * density.density
         val boardTopPaddingPx = statusBarHeightPx + with(density) { 90.dp.toPx() }
 
-        // ✅ LÍNEA DE PELIGRO UNIFICADA EN FILA 11
         val dangerRow = 11
         
         LaunchedEffect(dangerRow) {
@@ -270,7 +276,7 @@ fun LevelScreen(
         val isDangerActive = bubbles.keys.any { it.row >= (dangerRow - 2) }
         val finalShakeIntensity = (if (isDangerActive) 3f else 0f) + (shakeIntensity * 0.5f)
 
-        if (currentGameMode != GameMode.ADVENTURE) {
+        if (currentGameMode != GameMode.ADVENTURE && duelViewModel == null) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val color1 = Color.White.copy(alpha = 0.15f)
                 val color2 = Color.White.copy(alpha = 0.05f)
@@ -307,7 +313,6 @@ fun LevelScreen(
                     drawRect(color = Color.Red.copy(alpha = dangerAlpha * 0.3f), size = size)
                 }
 
-                // ✅ DIBUJO DE LA LÍNEA ROJA (Parpadeo Estático)
                 drawLine(
                     color = Color.Red.copy(alpha = redLineAlpha),
                     start = Offset(0f, redLineY),
@@ -409,7 +414,6 @@ fun LevelScreen(
                 )
             }
 
-            // ✅ CAPA DE TEXTOS FLOTANTES (Por encima de todo el juego)
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawIntoCanvas { canvas ->
                     floatingTexts.forEach { ft ->
@@ -431,7 +435,6 @@ fun LevelScreen(
                             this.alpha = alpha
                             
                             if (isCombo) {
-                                // Gradiente colorido para el combo
                                 shader = android.graphics.LinearGradient(
                                     ft.x - 50f, ft.y - 50f, ft.x + 50f, ft.y + 50f,
                                     intArrayOf(
@@ -451,6 +454,13 @@ fun LevelScreen(
                     }
                 }
             }
+        }
+
+        if (opponentState != null) {
+            OpponentBoard(
+                modifier = Modifier.align(Alignment.CenterStart).offset(y = (-100).dp),
+                opponent = opponentState
+            )
         }
 
         GameTopBar(
@@ -475,13 +485,13 @@ fun LevelScreen(
             )
         }
 
-        if (gameState == GameState.IDLE) {
+        if (gameState == GameState.IDLE && !isShowingVS) {
             if (viewModel.gameMode == GameMode.ADVENTURE) {
                 val advViewModel = viewModel as? AdventureViewModel; val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
                 if (currentLevel != null) { AdventureStartDialog(levelId = currentLevel.id, objective = currentLevel.objective, onStartClick = { 
                     viewModel.startGame() 
                 }) }
-            } else {
+            } else if (duelViewModel == null) {
                 ModeStartOverlay(gameMode = viewModel.gameMode, highScore = highScore, soundManager = soundManager, onStart = { 
                     viewModel.startGame() 
                 })
@@ -498,6 +508,7 @@ fun LevelScreen(
                     viewModel.restartGame() 
                 },
                 onExit = { 
+                    duelViewModel?.resetMatchmaking()
                     soundManager.forceStartMusic(); onMenuClick() 
                 },
                 showSettings = true,
@@ -513,19 +524,23 @@ fun LevelScreen(
                 onRestart = { 
                     viewModel.restartGame() 
                 },
+                onRematch = if (duelViewModel != null) { { duelViewModel.requestRematch() } } else null,
+                isRematchAccepted = isRematchAcceptedByOpponent,
                 onNextLevel = if (gameState == GameState.WON && currentGameMode == GameMode.ADVENTURE && currentLevelId < AdventureLevels.levels.size) {
                     { 
                         (viewModel as? AdventureViewModel)?.loadAdventureLevel(currentLevelId + 1) 
                     }
                 } else null,
                 onExit = { 
+                    duelViewModel?.resetMatchmaking()
                     onMenuClick() 
                 },
                 score = score,
                 isWin = gameState == GameState.WON,
                 isAdventure = viewModel.gameMode == GameMode.ADVENTURE,
+                isDuel = duelViewModel != null,
                 stars = if (viewModel is AdventureViewModel) viewModel.starsEarned else 0,
-                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else { { 
+                onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else if(duelViewModel != null) null else { { 
                     onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } 
                 } }
             )
@@ -552,6 +567,129 @@ fun LevelScreen(
                 soundManager = soundManager
             )
         }
+
+        // ✅ Nueva Presentación VS con Barra de Carga
+        if (isShowingVS) {
+            VSPresentationOverlay(
+                myName = viewModel.authManager.currentUser?.displayName ?: "Tú",
+                myAvatar = viewModel.authManager.currentUser?.photoUrl?.toString(),
+                opponentName = opponentState?.displayName ?: "Oponente",
+                opponentAvatar = opponentState?.avatarUrl,
+                progress = matchLoadingProgress
+            )
+        }
+    }
+}
+
+@Composable
+fun VSPresentationOverlay(
+    myName: String,
+    myAvatar: String?,
+    opponentName: String,
+    opponentAvatar: String?,
+    progress: Float
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(colors = listOf(Color(0xFF1A237E), Color(0xFF000000)))),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth().padding(32.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Mi Perfil
+                VSPlayerInfo(name = myName, avatar = myAvatar, isLeft = true)
+
+                // Texto VS con animación
+                val infiniteTransition = rememberInfiniteTransition(label = "vs")
+                val scale by infiniteTransition.animateFloat(
+                    initialValue = 1f, targetValue = 1.3f,
+                    animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "scale"
+                )
+                Text(
+                    "VS",
+                    fontSize = 60.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+                    style = TextStyle(shadow = Shadow(Color.Red, offset = Offset(4f, 4f), blurRadius = 8f))
+                )
+
+                // Perfil Oponente
+                VSPlayerInfo(name = opponentName, avatar = opponentAvatar, isLeft = false)
+            }
+
+            Spacer(Modifier.height(60.dp))
+
+            // Barra de Carga Dinámica
+            Text(
+                text = "ESTABLECIENDO CONEXIÓN...",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(12.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.1f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(Brush.horizontalGradient(listOf(Color(0xFF00E676), Color(0xFF69F0AE))))
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "${(progress * 100).toInt()}%",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black
+            )
+        }
+    }
+}
+
+@Composable
+fun VSPlayerInfo(name: String, avatar: String?, isLeft: Boolean) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            modifier = Modifier.size(100.dp),
+            shape = CircleShape,
+            border = BorderStroke(4.dp, if (isLeft) Color(0xFF2196F3) else Color(0xFFF44336)),
+            shadowElevation = 12.dp
+        ) {
+            AsyncImage(
+                model = avatar,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.ic_launcher_background)
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = name.uppercase(),
+            color = Color.White,
+            fontWeight = FontWeight.Black,
+            fontSize = 16.sp,
+            maxLines = 1,
+            style = TextStyle(shadow = Shadow(Color.Black, offset = Offset(2f, 2f)))
+        )
     }
 }
 
@@ -581,7 +719,6 @@ fun QuickShopOverlay(
                 modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // TÍTULO
                 Text(
                     text = stringResource(id = R.string.shop_title).uppercase(),
                     style = TextStyle(
@@ -595,7 +732,6 @@ fun QuickShopOverlay(
                 
                 Spacer(Modifier.height(24.dp))
 
-                // FILA DE ITEMS
                 ItemRow(
                     name = stringResource(id = R.string.shop_item_fireball),
                     desc = if (fireballsBoughtCount < 3) stringResource(id = R.string.shop_desc_fireball) else "Máximo alcanzado",
@@ -621,7 +757,6 @@ fun QuickShopOverlay(
 
                 Spacer(Modifier.height(32.dp))
 
-                // BOTÓN CERRAR (Estilo Menú)
                 ReferenceButton(
                     text = stringResource(id = R.string.shop_close),
                     backgroundColor = SageGreen,
@@ -672,7 +807,6 @@ fun ItemRow(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icono con fondo circular sutil
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -689,7 +823,6 @@ fun ItemRow(
             
             Spacer(Modifier.width(16.dp))
             
-            // Textos (Nombre + Desc)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = name.uppercase(),
@@ -709,7 +842,6 @@ fun ItemRow(
                 )
             }
             
-            // Precio (Moneda)
             if (!isLocked) {
                 Surface(
                     color = Color.White,
@@ -824,10 +956,14 @@ fun OverlayMenu(
     showSettings: Boolean = false, settingsManager: SettingsManager? = null,
     onVolumeChange: (Float) -> Unit = {},
     onShowAd: (() -> Unit)? = null, isAdventure: Boolean = false, stars: Int = 0,
-    onNextLevel: (() -> Unit)? = null
+    onNextLevel: (() -> Unit)? = null,
+    isDuel: Boolean = false,
+    onRematch: (() -> Unit)? = null,
+    isRematchAccepted: Boolean = false
 ) {
     val isPause = title == stringResource(id = R.string.game_pause)
     val scope = rememberCoroutineScope()
+    var rematchRequested by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Surface(
@@ -840,7 +976,6 @@ fun OverlayMenu(
                 modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // TÍTULO
                 Text(
                     text = title.uppercase(),
                     style = TextStyle(
@@ -854,9 +989,20 @@ fun OverlayMenu(
                 
                 Spacer(Modifier.height(24.dp))
 
-                if (score != null) {
+                if (score != null && !isDuel) {
                     Text("PUNTUACIÓN", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Text("$score", color = NavyDark, fontSize = 48.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(24.dp))
+                }
+
+                if (isDuel) {
+                    Text(
+                        text = if (isWin) "¡ERES EL MEJOR!" else "¡MÁS SUERTE LA PRÓXIMA!",
+                        color = if (isWin) SageGreen else Color.Red,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = TextAlign.Center
+                    )
                     Spacer(Modifier.height(24.dp))
                 }
 
@@ -901,31 +1047,56 @@ fun OverlayMenu(
                     Spacer(Modifier.height(24.dp))
                 }
 
-                // BOTÓN CONTINUAR / SIGUIENTE
-                val mainButtonAction = onContinue ?: onNextLevel
-                val mainButtonText = if (onContinue != null) stringResource(id = R.string.game_resume) else stringResource(id = R.string.game_next_level)
-                
-                if (mainButtonAction != null) {
+                if (onContinue != null) {
                     ReferenceButton(
-                        text = mainButtonText,
+                        text = stringResource(id = R.string.game_resume),
                         backgroundColor = SageGreen,
                         contentColor = Color.White,
-                        onClick = mainButtonAction
+                        onClick = onContinue
                     )
                     Spacer(Modifier.height(16.dp))
                 }
 
-                // FILA DE ACCIONES (REINICIAR | SALIR)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (onNextLevel != null) {
                     ReferenceButton(
-                        text = "",
-                        backgroundColor = Color.White,
-                        contentColor = Color.Gray,
-                        icon = Icons.Default.Refresh,
-                        iconColor = Color.Gray,
-                        modifier = Modifier.weight(1f),
-                        onClick = onRestart
+                        text = stringResource(id = R.string.game_next_level),
+                        backgroundColor = SageGreen,
+                        contentColor = Color.White,
+                        onClick = onNextLevel
                     )
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                if (isDuel && onRematch != null) {
+                    val buttonText = when {
+                        isRematchAccepted -> "¡ACEPTANDO...!"
+                        rematchRequested -> "ESPERANDO RIVAL..."
+                        else -> "REVANCHA"
+                    }
+                    ReferenceButton(
+                        text = buttonText,
+                        backgroundColor = if (rematchRequested) Color.LightGray else SageGreen,
+                        contentColor = Color.White,
+                        onClick = { 
+                            rematchRequested = true
+                            onRematch() 
+                        }
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (!isDuel) {
+                        ReferenceButton(
+                            text = "",
+                            backgroundColor = Color.White,
+                            contentColor = Color.Gray,
+                            icon = Icons.Default.Refresh,
+                            iconColor = Color.Gray,
+                            modifier = Modifier.weight(1f),
+                            onClick = onRestart
+                        )
+                    }
                     
                     val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
                     ReferenceButton(

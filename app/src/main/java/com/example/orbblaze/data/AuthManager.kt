@@ -154,7 +154,6 @@ class AuthManager {
                 "status" to "pending",
                 "timestamp" to FieldValue.serverTimestamp()
             )
-            // Escribimos en la colección del destinatario
             db.collection("users").document(toUid).collection("friend_requests").document(fromUid).set(request).await()
             true
         } catch (e: Exception) { false }
@@ -170,16 +169,11 @@ class AuthManager {
                 if (snapshot != null) {
                     val requests = snapshot.documents.mapNotNull { doc ->
                         val data = doc.data?.plus("fromUid" to doc.id)
-                        
-                        // ✅ AUTO-PROCESAMIENTO DE CONFIRMACIONES
-                        // Si recibimos una confirmación de que alguien aceptó nuestra solicitud previa
                         if (data?.get("status") == "accepted_confirmation") {
                             val friendId = doc.id
-                            // 1. Nos añadimos a nosotros mismos
                             db.collection("users").document(uid).update("friends", FieldValue.arrayUnion(friendId))
-                            // 2. Borramos la confirmación
                             db.collection("users").document(uid).collection("friend_requests").document(friendId).delete()
-                            null // No mostrar en la lista de solicitudes
+                            null
                         } else {
                             data
                         }
@@ -194,13 +188,8 @@ class AuthManager {
         val myUid = auth.currentUser?.uid ?: return false
         return try {
             db.runBatch { batch ->
-                // 1. Añadir a mi lista de amigos
                 batch.set(db.collection("users").document(myUid), mapOf("friends" to FieldValue.arrayUnion(friendUid)), SetOptions.merge())
-                
-                // 2. Borrar la solicitud entrante
                 batch.delete(db.collection("users").document(myUid).collection("friend_requests").document(friendUid))
-                
-                // 3. Notificar al otro enviando una "confirmación" a su buzón
                 val confirmation = mapOf(
                     "fromUid" to myUid,
                     "status" to "accepted_confirmation",
@@ -229,7 +218,6 @@ class AuthManager {
             db.runBatch { batch ->
                 batch.update(db.collection("users").document(myUid), "friends", FieldValue.arrayRemove(friendUid))
                 batch.update(db.collection("users").document(myUid), "favoriteFriends", FieldValue.arrayRemove(friendUid))
-                // Nota: El amigo deberá borrarnos manualmente o esperar a una futura Cloud Function
             }.await()
             true
         } catch (e: Exception) { false }
@@ -271,6 +259,59 @@ class AuthManager {
         awaitClose { listener.remove() }
     }
 
+    // --- SISTEMA DE INVITACIONES DE DUELO ---
+
+    suspend fun sendDuelInvitation(toUid: String, roomId: String): Boolean {
+        val fromUid = auth.currentUser?.uid ?: return false
+        return try {
+            val invitation = mapOf(
+                "fromUid" to fromUid,
+                "fromName" to (auth.currentUser?.displayName ?: "Jugador"),
+                "roomId" to roomId,
+                "status" to "pending",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "expiresAt" to System.currentTimeMillis() + (60 * 1000) 
+            )
+            db.collection("users").document(toUid).collection("game_invites").document(fromUid).set(invitation).await()
+            true
+        } catch (e: Exception) { false }
+    }
+
+    fun getDuelInvitations(): Flow<List<Map<String, Any>>> = callbackFlow {
+        val uid = auth.currentUser?.uid ?: return@callbackFlow
+        
+        val listener = db.collection("users").document(uid).collection("game_invites")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                
+                // Margen de 5 minutos para evitar problemas de sincronización de reloj
+                val fiveMinutesAgo = System.currentTimeMillis() - (5 * 60 * 1000)
+                
+                val invites = snapshot?.documents?.mapNotNull { doc ->
+                    val data = doc.data
+                    val expiresAt = data?.get("expiresAt") as? Long ?: 0L
+                    
+                    if (expiresAt > fiveMinutesAgo) {
+                        data?.plus("id" to doc.id)
+                    } else {
+                        doc.reference.delete() // Limpieza automática
+                        null
+                    }
+                } ?: emptyList()
+                trySend(invites)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun deleteDuelInvitation(invitationId: String) {
+        val myUid = auth.currentUser?.uid ?: return
+        try {
+            db.collection("users").document(myUid).collection("game_invites").document(invitationId).delete().await()
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    // --- OTROS ---
+
     suspend fun saveProgressToCloud(data: Map<String, Any>): Boolean {
         val user = auth.currentUser ?: return false
         val extendedData = data.toMutableMap()
@@ -297,7 +338,7 @@ class AuthManager {
         return try {
             val updates = userProfileChangeRequest {
                 displayName?.let { this.displayName = it }
-                photoUrl?.let { this.photoUri = Uri.parse(it) }
+                photoUri = photoUrl?.let { Uri.parse(it) }
             }
             user.updateProfile(updates).await()
             val data = mutableMapOf<String, Any>()

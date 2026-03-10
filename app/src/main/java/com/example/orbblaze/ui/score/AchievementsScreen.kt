@@ -33,7 +33,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.orbblaze.ui.components.ReferenceButton
 import com.example.orbblaze.ui.game.GameViewModel
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
@@ -68,9 +67,9 @@ fun AchievementsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 0.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 0.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Header
                 Box(
@@ -121,7 +120,6 @@ fun AchievementsScreen(
                         )
                     }
 
-                    // Pulido Firebase: Icono de sincronización
                     Icon(
                         imageVector = Icons.Default.CloudDone,
                         contentDescription = null,
@@ -132,7 +130,7 @@ fun AchievementsScreen(
 
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
                     contentPadding = PaddingValues(bottom = 60.dp, top = 12.dp)
                 ) {
                     items(displayList) { achievement ->
@@ -162,21 +160,18 @@ fun AchievementCardPremium(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "scale")
 
-    // EL TRUCO: Box con padding externo para que la sombra no se corte
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp) // Espacio vital para la sombra
+            .padding(horizontal = 8.dp, vertical = 8.dp)
             .graphicsLayer { 
                 scaleX = scale
                 scaleY = scale
             }
             .shadow(
-                elevation = if (isPressed) 4.dp else 12.dp,
+                elevation = if (isPressed) 4.dp else 10.dp,
                 shape = RoundedCornerShape(28.dp),
-                clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.4f),
-                spotColor = Color.Black.copy(alpha = 0.4f)
+                clip = false
             )
             .background(Color.White, shape = RoundedCornerShape(28.dp))
             .clickable(

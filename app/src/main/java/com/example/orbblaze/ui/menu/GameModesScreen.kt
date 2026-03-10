@@ -35,7 +35,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.ui.components.MultiplayerLobby
+import com.example.orbblaze.ui.game.DuelViewModel
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.theme.*
@@ -56,7 +58,9 @@ data class GameModeItem(
 fun GameModesScreen(
     onModeSelect: (String) -> Unit,
     onBackClick: () -> Unit,
-    soundManager: SoundManager
+    soundManager: SoundManager,
+    duelViewModel: DuelViewModel,
+    authManager: AuthManager // ✅ Recibido para pasar al Lobby
 ) {
     var showLockedDialog by remember { mutableStateOf(false) }
     var showLobby by remember { mutableStateOf(false) }
@@ -128,7 +132,18 @@ fun GameModesScreen(
             }
         }
 
-        if (showLobby) { MultiplayerLobby(onClose = { showLobby = false }, onMatchFound = { showLobby = false }, soundManager = soundManager) }
+        if (showLobby) { 
+            MultiplayerLobby(
+                onClose = { showLobby = false }, 
+                onMatchFound = { roomId -> 
+                    showLobby = false
+                    onModeSelect("duel") 
+                }, 
+                soundManager = soundManager,
+                viewModel = duelViewModel,
+                authManager = authManager // ✅ Ahora sí se pasa correctamente
+            ) 
+        }
         if (showLockedDialog) { OrbBlazeLockedDialog(soundManager = soundManager, onDismiss = { showLockedDialog = false }) }
     }
 }

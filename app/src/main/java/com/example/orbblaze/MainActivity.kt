@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -14,7 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -42,7 +47,10 @@ import com.example.orbblaze.ui.theme.OrbBlazeTheme
 import com.example.orbblaze.ui.components.GlobalBackground
 import com.example.orbblaze.ui.components.SyncIndicator
 import com.example.orbblaze.ui.components.AchievementNotification
+import com.example.orbblaze.ui.theme.NavyDark
+import com.example.orbblaze.ui.theme.SageGreen
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -67,7 +75,7 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
                 
-                val isLevel = currentRoute in listOf("game", "time_attack", "adventure_game", "game_adventure")
+                val isLevel = currentRoute in listOf("game", "time_attack", "adventure_game", "game_adventure", "duel")
                 val showBanner = currentRoute != "splash" && currentRoute != null
 
                 LaunchedEffect(Unit) {
@@ -164,10 +172,40 @@ fun AppNavigation(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val scope = rememberCoroutineScope()
 
     val classicVm: ClassicViewModel = hiltViewModel()
     val timeAttackVm: TimeAttackViewModel = hiltViewModel()
     val adventureVm: AdventureViewModel = hiltViewModel()
+    val duelVm: DuelViewModel = hiltViewModel() 
+
+    // ✅ Sistema de Notificación de Invitación de Duelo
+    val duelInvites by authManager.getDuelInvitations().collectAsState(initial = emptyList())
+    
+    if (duelInvites.isNotEmpty()) {
+        val invite = duelInvites.first()
+        DuelInviteDialog(
+            fromName = invite["fromName"] as? String ?: "Jugador",
+            onAccept = {
+                scope.launch {
+                    val roomId = invite["roomId"] as? String
+                    val inviteId = invite["id"] as? String ?: ""
+                    authManager.deleteDuelInvitation(inviteId)
+                    if (roomId != null) {
+                        // ✅ Sincronizamos el ViewModel antes de navegar
+                        duelVm.findMatch(roomId)
+                        navController.navigate("duel")
+                    }
+                }
+            },
+            onReject = {
+                scope.launch {
+                    val inviteId = invite["id"] as? String ?: ""
+                    authManager.deleteDuelInvitation(inviteId)
+                }
+            }
+        )
+    }
 
     LaunchedEffect(navController.currentBackStackEntry) {
         soundManager.refreshSettings()
@@ -243,7 +281,9 @@ fun AppNavigation(
                     navController.navigate(mode)
                 },
                 onBackClick = { navController.popBackStack() },
-                soundManager = soundManager
+                soundManager = soundManager,
+                duelViewModel = duelVm,
+                authManager = authManager
             )
         }
         composable("game") {
@@ -276,6 +316,17 @@ fun AppNavigation(
                 }
             )
         }
+        composable("duel") { 
+            LevelScreen(
+                viewModel = duelVm,
+                soundManager = soundManager,
+                onMenuClick = { 
+                    duelVm.resetMatchmaking()
+                    navController.navigate("menu") { popUpTo("menu") { inclusive = true } } 
+                },
+                onShowAd = { }
+            )
+        }
         composable("shop") {
             ShopScreen(onBackClick = { navController.popBackStack() })
         }
@@ -301,6 +352,28 @@ fun AppNavigation(
                 authManager = authManager,
                 onBackClick = { navController.popBackStack() }
             )
+        }
+    }
+}
+
+@Composable
+fun DuelInviteDialog(fromName: String, onAccept: () -> Unit, onReject: () -> Unit) {
+    Dialog(onDismissRequest = onReject) {
+        Surface(shape = RoundedCornerShape(28.dp), color = Color.White, modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("🔥 ¡DESAFÍO ENTRANTE!", fontWeight = FontWeight.Black, fontSize = 20.sp, color = NavyDark)
+                Spacer(Modifier.height(12.dp))
+                Text("¡$fromName te ha invitado a un duelo 1v1!", textAlign = TextAlign.Center, color = Color.Gray)
+                Spacer(Modifier.height(24.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = onReject, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2))) {
+                        Text("IGNORAR", color = Color.Red, fontWeight = FontWeight.Bold)
+                    }
+                    Button(onClick = onAccept, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = SageGreen)) {
+                        Text("¡ACEPTAR!", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }

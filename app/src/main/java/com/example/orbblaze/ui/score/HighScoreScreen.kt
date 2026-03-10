@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.SportsKabaddi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,6 +42,7 @@ import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
 import com.example.orbblaze.ui.theme.*
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.firstOrNull
 
 @Composable
 fun HighScoreScreen(
@@ -49,7 +51,7 @@ fun HighScoreScreen(
     leaderboardManager: LeaderboardManager,
     onBackClick: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Clásico, 1: Contra Tiempo, 2: Aventura
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Clásico, 1: Contra Tiempo, 2: Aventura, 3: Duelo
     
     val highScore by settingsManager.highScoreFlow.collectAsState(initial = 0)
     val highScoreTime by settingsManager.highScoreTimeFlow.collectAsState(initial = 0)
@@ -65,6 +67,13 @@ fun HighScoreScreen(
     val timeAttackLeaderboard by produceState<List<LeaderboardEntry>?>(initialValue = null, leaderboardManager) {
         leaderboardManager.getLeaderboard("TIME_ATTACK").catch { 
             Log.e("HighScoreScreen", "Error cargando Time Attack: ${it.message}")
+            emit(emptyList()) 
+        }.collect { value = it }
+    }
+
+    val duelLeaderboard by produceState<List<LeaderboardEntry>?>(initialValue = null, leaderboardManager) {
+        leaderboardManager.getLeaderboard("DUEL").catch { 
+            Log.e("HighScoreScreen", "Error cargando Duel: ${it.message}")
             emit(emptyList()) 
         }.collect { value = it }
     }
@@ -141,35 +150,64 @@ fun HighScoreScreen(
 
                 Surface(color = Color.White.copy(alpha = 0.1f), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Row(modifier = Modifier.fillMaxSize()) {
-                        TabItem(text = "CLÁSICO", isSelected = selectedTab == 0, modifier = Modifier.weight(1f)) { selectedTab = 0; soundManager.play(SoundType.POP) }
+                        TabItem(text = "CLASSIC", isSelected = selectedTab == 0, modifier = Modifier.weight(1f)) { selectedTab = 0; soundManager.play(SoundType.POP) }
                         TabItem(text = "C/TIEMPO", isSelected = selectedTab == 1, modifier = Modifier.weight(1f)) { selectedTab = 1; soundManager.play(SoundType.POP) }
-                        TabItem(text = "AVENTURA", isSelected = selectedTab == 2, modifier = Modifier.weight(1f)) { selectedTab = 2; soundManager.play(SoundType.POP) }
+                        TabItem(text = "ADVENTURE", isSelected = selectedTab == 2, modifier = Modifier.weight(1f)) { selectedTab = 2; soundManager.play(SoundType.POP) }
+                        TabItem(text = "DUEL", isSelected = selectedTab == 3, modifier = Modifier.weight(1f)) { selectedTab = 3; soundManager.play(SoundType.POP) }
                     }
                 }
 
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    val leaderboard = when(selectedTab) {
+                    val leaderboardRaw = when(selectedTab) {
                         0 -> classicLeaderboard
                         1 -> timeAttackLeaderboard
+                        3 -> duelLeaderboard
                         else -> emptyList()
                     }
                     
-                    val myRecord = when(selectedTab) {
-                        0 -> highScore.toString()
-                        1 -> highScoreTime.toString()
-                        else -> "NIVEL $adventureProgress"
+                    var myRecord by remember { mutableStateOf("") }
+                    var myUid by remember { mutableStateOf<String?>(null) }
+                    
+                    LaunchedEffect(selectedTab, highScore, highScoreTime, adventureProgress, duelLeaderboard) {
+                        val uid = settingsManager.lastKnownUidFlow.firstOrNull()
+                        myUid = uid
+                        myRecord = when(selectedTab) {
+                            0 -> highScore.toString()
+                            1 -> highScoreTime.toString()
+                            3 -> {
+                                val myDuelEntry = duelLeaderboard?.find { it.userId == uid }
+                                (myDuelEntry?.score ?: 1000).toString()
+                            }
+                            else -> "NIVEL $adventureProgress"
+                        }
+                    }
+
+                    // ✅ Lógica para inyectarme en el Top Mundial de Duelo si no estoy pero tengo puntos
+                    val leaderboard = remember(leaderboardRaw, selectedTab, myUid, myRecord) {
+                        if (selectedTab == 3 && leaderboardRaw != null && myUid != null) {
+                            val exists = leaderboardRaw.any { it.userId == myUid }
+                            if (!exists) {
+                                val myEntry = LeaderboardEntry(
+                                    userId = myUid!!,
+                                    username = "TÚ",
+                                    score = myRecord.toIntOrNull() ?: 1000
+                                )
+                                (leaderboardRaw + myEntry).sortedByDescending { it.score }
+                            } else leaderboardRaw
+                        } else leaderboardRaw
                     }
                     
                     val modeColor = when(selectedTab) {
                         0 -> SageGreen
                         1 -> Color(0xFF00E676)
+                        3 -> Color(0xFFF44336)
                         else -> Color(0xFFFFD700)
                     }
 
                     LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
                         item {
-                            Text("MI RÉCORD", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
-                            MyRecordCard(value = myRecord, color = modeColor, fontScale = fontScale)
+                            Text(if(selectedTab == 3) "MI RATING" else "MI RÉCORD", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
+                            MyRecordCard(value = myRecord, color = modeColor, fontScale = fontScale, isDuel = selectedTab == 3)
                         }
 
                         if (selectedTab != 2) {
@@ -192,7 +230,7 @@ fun HighScoreScreen(
                                 }
                             } else {
                                 itemsIndexed(leaderboard) { index, entry ->
-                                    LeaderboardRow(rank = index + 1, entry = entry, fontScale = fontScale)
+                                    LeaderboardRow(rank = index + 1, entry = entry, fontScale = fontScale, isDuel = selectedTab == 3, isMe = entry.userId == myUid)
                                 }
                             }
                         }
@@ -208,20 +246,20 @@ fun TabItem(text: String, isSelected: Boolean, modifier: Modifier, onClick: () -
     val backgroundColor by animateColorAsState(if (isSelected) Color.White else Color.Transparent, label = "bg")
     val contentColor by animateColorAsState(if (isSelected) NavyDark else Color.White.copy(alpha = 0.6f), label = "content")
     Box(modifier = modifier.fillMaxHeight().padding(4.dp).clip(RoundedCornerShape(20.dp)).background(backgroundColor).clickable { onClick() }, contentAlignment = Alignment.Center) {
-        Text(text, color = contentColor, fontWeight = FontWeight.Black, fontSize = 11.sp)
+        Text(text, color = contentColor, fontWeight = FontWeight.Black, fontSize = 9.sp, textAlign = TextAlign.Center, lineHeight = 10.sp)
     }
 }
 
 @Composable
-fun MyRecordCard(value: String, color: Color, fontScale: Float) {
+fun MyRecordCard(value: String, color: Color, fontScale: Float, isDuel: Boolean = false) {
     Surface(color = Color.White, shape = RoundedCornerShape(28.dp), shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth().height((85 * fontScale).dp)) {
         Row(modifier = Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Star, null, tint = color, modifier = Modifier.size(24.dp))
+                Icon(if(isDuel) Icons.Default.SportsKabaddi else Icons.Default.Star, null, tint = color, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text("PUNTUACIÓN ACTUAL", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(if(isDuel) "RATING ELO" else "PUNTUACIÓN ACTUAL", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Text(value, color = NavyDark, fontSize = 28.sp, fontWeight = FontWeight.Black)
             }
         }
@@ -229,18 +267,23 @@ fun MyRecordCard(value: String, color: Color, fontScale: Float) {
 }
 
 @Composable
-fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, fontScale: Float) {
+fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, fontScale: Float, isDuel: Boolean = false, isMe: Boolean = false) {
     val rankColor = when(rank) {
         1 -> Color(0xFFFFD700) 
         2 -> Color(0xFFC0C0C0) 
         3 -> Color(0xFFCD7F32) 
-        else -> Color.Gray.copy(alpha = 0.3f)
+        else -> if (isMe) Color(0xFFFFD700) else Color.Gray.copy(alpha = 0.3f)
     }
-    Surface(color = Color.White.copy(alpha = 0.9f), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height((65 * fontScale).dp)) {
+    Surface(
+        color = if (isMe) Color(0xFFFFD700) else Color.White.copy(alpha = 0.9f), 
+        shape = RoundedCornerShape(24.dp), 
+        shadowElevation = if (isMe) 8.dp else 2.dp,
+        modifier = Modifier.fillMaxWidth().height((65 * fontScale).dp)
+    ) {
         Row(modifier = Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("#$rank", color = rankColor, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.width(45.dp))
-            Text(entry.username.uppercase(), color = NavyDark, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Text("${entry.score}", color = SageGreen, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text("#$rank", color = if (isMe && rank > 3) Color.White else rankColor, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.width(45.dp))
+            Text(if(isMe) "TÚ" else entry.username.uppercase(), color = if(isMe) Color.White else NavyDark, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Text("${entry.score}", color = if (isMe) Color.White else if(isDuel) Color(0xFFF44336) else SageGreen, fontWeight = FontWeight.Black, fontSize = 18.sp)
         }
     }
 }

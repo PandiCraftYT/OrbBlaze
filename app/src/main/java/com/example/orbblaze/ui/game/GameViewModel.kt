@@ -26,14 +26,14 @@ import javax.inject.Inject
 import kotlin.math.*
 
 enum class GameState { IDLE, PLAYING, WON, LOST }
-enum class GameMode { CLASSIC, TIME_ATTACK, ADVENTURE } 
+enum class GameMode { CLASSIC, TIME_ATTACK, ADVENTURE, DUEL } 
 enum class SoundType { SHOOT, POP, EXPLODE, STICK, WIN, LOSE, SWAP, ACHIEVEMENT }
 
 @HiltViewModel
 open class GameViewModel @Inject constructor(
     application: Application,
     protected val settingsManager: SettingsManager,
-    protected val authManager: AuthManager,
+    val authManager: AuthManager, 
     protected val syncUserDataUseCase: SyncUserDataUseCase,
     protected val unlockAchievementUseCase: UnlockAchievementUseCase,
     protected val leaderboardManager: LeaderboardManager
@@ -370,6 +370,8 @@ open class GameViewModel @Inject constructor(
     }
 
     protected open fun updateHighScore() {
+        if (gameMode == GameMode.DUEL) return // ✅ No actualizar récord ni ranking en modo duelo
+
         viewModelScope.launch {
             val isTimeMode = gameMode == GameMode.TIME_ATTACK
             val currentHigh = if (isTimeMode) settingsManager.highScoreTimeFlow.first() else settingsManager.highScoreFlow.first()
@@ -667,7 +669,7 @@ open class GameViewModel @Inject constructor(
         }
     }
 
-    protected fun checkGameConditions(m: BoardMetricsPx) {
+    protected open fun checkGameConditions(m: BoardMetricsPx) {
         if (gameState != GameState.PLAYING) return
         if (bubblesByPosition.isEmpty()) { 
             gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100)
