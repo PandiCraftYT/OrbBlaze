@@ -1,11 +1,12 @@
 package com.example.orbblaze.data
 
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
 /**
  * Clase unificada para representar tanto el estado de una sala de juego como el estado de un jugador.
- * Se utiliza GameRoom para ambos propósitos para simplificar el modelo de datos.
+ * Corregido: Nombres de variables simplificados para evitar conflictos de mapeo con Firebase.
  */
 data class GameRoom(
     // --- Campos de Estado de Jugador ---
@@ -14,12 +15,23 @@ data class GameRoom(
     val avatarUrl: String? = null,
     val score: Int = 0,
     val dangerLevel: Float = 0f,
-    val isReady: Boolean = false,
+    
+    @get:PropertyName("ready")
+    @set:PropertyName("ready")
+    var ready: Boolean = false,
+    
     val lastAttack: String? = null,
-    val rematchReady: Boolean = false,
+    
+    @get:PropertyName("rematchReady")
+    @set:PropertyName("rematchReady")
+    var rematchReady: Boolean = false,
+    
     val currentReaction: String? = null,
     val reactionTimestamp: Long = 0L,
-    val isBot: Boolean = false,
+    
+    @get:PropertyName("bot")
+    @set:PropertyName("bot")
+    var bot: Boolean = false,
     
     // Estadísticas detalladas
     val bubblesPopped: Int = 0,

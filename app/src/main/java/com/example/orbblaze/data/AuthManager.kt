@@ -300,7 +300,6 @@ class AuthManager {
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) return@addSnapshotListener
                     
-                    // Margen de 5 minutos para evitar problemas de sincronización de reloj
                     val fiveMinutesAgo = System.currentTimeMillis() - (5 * 60 * 1000)
                     
                     val invites = snapshot?.documents?.mapNotNull { doc ->
@@ -310,7 +309,7 @@ class AuthManager {
                         if (expiresAt > fiveMinutesAgo) {
                             data?.plus("id" to doc.id)
                         } else {
-                            doc.reference.delete() // Limpieza automática
+                            doc.reference.delete()
                             null
                         }
                     } ?: emptyList()
@@ -327,15 +326,20 @@ class AuthManager {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    // --- OTROS ---
+    // --- PERFIL Y PROGRESO ---
 
     suspend fun saveProgressToCloud(data: Map<String, Any>): Boolean {
         val user = auth.currentUser ?: return false
         val extendedData = data.toMutableMap()
-        extendedData["displayName"] = user.displayName ?: "Jugador"
+        
+        // Asegurar que siempre haya un nombre válido en Firestore para el ranking
+        val currentName = user.displayName ?: "Jugador"
+        extendedData["displayName"] = currentName
         extendedData["isAnonymous"] = user.isAnonymous
         extendedData["playerId"] = getPlayerId()
+        
         user.photoUrl?.let { extendedData["photoUrl"] = it.toString() }
+        
         return try {
             db.collection("users").document(user.uid).set(extendedData, SetOptions.merge()).await()
             true
@@ -353,18 +357,29 @@ class AuthManager {
     suspend fun updateProfile(displayName: String?, photoUrl: String?): Boolean {
         val user = auth.currentUser ?: return false
         return try {
+            // 1. Actualizar perfil en Firebase Auth
             val updates = userProfileChangeRequest {
                 displayName?.let { this.displayName = it }
                 photoUri = photoUrl?.let { Uri.parse(it) }
             }
             user.updateProfile(updates).await()
+            
+            // 2. Sincronizar con Firestore inmediatamente
             val data = mutableMapOf<String, Any>()
             displayName?.let { data["displayName"] = it }
             photoUrl?.let { data["photoUrl"] = it }
             data["playerId"] = getPlayerId()
+            
             db.collection("users").document(user.uid).set(data, SetOptions.merge()).await()
+            
+            // Forzar recarga local del usuario para reflejar cambios en la UI
+            user.reload().await()
             _user.value = auth.currentUser
+            
             true
-        } catch (e: Exception) { false }
+        } catch (e: Exception) { 
+            e.printStackTrace()
+            false 
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.example.orbblaze.data
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -15,7 +16,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
     private val roomsCollection = db.collection("gameRooms")
 
     fun findOrCreateRoom(targetRoomId: String? = null): Flow<GameRoom?> = callbackFlow {
-         val currentUser = authManager.currentUser
+        val currentUser = authManager.currentUser
         var roomListener: ListenerRegistration? = null
 
         if (currentUser == null) {
@@ -31,7 +32,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
             try {
                 var roomId: String? = null
 
-                // 1. Unirse a sala específica (por Invitación)
                 if (targetRoomId != null) {
                     val joined = db.runTransaction { transaction ->
                         val roomRef = roomsCollection.document(targetRoomId)
@@ -39,7 +39,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
                         if (roomSnap.exists()) {
                             val players = roomSnap.get("players") as? Map<*, *>
                             if (players?.containsKey(currentUser.uid) == true) return@runTransaction true
-                            
+
                             val currentCount = roomSnap.getLong("playerCount") ?: 0
                             if (currentCount == 1L) {
                                 transaction.update(roomRef, "players.${currentUser.uid}", myPlayerState)
@@ -53,7 +53,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
                     if (joined) roomId = targetRoomId
                 }
 
-                // 2. Búsqueda de sala abierta (Matchmaking normal)
                 if (roomId == null && targetRoomId == null) {
                     val openRoomsQuery = roomsCollection
                         .whereEqualTo("status", "WAITING")
@@ -87,7 +86,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
                     }
                 }
 
-                // 3. Crear sala nueva si no se encontró ninguna
                 if (roomId == null) {
                     val newRoomId = targetRoomId ?: UUID.randomUUID().toString()
                     val newRoom = GameRoom(
@@ -100,7 +98,6 @@ class MatchmakingManager(private val authManager: AuthManager) {
                     roomId = newRoomId
                 }
 
-                // 4. Escuchar cambios en la sala asignada
                 val finalRoomId = roomId
                 if (finalRoomId != null) {
                     roomListener = roomsCollection.document(finalRoomId)
@@ -136,12 +133,12 @@ class MatchmakingManager(private val authManager: AuthManager) {
             "https://api.dicebear.com/7.x/bottts/png?seed=B2",
             "https://api.dicebear.com/7.x/bottts/png?seed=B3"
         )
-        
+
         val botState = GameRoom(
             userId = botId,
             displayName = botNames.random(),
             avatarUrl = botAvatars.random(),
-            isBot = true
+            bot = true
         )
 
         try {
@@ -168,17 +165,27 @@ class MatchmakingManager(private val authManager: AuthManager) {
                 val roomSnap = transaction.get(roomRef)
                 if (!roomSnap.exists()) return@runTransaction
 
+                val currentStatus = roomSnap.getString("status") ?: "WAITING"
                 val currentCount = roomSnap.getLong("playerCount") ?: 0
+                
                 if (currentCount <= 1L) {
                     transaction.delete(roomRef)
                 } else {
+                    if (currentStatus == "PLAYING") {
+                        val players = roomSnap.get("players") as? Map<*, *>
+                        val remainingPlayerId = players?.keys?.firstOrNull { it != myId } as? String
+                        
+                        transaction.update(roomRef, "status", "FINISHED")
+                        transaction.update(roomRef, "winnerId", remainingPlayerId)
+                    }
+                    
                     transaction.update(roomRef, "players.$myId", FieldValue.delete())
                     transaction.update(roomRef, "playerCount", currentCount - 1)
-                    
-                    // Si el que se queda es un bot, borrar la sala
+
                     @Suppress("UNCHECKED_CAST")
-                    val players = roomSnap.get("players") as? Map<String, Any>
-                    val remainingPlayers = players?.keys?.filter { it != myId }
+                    val playersSnap = roomSnap.get("players") as? Map<String, Any>
+                    val remainingPlayers = playersSnap?.keys?.filter { it != myId }
+                    
                     if (remainingPlayers?.size == 1 && remainingPlayers.first().startsWith("BOT_")) {
                         transaction.delete(roomRef)
                     }
@@ -223,23 +230,34 @@ class MatchmakingManager(private val authManager: AuthManager) {
             db.runTransaction { transaction ->
                 val roomRef = roomsCollection.document(roomId)
                 val roomSnap = transaction.get(roomRef)
-                val room = roomSnap.toObject(GameRoom::class.java) ?: return@runTransaction
+                if (!roomSnap.exists()) return@runTransaction
+                
+                val roomObj = roomSnap.toObject(GameRoom::class.java) ?: return@runTransaction
 
                 transaction.update(roomRef, "players.$myId.rematchReady", ready)
 
-                val otherPlayer = room.players.values.firstOrNull { it.userId != myId }
-                
-                // Si el otro jugador es un bot, aceptar revancha instantáneamente
-                if (ready && (otherPlayer?.rematchReady == true || otherPlayer?.isBot == true)) {
+                val otherPlayer = roomObj.players.values.firstOrNull { it.userId != myId }
+                // Reforzamos detección de bot por ID además del campo boolean
+                val isOtherBot = otherPlayer?.bot == true || otherPlayer?.userId?.startsWith("BOT_") == true
+
+                if (ready && (otherPlayer?.rematchReady == true || isOtherBot)) {
                     transaction.update(roomRef, "status", "PLAYING")
-                    room.players.keys.forEach { uid ->
+                    transaction.update(roomRef, "winnerId", FieldValue.delete())
+                    transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
+
+                    roomObj.players.keys.forEach { uid ->
                         transaction.update(roomRef, "players.$uid.score", 0)
                         transaction.update(roomRef, "players.$uid.rematchReady", false)
-                        transaction.update(roomRef, "players.$uid.lastAttack", null)
-                        transaction.update(roomRef, "players.$uid.currentReaction", null)
+                        transaction.update(roomRef, "players.$uid.lastAttack", FieldValue.delete())
+                        transaction.update(roomRef, "players.$uid.currentReaction", FieldValue.delete())
+                        transaction.update(roomRef, "players.$uid.dangerLevel", 0f)
+                        transaction.update(roomRef, "players.$uid.bubblesPopped", 0)
+                        transaction.update(roomRef, "players.$uid.maxCombo", 0)
+                        transaction.update(roomRef, "players.$uid.attacksSent", 0)
                     }
                 } else if (ready) {
                     transaction.update(roomRef, "status", "REMATCH_REQUESTED")
+                    transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
                 }
             }.await()
         } catch (e: Exception) {

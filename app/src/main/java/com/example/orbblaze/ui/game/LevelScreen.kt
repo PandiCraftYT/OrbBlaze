@@ -25,12 +25,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -62,6 +65,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.random.Random
 
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
@@ -108,6 +112,9 @@ fun LevelScreen(
     val roomState by duelViewModel?.room?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(null) }
     val myId = viewModel.authManager.currentUser?.uid ?: ""
     val myPlayerState = roomState?.players?.get(myId)
+
+    // ✅ Aviso de Ataque
+    val incomingAttackNotice = duelViewModel?.incomingAttackNotice
 
     var showQuickShop by remember { mutableStateOf(false) }
     var isAiming by remember { mutableStateOf(false) }
@@ -528,6 +535,9 @@ fun LevelScreen(
             )
         }
 
+        // ✅ Notificación de Ataque Recibido
+        AttackWarningOverlay(incomingAttackNotice)
+
         if (gameState == GameState.IDLE && !isShowingVS) {
             if (viewModel.gameMode == GameMode.ADVENTURE) {
                 val advViewModel = viewModel as? AdventureViewModel; val currentLevel = AdventureLevels.levels.find { it.id == advViewModel?.currentLevelId }
@@ -560,7 +570,10 @@ fun LevelScreen(
             )
         }
 
-        if (gameState == GameState.WON || gameState == GameState.LOST) {
+        // ✅ LÓGICA DE SECUENCIA MEJORADA: Esperar a que la animación de rango termine para mostrar el menú
+        val isShowingRankAnim = duelViewModel?.showRankAnimation == true
+        
+        if ((gameState == GameState.WON || gameState == GameState.LOST) && !isShowingRankAnim) {
             val opp = opponentState
             OverlayMenu(
                 title = if (gameState == GameState.WON) stringResource(id = R.string.game_victory) else stringResource(id = R.string.game_over),
@@ -631,19 +644,94 @@ fun LevelScreen(
             )
         }
 
-        // ✅ Nueva Animación de Rango al Terminar
-        if (duelViewModel?.showRankAnimation == true) {
+        // ✅ Animación de Rango (Aparece primero y bloquea el OverlayMenu)
+        if (isShowingRankAnim) {
             RankUpdateOverlay(
-                previousElo = duelViewModel.previousElo,
-                eloChange = duelViewModel.lastEloChange,
+                previousElo = duelViewModel?.previousElo ?: 1000,
+                eloChange = duelViewModel?.lastEloChange ?: 0,
                 soundManager = soundManager,
                 onFinish = {
-                    duelViewModel.showRankAnimation = false
+                    duelViewModel?.showRankAnimation = false
                 }
             )
         }
     }
 }
+
+@Composable
+fun AttackWarningOverlay(notice: String?) {
+    AnimatedVisibility(
+        visible = notice != null,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+        exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
+        modifier = Modifier.fillMaxWidth().padding(top = 120.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+            Surface(
+                color = Color(0xFFEF4444),
+                shape = RoundedCornerShape(16.dp),
+                shadowElevation = 8.dp,
+                border = BorderStroke(2.dp, Color.White.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Whatshot, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = notice ?: "",
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        letterSpacing = 1.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ConfettiView(modifier: Modifier = Modifier) {
+    val particles = remember {
+        List(40) {
+            ConfettiParticle(
+                x = Random.nextFloat(),
+                y = Random.nextFloat() * -1f,
+                color = listOf(Color.Yellow, Color.White, Color.Cyan, Color.Magenta, Color.Green).random(),
+                speed = 0.05f + Random.nextFloat() * 0.1f,
+                rotation = Random.nextFloat() * 360f,
+                size = 5f + Random.nextFloat() * 10f
+            )
+        }
+    }
+    
+    val infiniteTransition = rememberInfiniteTransition(label = "confetti")
+    val time by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing)), label = "time"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        particles.forEach { p ->
+            val currentY = (p.y + (time * p.speed * 20f)) % 1.2f
+            if (currentY in 0f..1f) {
+                rotate(degrees = p.rotation + time * 360f, pivot = Offset(p.x * size.width + p.size/2, currentY * size.height + p.size/2)) {
+                    drawRect(
+                        color = p.color,
+                        topLeft = Offset(p.x * size.width, currentY * size.height),
+                        size = Size(p.size, p.size)
+                    )
+                }
+            }
+        }
+    }
+}
+
+data class ConfettiParticle(
+    val x: Float, val y: Float, val color: Color, val speed: Float, val rotation: Float, val size: Float
+)
 
 @Composable
 fun RankUpdateOverlay(
@@ -1245,54 +1333,97 @@ fun OverlayMenu(
     val scope = rememberCoroutineScope()
     var rematchRequested by remember { mutableStateOf(false) }
 
+    val appearScale by animateFloatAsState(targetValue = 1f, animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f), label = "pop")
+    val resplandorAlpha by animateFloatAsState(targetValue = 0.4f, animationSpec = tween(1000), label = "aura")
+
+    // PUNTUACIÓN ANIMADA
+    var animatedScore by remember { mutableIntStateOf(0) }
+    LaunchedEffect(score) {
+        if (score != null) {
+            delay(500)
+            val step = (score / 30).coerceAtLeast(1)
+            while (animatedScore < score) {
+                animatedScore = (animatedScore + step).coerceAtMost(score)
+                delay(16)
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
+        if (isWin) ConfettiView()
+
+        // Resplandor de fondo
+        Box(
+            modifier = Modifier
+                .size(500.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            (if (isWin) Color(0xFFFFD700) else Color(0xFF3F51B5)).copy(alpha = resplandorAlpha),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
         Surface(
-            shape = RoundedCornerShape(40.dp),
+            shape = RoundedCornerShape(48.dp),
             color = Color.White,
-            shadowElevation = 12.dp,
-            modifier = Modifier.width(360.dp)
+            shadowElevation = 20.dp,
+            modifier = Modifier.width(360.dp).graphicsLayer { scaleX = appearScale; scaleY = appearScale },
+            border = BorderStroke(3.dp, if (isWin) Color(0xFFFFD700) else Color.Transparent)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // ICONO DE ESTADO
+                Box(
+                    modifier = Modifier.size(80.dp).clip(CircleShape).background(if (isWin) Color(0xFFFFF9C4) else Color(0xFFFEE2E2)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isWin) Icons.Default.EmojiEvents else Icons.Default.SentimentVeryDissatisfied,
+                        contentDescription = null,
+                        tint = if (isWin) Color(0xFFFFC107) else Color(0xFFEF4444),
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
                 Text(
                     text = title.uppercase(),
-                    style = TextStyle(
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Black,
-                        color = NavyDark,
-                        letterSpacing = 1.sp
-                    )
+                    style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Black, color = NavyDark, letterSpacing = 2.sp)
                 )
                 Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(32.dp))
 
                 if (isDuel && opponentStats != null && myStats != null) {
                     DuelResultsTable(myStats, opponentStats, isWin)
                     Spacer(Modifier.height(24.dp))
                 } else if (score != null) {
                     Text("PUNTUACIÓN", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Text("$score", color = NavyDark, fontSize = 48.sp, fontWeight = FontWeight.Black)
+                    Text("$animatedScore", color = NavyDark, fontSize = 56.sp, fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(24.dp))
                 }
 
                 if (isAdventure && isWin && stars > 0) {
-                    val starsList = remember(stars) { List(3) { it < stars } }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        starsList.forEachIndexed { i, isFilled ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        for (i in 0 until 3) {
+                            val isFilled = i < stars
                             val scale = remember { Animatable(0f) }
-                            LaunchedEffect(Unit) { delay(i * 150L); scale.animateTo(1f, spring(0.6f, 300f)) }
+                            LaunchedEffect(Unit) { delay(i * 200L + 1000L); scale.animateTo(1.2f, tween(300)).also { scale.animateTo(1f, tween(100)) } }
                             Icon(
                                 imageVector = Icons.Default.Star,
                                 contentDescription = null,
-                                tint = if (isFilled) StarGold else Color.LightGray.copy(alpha = 0.3f),
-                                modifier = Modifier.size(32.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+                                tint = if (isFilled) StarGold else Color.LightGray.copy(alpha = 0.2f),
+                                modifier = Modifier.size(44.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }
                             )
                         }
                     }
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(32.dp))
                 }
 
                 if (showSettings && settingsManager != null) {
@@ -1300,86 +1431,68 @@ fun OverlayMenu(
                     val colorBlind by settingsManager.colorBlindModeFlow.collectAsState(false)
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text("SONIDO", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Slider(
-                            value = sfxVol,
-                            onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } },
-                            colors = SliderDefaults.colors(thumbColor = SageGreen, activeTrackColor = SageGreen, inactiveTrackColor = SageGreen.copy(alpha = 0.2f))
-                        )
+                        Slider(value = sfxVol, onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } }, colors = SliderDefaults.colors(thumbColor = SageGreen, activeTrackColor = SageGreen))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("DALTONISMO", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = colorBlind,
-                                onCheckedChange = {
-                                    scope.launch { settingsManager.setColorBlindMode(it) }
-                                },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SageGreen)
-                            )
+                            Switch(checked = colorBlind, onCheckedChange = { scope.launch { settingsManager.setColorBlindMode(it) } }, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SageGreen))
                         }
                     }
                     Spacer(Modifier.height(24.dp))
                 }
 
+                // BOTONES CON ANIMACIÓN
+                val infinitePulse = rememberInfiniteTransition(label = "btn_pulse")
+                val pulseScale by infinitePulse.animateFloat(initialValue = 1f, targetValue = 1.05f, animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "p")
+
                 if (onContinue != null) {
-                    ReferenceButton(
-                        text = stringResource(id = R.string.game_resume),
-                        backgroundColor = SageGreen,
-                        contentColor = Color.White,
-                        onClick = onContinue
-                    )
+                    ReferenceButton(text = stringResource(id = R.string.game_resume), backgroundColor = SageGreen, contentColor = Color.White, onClick = onContinue)
                     Spacer(Modifier.height(16.dp))
                 }
 
                 if (onNextLevel != null) {
                     ReferenceButton(
-                        text = stringResource(id = R.string.game_next_level),
-                        backgroundColor = SageGreen,
-                        contentColor = Color.White,
+                        text = stringResource(id = R.string.game_next_level), 
+                        backgroundColor = SageGreen, 
+                        contentColor = Color.White, 
+                        modifier = Modifier.graphicsLayer { scaleX = pulseScale; scaleY = pulseScale },
                         onClick = onNextLevel
                     )
                     Spacer(Modifier.height(16.dp))
                 }
 
                 if (isDuel && onRematch != null) {
-                    val buttonText = when {
-                        isRematchAccepted -> "¡ACEPTANDO...!"
-                        rematchRequested -> "ESPERANDO RIVAL..."
-                        else -> "REVANCHA"
-                    }
                     ReferenceButton(
-                        text = buttonText,
+                        text = if (isRematchAccepted) "¡ACEPTANDO...!" else if (rematchRequested) "ESPERANDO RIVAL..." else "REVANCHA",
                         backgroundColor = if (rematchRequested) Color.LightGray else SageGreen,
                         contentColor = Color.White,
-                        onClick = {
-                            rematchRequested = true
-                            onRematch()
-                        }
+                        modifier = Modifier.graphicsLayer { if(!rematchRequested) { scaleX = pulseScale; scaleY = pulseScale } },
+                        onClick = { rematchRequested = true; onRematch() }
                     )
                     Spacer(Modifier.height(16.dp))
                 }
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (!isDuel) {
-                        ReferenceButton(
-                            text = "",
-                            backgroundColor = Color.White,
-                            contentColor = Color.Gray,
-                            icon = Icons.Default.Refresh,
-                            iconColor = Color.Gray,
-                            modifier = Modifier.weight(1f),
-                            onClick = onRestart
-                        )
+                        Surface(
+                            modifier = Modifier.weight(1f).height(60.dp).clickable { onRestart() },
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color(0xFFF5F5F5)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Refresh, null, tint = Color.Gray)
+                            }
+                        }
                     }
 
-                    val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
-                    ReferenceButton(
-                        text = "",
-                        backgroundColor = Color.White,
-                        contentColor = Color.Gray,
-                        icon = exitIcon,
-                        iconColor = Color.Gray,
-                        modifier = Modifier.weight(1f),
-                        onClick = onExit
-                    )
+                    Surface(
+                        modifier = Modifier.weight(1f).height(60.dp).clickable { onExit() },
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color(0xFFF5F5F5)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home, null, tint = Color.Gray)
+                        }
+                    }
                 }
             }
         }
@@ -1571,3 +1684,4 @@ fun FireballRenderer(modifier: Modifier = Modifier) {
         drawCircle(brush = Brush.radialGradient(colorStops = arrayOf(0.0f to Color.White, 0.4f to Color(0xFFFFEB3B), 1.0f to Color(0xFFFF5722)), center = center, radius = r * 0.9f))
     }
 }
+
