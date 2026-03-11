@@ -60,11 +60,15 @@ fun GameModesScreen(
     onBackClick: () -> Unit,
     soundManager: SoundManager,
     duelViewModel: DuelViewModel,
-    authManager: AuthManager // ✅ Recibido para pasar al Lobby
+    authManager: AuthManager 
 ) {
     var showLockedDialog by remember { mutableStateOf(false) }
+    var showLoginRequiredDialog by remember { mutableStateOf(false) }
     var showLobby by remember { mutableStateOf(false) }
     
+    val currentUser by authManager.user.collectAsState()
+    val isAnonymous = currentUser == null || currentUser?.isAnonymous == true
+
     val infiniteTransition = rememberInfiniteTransition(label = "modes_animations")
     val titleFloat by infiniteTransition.animateFloat(
         initialValue = -8f, targetValue = 8f,
@@ -76,7 +80,7 @@ fun GameModesScreen(
     val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
 
     val modes = listOf(
-        GameModeItem("duel", "DUELO 1V1", "¡Compite en vivo contra el mundo!", Brush.linearGradient(colors = listOf(Color(0xFFFF5722), Color(0xFFFFAB40))), Icons.Default.Public, isNew = true, isWide = true),
+        GameModeItem("duel", "DUELO 1V1", "¡Compite en vivo contra el mundo!", Brush.linearGradient(colors = listOf(Color(0xFFFF5722), Color(0xFFFFAB40))), Icons.Default.Public, isNew = true, isWide = true, isLocked = isAnonymous),
         GameModeItem("game", "CLÁSICO", "¡Sobrevive!", Brush.linearGradient(colors = listOf(SageGreen, Color(0xFFB2DFDB))), Icons.Default.PlayArrow, isPrincipal = true),
         GameModeItem("time_attack", "TIEMPO", "¡Sé rápido!", Brush.linearGradient(colors = listOf(Color(0xFF00E676), Color(0xFF69F0AE))), Icons.Default.Timer),
         GameModeItem("adventure_map", "MODO AVENTURA", "¡Explora mundos y supera retos!", Brush.linearGradient(colors = listOf(Color(0xFFFFD700), Color(0xFFFFF176))), Icons.Default.Map, isWide = true),
@@ -122,7 +126,10 @@ fun GameModesScreen(
                             mode = mode,
                             soundManager = soundManager,
                             onClick = {
-                                if (mode.id == "duel") showLobby = true
+                                if (mode.id == "duel") {
+                                    if (isAnonymous) showLoginRequiredDialog = true
+                                    else showLobby = true
+                                }
                                 else if (mode.isLocked) showLockedDialog = true
                                 else onModeSelect(mode.id)
                             }
@@ -141,10 +148,16 @@ fun GameModesScreen(
                 }, 
                 soundManager = soundManager,
                 viewModel = duelViewModel,
-                authManager = authManager // ✅ Ahora sí se pasa correctamente
+                authManager = authManager 
             ) 
         }
         if (showLockedDialog) { OrbBlazeLockedDialog(soundManager = soundManager, onDismiss = { showLockedDialog = false }) }
+        if (showLoginRequiredDialog) {
+            AuthRequiredDialog(
+                soundManager = soundManager,
+                onDismiss = { showLoginRequiredDialog = false }
+            )
+        }
     }
 }
 
@@ -173,6 +186,8 @@ fun ModeFlexibleCard(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                // ✅ Reducir opacidad si está bloqueado
+                alpha = if (mode.isLocked) 0.75f else 1f
             }
             .then(if (mode.isWide) Modifier.height((115 * fontScale).dp) else Modifier.aspectRatio(1f))
             .shadow(
@@ -183,11 +198,15 @@ fun ModeFlexibleCard(
                 spotColor = Color.Black.copy(alpha = 0.4f)
             )
             .clip(RoundedCornerShape(32.dp))
-            .background(mode.brush)
+            // ✅ Fondo gris si está bloqueado
+            .background(
+                if (mode.isLocked) Brush.linearGradient(colors = listOf(Color(0xFF757575), Color(0xFF9E9E9E)))
+                else mode.brush
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = { if (!mode.isLocked) { soundManager.play(SoundType.POP); onClick() } else onClick() }
+                onClick = { if (!mode.isLocked || mode.id == "duel") { soundManager.play(SoundType.POP); onClick() } else onClick() }
             )
     ) {
         // Icono de fondo decorativo
@@ -232,7 +251,7 @@ fun ModeFlexibleCard(
                     )
                 )
                 Text(
-                    text = if (mode.isLocked) "PRÓXIMAMENTE" else mode.description,
+                    text = if (mode.isLocked && mode.id != "duel") "PRÓXIMAMENTE" else mode.description,
                     style = TextStyle(
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = (if (mode.isWide) 12 else 11).sp * fontScale,
@@ -260,6 +279,35 @@ fun ModeFlexibleCard(
             }
         }
     }
+}
+
+@Composable
+fun AuthRequiredDialog(soundManager: SoundManager, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { soundManager.play(SoundType.POP); onDismiss() }) {
+                Text("ENTENDIDO", color = Color(0xFF1A237E), fontWeight = FontWeight.ExtraBold)
+            }
+        },
+        title = { 
+            Text(
+                "CUENTA REQUERIDA", 
+                fontWeight = FontWeight.Black, 
+                textAlign = TextAlign.Center, 
+                modifier = Modifier.fillMaxWidth()
+            ) 
+        },
+        text = { 
+            Text(
+                "Para acceder al modo DUELO 1V1 y competir contra otros jugadores, necesitas iniciar sesión con una cuenta.", 
+                textAlign = TextAlign.Center, 
+                modifier = Modifier.fillMaxWidth()
+            ) 
+        },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = Color.White
+    )
 }
 
 @Composable

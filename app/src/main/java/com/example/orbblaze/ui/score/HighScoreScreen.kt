@@ -155,9 +155,9 @@ fun HighScoreScreen(
                 Surface(color = Color.White.copy(alpha = 0.1f), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Row(modifier = Modifier.fillMaxSize()) {
                         TabItem(text = "CLASSIC", isSelected = selectedTab == 0, modifier = Modifier.weight(1f)) { selectedTab = 0; soundManager.play(SoundType.POP) }
-                        TabItem(text = "C/TIEMPO", isSelected = selectedTab == 1, modifier = Modifier.weight(1f)) { selectedTab = 1; soundManager.play(SoundType.POP) }
+                        TabItem(text = "CONTRA TIEMPO", isSelected = selectedTab == 1, modifier = Modifier.weight(1f)) { selectedTab = 1; soundManager.play(SoundType.POP) }
                         TabItem(text = "ADVENTURE", isSelected = selectedTab == 2, modifier = Modifier.weight(1f)) { selectedTab = 2; soundManager.play(SoundType.POP) }
-                        TabItem(text = "DUEL", isSelected = selectedTab == 3, modifier = Modifier.weight(1f)) { selectedTab = 3; soundManager.play(SoundType.POP) }
+                        TabItem(text = "DUEL 1v1 ", isSelected = selectedTab == 3, modifier = Modifier.weight(1f)) { selectedTab = 3; soundManager.play(SoundType.POP) }
                     }
                 }
 
@@ -302,14 +302,17 @@ fun MyRecordCard(value: String, color: Color, fontScale: Float, isDuel: Boolean 
 fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, fontScale: Float, isDuel: Boolean = false, isMe: Boolean = false) {
     val rankInfo = if (isDuel) Rank.fromElo(entry.score) else Rank.fromScore(entry.score)
     val positionColor = when(rank) {
-        1 -> Color(0xFFFFD700) 
+        1 -> Color(0xFFFFE700)
         2 -> Color(0xFFC0C0C0) 
         3 -> Color(0xFFCD7F32) 
         else -> if (isMe) Color(0xFFFFD700) else Color.Gray.copy(alpha = 0.3f)
     }
     
+    // ✅ Color de fondo para "TU" más oscuro para que el texto resalte mejor
+    val myBackgroundColor = Color(0xFF3F51B5) // Un ámbar/amarillo más saturado y oscuro que el FFD700
+
     Surface(
-        color = if (isMe) Color(0xFFFFD700) else Color.White.copy(alpha = 0.9f),
+        color = if (isMe) myBackgroundColor else Color.White.copy(alpha = 0.9f),
         shape = RoundedCornerShape(24.dp), 
         shadowElevation = if (isMe) 8.dp else 2.dp,
         modifier = Modifier.fillMaxWidth().height((70 * fontScale).dp)

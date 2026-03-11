@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -160,7 +161,7 @@ fun LevelScreen(
 
     val lightTime by infiniteTransition.animateFloat(
         initialValue = 0f, targetValue = 360f,
-        animationSpec = infiniteRepeatable(animation = tween(4000, easing = LinearEasing), repeatMode = RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(animation = tween(4000, easing = LinearEasing), RepeatMode.Restart),
         label = "light_move"
     )
 
@@ -174,13 +175,13 @@ fun LevelScreen(
 
     val indicatorAlpha by infiniteTransition.animateFloat(
         initialValue = 0.3f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), RepeatMode.Reverse),
         label = "indicator_pulse"
     )
 
     val redLineAlpha by infiniteTransition.animateFloat(
         initialValue = 0.3f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(animation = tween(800, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(animation = tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "danger_line_pulse"
     )
 
@@ -622,8 +623,10 @@ fun LevelScreen(
             VSPresentationOverlay(
                 myName = viewModel.authManager.currentUser?.displayName ?: "Tú",
                 myAvatar = viewModel.authManager.currentUser?.photoUrl?.toString(),
+                myElo = myPlayerState?.score ?: 1000,
                 opponentName = opponentState?.displayName ?: "Oponente",
                 opponentAvatar = opponentState?.avatarUrl,
+                opponentElo = opponentState?.score ?: 1000,
                 progress = matchLoadingProgress
             )
         }
@@ -758,80 +761,183 @@ fun RankUpdateOverlay(
 fun VSPresentationOverlay(
     myName: String,
     myAvatar: String?,
+    myElo: Int,
     opponentName: String,
     opponentAvatar: String?,
+    opponentElo: Int,
     progress: Float
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(colors = listOf(Color(0xFF1A237E), Color(0xFF000000)))),
+            .background(Color(0xFF0A0B1E)), // Fondo oscuro premium
         contentAlignment = Alignment.Center
     ) {
+        // Elementos decorativos de fondo (rayos/luces)
+        Box(modifier = Modifier.fillMaxSize()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val diagonalPath = Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(size.width, size.height)
+                }
+                drawPath(
+                    path = diagonalPath,
+                    brush = Brush.linearGradient(listOf(Color(0xFF2196F3).copy(alpha = 0.1f), Color(0xFFF44336).copy(alpha = 0.1f))),
+                    style = Stroke(width = 200.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth().padding(32.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
+            // CABECERA VERSUS
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Mi Perfil
-                VSPlayerInfo(name = myName, avatar = myAvatar, isLeft = true)
+                // MI JUGADOR
+                VSPlayerLargeCard(name = myName, avatar = myAvatar, elo = myElo, color = Color(0xFF2196F3), isLeft = true)
 
-                // Texto VS con animación
-                val infiniteTransition = rememberInfiniteTransition(label = "vs")
-                val scale by infiniteTransition.animateFloat(
-                    initialValue = 1f, targetValue = 1.3f,
-                    animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "scale"
-                )
-                Text(
-                    "VS",
-                    fontSize = 60.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
-                    style = TextStyle(shadow = Shadow(Color.Red, offset = Offset(4f, 4f), blurRadius = 8f))
-                )
+                // TEXTO VS CENTRAL
+                Box(contentAlignment = Alignment.Center) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "vs_anim")
+                    val vsScale by infiniteTransition.animateFloat(
+                        initialValue = 1f, targetValue = 1.2f,
+                        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "scale"
+                    )
+                    
+                    Text(
+                        text = "VS",
+                        fontSize = 72.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        modifier = Modifier.graphicsLayer { scaleX = vsScale; scaleY = vsScale },
+                        style = TextStyle(
+                            shadow = Shadow(Color.Red.copy(alpha = 0.8f), blurRadius = 20f)
+                        )
+                    )
+                }
 
-                // Perfil Oponente
-                VSPlayerInfo(name = opponentName, avatar = opponentAvatar, isLeft = false)
+                // OPONENTE
+                VSPlayerLargeCard(name = opponentName, avatar = opponentAvatar, elo = opponentElo, color = Color(0xFFF44336), isLeft = false)
             }
 
-            Spacer(Modifier.height(60.dp))
+            Spacer(Modifier.height(80.dp))
 
-            // Barra de Carga Dinámica
-            Text(
-                text = "ESTABLECIENDO CONEXIÓN...",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            Spacer(Modifier.height(16.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.8f)
-                    .height(12.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.1f))
-            ) {
+            // BARRA DE CARGA REFINADA
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth(0.7f)) {
+                Text(
+                    text = "PREPARANDO ARENA...",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 4.sp
+                )
+                
+                Spacer(Modifier.height(16.dp))
+                
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(progress)
-                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .height(6.dp)
                         .clip(CircleShape)
-                        .background(Brush.horizontalGradient(listOf(Color(0xFF00E676), Color(0xFF69F0AE))))
+                        .background(Color.White.copy(alpha = 0.05f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .clip(CircleShape)
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF64B5F6), Color(0xFFEF5350))))
+                    )
+                }
+                
+                Spacer(Modifier.height(12.dp))
+                
+                Text(
+                    text = "${(progress * 100).toInt()}%",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 4f))
                 )
             }
-            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+fun VSPlayerLargeCard(name: String, avatar: String?, elo: Int, color: Color, isLeft: Boolean) {
+    val rank = Rank.fromElo(elo)
+    
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Marco de Avatar con Rango
+        Box(contentAlignment = Alignment.Center) {
+            // Resplandor de Rango
+            Box(
+                modifier = Modifier
+                    .size(115.dp)
+                    .background(Brush.radialGradient(listOf(rank.color.copy(alpha = 0.3f), Color.Transparent)), CircleShape)
+            )
+            
+            Surface(
+                modifier = Modifier.size(100.dp),
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.1f),
+                border = BorderStroke(3.dp, rank.color),
+                shadowElevation = 10.dp
+            ) {
+                AsyncImage(
+                    model = avatar,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(R.drawable.ic_launcher_background)
+                )
+            }
+            
+            // Medalla de Rango
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .align(if (isLeft) Alignment.BottomEnd else Alignment.BottomStart)
+                    .background(Color.White, CircleShape)
+                    .border(1.dp, rank.color, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(rank.medalName, fontSize = 18.sp)
+            }
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        Text(
+            text = name.uppercase(),
+            color = Color.White,
+            fontWeight = FontWeight.Black,
+            fontSize = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 120.dp),
+            textAlign = TextAlign.Center
+        )
+        
+        Surface(
+            color = rank.color.copy(alpha = 0.2f),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.padding(top = 4.dp)
+        ) {
             Text(
-                text = "${(progress * 100).toInt()}%",
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black
+                text = rank.title,
+                color = rank.color,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                letterSpacing = 1.sp
             )
         }
     }
@@ -1449,7 +1555,18 @@ fun FireballRenderer(modifier: Modifier = Modifier) {
     val pulse by infiniteTransition.animateFloat(initialValue = 0.9f, targetValue = 1.1f, animationSpec = infiniteRepeatable(tween(100, easing = LinearEasing), RepeatMode.Reverse), label = "pulse")
     Canvas(modifier = modifier) {
         val r = size.minDimension / 2; val cx = size.width / 2; val cy = size.height / 2
-        drawPath(path = Path().apply { moveTo(cx - r * 0.5f, cy); quadraticTo(cx, cy + r * 6f, cx + r * 0.5f, cy); close() }, brush = Brush.verticalGradient(colors = listOf(Color(0xFFFFEB3B), Color(0xFFFF5722), Color.Transparent), startY = cy, endY = cy + r * 5f))
+        drawPath(
+            path = Path().apply {
+                moveTo(cx - r * 0.5f, cy)
+                quadraticTo(cx, cy + r * 6f, cx + r * 0.5f, cy)
+                close()
+            },
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0xFFFFEB3B), Color(0xFFFF5722), Color.Transparent),
+                startY = cy,
+                endY = cy + r * 5f
+            )
+        )
         drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0xFFFF5722).copy(alpha = 0.6f), Color.Transparent), center = center, radius = r * 1.5f * pulse))
         drawCircle(brush = Brush.radialGradient(colorStops = arrayOf(0.0f to Color.White, 0.4f to Color(0xFFFFEB3B), 1.0f to Color(0xFFFF5722)), center = center, radius = r * 0.9f))
     }

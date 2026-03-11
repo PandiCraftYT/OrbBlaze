@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,6 +44,7 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.domain.model.Rank
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
@@ -450,79 +452,183 @@ fun FriendProfileDialog(
     val stars = (data["level_stars_all_total"] as? Number)?.toInt() ?: 0 
     val level = (data["adventure_progress"] as? Number)?.toInt() ?: 0
     val coins = (data["coins"] as? Number)?.toInt() ?: 0
+    val duelElo = (data["duel_elo"] as? Number)?.toInt() ?: 1000
+    val rank = Rank.fromElo(duelElo)
 
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(28.dp), color = Color.White, modifier = Modifier.padding(16.dp)) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                AsyncImage(
-                    model = photoUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(100.dp).clip(CircleShape).border(3.dp, if(isFavorite && isFriend) StarGold else Color.LightGray, CircleShape),
-                    contentScale = ContentScale.Crop,
-                    error = painterResource(R.drawable.ic_launcher_background)
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(name, fontWeight = FontWeight.Black, fontSize = 22.sp, color = NavyDark)
-                Text("ID: ORB-${(data["uid"] as String).takeLast(6).uppercase()}", fontSize = 12.sp, color = Color.Gray)
+        Surface(
+            shape = RoundedCornerShape(32.dp), 
+            color = Color(0xFFF8F9FF), // Un blanco azulado muy limpio
+            modifier = Modifier.padding(16.dp).shadow(24.dp, RoundedCornerShape(32.dp))
+        ) {
+            Column(modifier = Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // AVATAR CON ANILLO DE GRADIENTE DEL RANGO
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .size(110.dp)
+                            .background(
+                                Brush.sweepGradient(listOf(rank.color.copy(alpha = 0.6f), rank.color, rank.color.copy(alpha = 0.6f))),
+                                CircleShape
+                            )
+                    )
+                    AsyncImage(
+                        model = photoUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(102.dp)
+                            .clip(CircleShape)
+                            .border(4.dp, Color.White, CircleShape),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.ic_launcher_background)
+                    )
+                    
+                    // Medalla de rango pequeña en la esquina
+                    Box(
+                        modifier = Modifier.size(32.dp).align(Alignment.BottomEnd).offset(x = (-4).dp, y = (-4).dp)
+                            .background(Color.White, CircleShape).border(1.dp, rank.color, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(rank.medalName, fontSize = 16.sp)
+                    }
+                }
                 
                 Spacer(Modifier.height(20.dp))
                 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    StatBox(Icons.Default.Star, "$stars", Color(0xFFFFD700))
-                    StatBox(Icons.Default.Place, "Lvl $level", Color(0xFF2196F3))
-                    StatBox(Icons.Default.ShoppingCart, "$coins", Color(0xFF4CAF50))
+                Text(
+                    text = name, 
+                    fontWeight = FontWeight.Black, 
+                    fontSize = 24.sp, 
+                    color = NavyDark,
+                    textAlign = TextAlign.Center
+                )
+                
+                // RANGO TEXTO
+                Text(
+                    text = "RANGO ${rank.title}",
+                    color = rank.color,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.sp
+                )
+                
+                Surface(
+                    color = Color.Black.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text(
+                        text = "ID: ORB-${(data["uid"] as String).takeLast(6).uppercase()}", 
+                        fontSize = 11.sp, 
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+                
+                Spacer(Modifier.height(28.dp))
+                
+                // STATS CARDS
+                Row(
+                    modifier = Modifier.fillMaxWidth(), 
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(Modifier.weight(1f), Icons.Default.Star, "$stars", "ESTRELLAS", Color(0xFFFFD700))
+                    StatCard(Modifier.weight(1f), Icons.Default.Explore, "Lvl $level", "AVANCE", Color(0xFF2196F3))
+                    StatCard(Modifier.weight(1f), Icons.Default.MonetizationOn, "$coins", "ORBES", Color(0xFF4CAF50))
                 }
 
+                Spacer(Modifier.height(32.dp))
+
                 if (!isMe) {
-                    Spacer(Modifier.height(32.dp))
                     if (isFriend) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = onToggleFavorite, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if(isFavorite) Color.Gray else StarGold)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Button(
+                                onClick = onToggleFavorite, 
+                                modifier = Modifier.weight(1.2f).height(54.dp), 
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = if(isFavorite) Color(0xFF9E9E9E) else Color(0xFFFFC107)),
+                                elevation = ButtonDefaults.buttonElevation(4.dp)
+                            ) {
                                 Icon(if(isFavorite) Icons.Default.StarOutline else Icons.Default.Star, null, tint = Color.White)
-                                Text(if(isFavorite) "QUITAR" else "FAV", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(if(isFavorite) "QUITAR" else "FAVORITO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                             }
-                            Button(onClick = onRemove, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2))) {
-                                Icon(Icons.Default.Delete, null, tint = Color.Red)
-                                Text("BORRAR", color = Color.Red, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
+                            
+                            Surface(
+                                onClick = onRemove,
+                                modifier = Modifier.size(54.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                color = Color(0xFFFFEBEE),
+                                border = BorderStroke(1.dp, Color(0xFFFFCDD2))
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.DeleteForever, null, tint = Color(0xFFEF5350))
+                                }
                             }
                         }
                     } else if (isRequest) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Button(
                                 onClick = onRejectRequest,
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFEE2E2))
+                                modifier = Modifier.weight(1f).height(54.dp),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEBEE))
                             ) {
-                                Icon(Icons.Default.Close, null, tint = Color.Red)
-                                Text("RECHAZAR", color = Color.Red, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
+                                Text("RECHAZAR", color = Color(0xFFEF5350), fontWeight = FontWeight.Bold)
                             }
                             Button(
                                 onClick = onAcceptRequest,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).height(54.dp),
+                                shape = RoundedCornerShape(18.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE8F5E9))
                             ) {
-                                Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50))
-                                Text("ACEPTAR", color = Color(0xFF4CAF50), fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
+                                Text("ACEPTAR", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
                             }
                         }
                     } else {
                         Button(
                             onClick = onAddFriend,
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                            elevation = ButtonDefaults.buttonElevation(6.dp)
                         ) {
                             Icon(Icons.Default.PersonAdd, null, tint = Color.White)
-                            Spacer(Modifier.width(8.dp))
-                            Text("AGREGAR $name", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(12.dp))
+                            Text("ENVIAR SOLICITUD", fontWeight = FontWeight.Black, fontSize = 16.sp)
                         }
                     }
                 }
                 
-                TextButton(onClick = onDismiss, modifier = Modifier.padding(top = 12.dp)) {
-                    Text("CERRAR", color = Color.Gray, fontWeight = FontWeight.Bold)
+                TextButton(
+                    onClick = onDismiss, 
+                    modifier = Modifier.padding(top = 16.dp).fillMaxWidth()
+                ) {
+                    Text("VOLVER", color = Color.Gray, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun StatCard(modifier: Modifier, icon: ImageVector, value: String, label: String, color: Color) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.05f))
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(value, fontWeight = FontWeight.Black, color = NavyDark, fontSize = 15.sp)
+            Text(label, fontWeight = FontWeight.Bold, color = Color.LightGray, fontSize = 8.sp)
         }
     }
 }

@@ -15,65 +15,31 @@ class MatchmakingManager(private val authManager: AuthManager) {
     private val roomsCollection = db.collection("gameRooms")
 
     fun findOrCreateRoom(targetRoomId: String? = null): Flow<GameRoom?> = callbackFlow {
-        val currentUser = authManager.currentUser ?: run { 
-            trySend(null)
-            close()
-            return@callbackFlow 
-        }
-        
-        val myPlayerState = GameRoom(
-            userId = currentUser.uid,
-            displayName = currentUser.displayName ?: "Jugador",
-            avatarUrl = currentUser.photoUrl?.toString()
-        )
-
+         val currentUser = authManager.currentUser
         var roomListener: ListenerRegistration? = null
 
-        try {
-            var roomId: String? = null
+        if (currentUser == null) {
+            trySend(null)
+            close()
+        } else {
+            val myPlayerState = GameRoom(
+                userId = currentUser.uid,
+                displayName = currentUser.displayName ?: "Jugador",
+                avatarUrl = currentUser.photoUrl?.toString()
+            )
 
-            // 1. Unirse a sala específica (por Invitación)
-            if (targetRoomId != null) {
-                val joined = db.runTransaction { transaction ->
-                    val roomRef = roomsCollection.document(targetRoomId)
-                    val roomSnap = transaction.get(roomRef)
-                    if (roomSnap.exists()) {
-                        val players = roomSnap.get("players") as? Map<*, *>
-                        if (players?.containsKey(currentUser.uid) == true) return@runTransaction true
-                        
-                        val currentCount = roomSnap.getLong("playerCount") ?: 0
-                        if (currentCount == 1L) {
-                            transaction.update(roomRef, "players.${currentUser.uid}", myPlayerState)
-                            transaction.update(roomRef, "playerCount", 2)
-                            transaction.update(roomRef, "status", "PLAYING")
-                            transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
-                            true
-                        } else false
-                    } else false
-                }.await()
-                if (joined) roomId = targetRoomId
-            }
+            try {
+                var roomId: String? = null
 
-            // 2. Búsqueda de sala abierta (Matchmaking normal)
-            if (roomId == null && targetRoomId == null) {
-                val openRoomsQuery = roomsCollection
-                    .whereEqualTo("status", "WAITING")
-                    .whereEqualTo("playerCount", 1)
-                    .limit(1)
-
-                val querySnapshot = openRoomsQuery.get().await()
-
-                if (querySnapshot.documents.isNotEmpty()) {
-                    val doc = querySnapshot.documents.first()
-                    val targetId = doc.id
-
+                // 1. Unirse a sala específica (por Invitación)
+                if (targetRoomId != null) {
                     val joined = db.runTransaction { transaction ->
-                        val roomRef = roomsCollection.document(targetId)
+                        val roomRef = roomsCollection.document(targetRoomId)
                         val roomSnap = transaction.get(roomRef)
                         if (roomSnap.exists()) {
                             val players = roomSnap.get("players") as? Map<*, *>
-                            if (players?.containsKey(currentUser.uid) == true) return@runTransaction false
-
+                            if (players?.containsKey(currentUser.uid) == true) return@runTransaction true
+                            
                             val currentCount = roomSnap.getLong("playerCount") ?: 0
                             if (currentCount == 1L) {
                                 transaction.update(roomRef, "players.${currentUser.uid}", myPlayerState)
@@ -84,43 +50,79 @@ class MatchmakingManager(private val authManager: AuthManager) {
                             } else false
                         } else false
                     }.await()
-                    if (joined) roomId = targetId
-                }
-            }
-
-            // 3. Crear sala nueva si no se encontró ninguna
-            if (roomId == null) {
-                val newRoomId = targetRoomId ?: UUID.randomUUID().toString()
-                val newRoom = GameRoom(
-                    roomId = newRoomId,
-                    players = mapOf(currentUser.uid to myPlayerState),
-                    playerCount = 1,
-                    status = "WAITING"
-                )
-                roomsCollection.document(newRoomId).set(newRoom).await()
-                roomId = newRoomId
-            }
-
-            // 4. Escuchar cambios en la sala asignada
-            val finalRoomId = roomId
-            roomListener = roomsCollection.document(finalRoomId)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        trySend(null)
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null && snapshot.exists()) {
-                        val updatedRoom = snapshot.toObject(GameRoom::class.java)
-                        trySend(updatedRoom)
-                    } else {
-                        trySend(null)
-                        close()
-                    }
+                    if (joined) roomId = targetRoomId
                 }
 
-        } catch (e: Exception) {
-            e.printStackTrace()
-            trySend(null)
+                // 2. Búsqueda de sala abierta (Matchmaking normal)
+                if (roomId == null && targetRoomId == null) {
+                    val openRoomsQuery = roomsCollection
+                        .whereEqualTo("status", "WAITING")
+                        .whereEqualTo("playerCount", 1)
+                        .limit(1)
+
+                    val querySnapshot = openRoomsQuery.get().await()
+
+                    if (querySnapshot.documents.isNotEmpty()) {
+                        val doc = querySnapshot.documents.first()
+                        val targetId = doc.id
+
+                        val joined = db.runTransaction { transaction ->
+                            val roomRef = roomsCollection.document(targetId)
+                            val roomSnap = transaction.get(roomRef)
+                            if (roomSnap.exists()) {
+                                val players = roomSnap.get("players") as? Map<*, *>
+                                if (players?.containsKey(currentUser.uid) == true) return@runTransaction false
+
+                                val currentCount = roomSnap.getLong("playerCount") ?: 0
+                                if (currentCount == 1L) {
+                                    transaction.update(roomRef, "players.${currentUser.uid}", myPlayerState)
+                                    transaction.update(roomRef, "playerCount", 2)
+                                    transaction.update(roomRef, "status", "PLAYING")
+                                    transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
+                                    true
+                                } else false
+                            } else false
+                        }.await()
+                        if (joined) roomId = targetId
+                    }
+                }
+
+                // 3. Crear sala nueva si no se encontró ninguna
+                if (roomId == null) {
+                    val newRoomId = targetRoomId ?: UUID.randomUUID().toString()
+                    val newRoom = GameRoom(
+                        roomId = newRoomId,
+                        players = mapOf(currentUser.uid to myPlayerState),
+                        playerCount = 1,
+                        status = "WAITING"
+                    )
+                    roomsCollection.document(newRoomId).set(newRoom).await()
+                    roomId = newRoomId
+                }
+
+                // 4. Escuchar cambios en la sala asignada
+                val finalRoomId = roomId
+                if (finalRoomId != null) {
+                    roomListener = roomsCollection.document(finalRoomId)
+                        .addSnapshotListener { snapshot, error ->
+                            if (error != null) {
+                                trySend(null)
+                                return@addSnapshotListener
+                            }
+                            if (snapshot != null && snapshot.exists()) {
+                                val updatedRoom = snapshot.toObject(GameRoom::class.java)
+                                trySend(updatedRoom)
+                            } else {
+                                trySend(null)
+                                close()
+                            }
+                        }
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                trySend(null)
+            }
         }
 
         awaitClose { roomListener?.remove() }

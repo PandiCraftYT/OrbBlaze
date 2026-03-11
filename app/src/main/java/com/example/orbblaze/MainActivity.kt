@@ -122,16 +122,10 @@ class MainActivity : ComponentActivity() {
                             AchievementNotification(sharedViewModel.activeAchievement)
                             SyncIndicator(syncUserDataUseCase)
 
-                            if (showBanner && isLevel) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                                    AdBannerCapsule(adsManager)
-                                }
-                            }
+                            // Banner removido de aquí (pantallas de nivel)
                         }
 
-                        if (showBanner && !isLevel) {
-                            AdBannerCapsule(adsManager)
-                        }
+                        // Banner removido de aquí (menú y otras pantallas)
                     }
                 }
             }

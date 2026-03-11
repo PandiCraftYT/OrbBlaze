@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
@@ -268,47 +269,146 @@ fun ProfileScreen(
             }
 
             if (!isAnonymous) {
-                // Rango y Medalla Grande
+                // Rango y Medalla Grande - DISEÑO RADICALMENTE MEJORADO
+                val rankColor = currentRank.color
+                
                 Surface(
-                    modifier = Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(32.dp)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .shadow(20.dp, RoundedCornerShape(32.dp)),
                     shape = RoundedCornerShape(32.dp),
-                    color = Color.White.copy(alpha = 0.15f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    color = Color(0xFF1A1C2E), // Fondo oscuro profundo para que resalten los colores
+                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(rankColor.copy(alpha = 0.6f), Color.Transparent)))
                 ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "ESTADO DE RANGO",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
-                        )
-                        Spacer(Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Resplandor de fondo temático
                         Box(
                             modifier = Modifier
-                                .size(100.dp)
-                                .clip(CircleShape)
-                                .background(currentRank.color.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
+                                .fillMaxSize()
+                                .background(
+                                    Brush.radialGradient(
+                                        0.0f to rankColor.copy(alpha = 0.15f),
+                                        1.0f to Color.Transparent,
+                                        center = Offset(200f, 200f)
+                                    )
+                                )
+                        )
+
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Text(currentRank.medalName, fontSize = 60.sp)
+                            Text(
+                                text = "ESTADO DE RANGO",
+                                color = Color.White.copy(alpha = 0.5f),
+                                style = TextStyle(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 4.sp
+                                )
+                            )
+                            
+                            Spacer(Modifier.height(12.dp))
+                            
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Medalla con efecto de elevación
+                                Surface(
+                                    modifier = Modifier.size(100.dp),
+                                    shape = CircleShape,
+                                    color = Color.White.copy(alpha = 0.05f),
+                                    border = BorderStroke(1.dp, rankColor.copy(alpha = 0.3f))
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        // Brillo detrás de la medalla
+                                        Box(
+                                            modifier = Modifier.size(70.dp).graphicsLayer { alpha = 0.4f }
+                                            .background(Brush.radialGradient(listOf(rankColor, Color.Transparent)), CircleShape)
+                                        )
+                                        Text(text = currentRank.medalName, fontSize = 56.sp)
+                                    }
+                                }
+
+                                Spacer(Modifier.width(24.dp))
+
+                                Column {
+                                    Text(
+                                        text = currentRank.title,
+                                        color = rankColor,
+                                        style = TextStyle(
+                                            fontSize = 32.sp,
+                                            fontWeight = FontWeight.Black,
+                                            shadow = Shadow(rankColor.copy(alpha = 0.5f), Offset(0f, 0f), 15f)
+                                        )
+                                    )
+                                    
+                                    Spacer(Modifier.height(4.dp))
+                                    
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.TrendingUp, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = "$duelElo PUNTOS ELO",
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Spacer(Modifier.height(20.dp))
+                            
+                            // Barra de progreso elegante
+                            val nextRank = when(currentRank) {
+                                Rank.BRONZE -> 1200
+                                Rank.SILVER -> 1500
+                                Rank.GOLD -> 1800
+                                Rank.PLATINUM -> 2100
+                                Rank.DIAMOND -> 2400
+                                Rank.MASTER -> 3000
+                            }
+                            val prevMin = currentRank.minScore // Esto asume que tienes minScore en el Enum
+                            // Como Rank.kt usa minScore pero para puntos normales, usaré los valores de fromElo
+                            val currentRangeStart = when(currentRank) {
+                                Rank.BRONZE -> 0
+                                Rank.SILVER -> 1200
+                                Rank.GOLD -> 1500
+                                Rank.PLATINUM -> 1800
+                                Rank.DIAMOND -> 2100
+                                Rank.MASTER -> 2400
+                            }
+                            
+                            val progress = ((duelElo - currentRangeStart).toFloat() / (nextRank - currentRangeStart).toFloat()).coerceIn(0f, 1f)
+                            
+                            Column(modifier = Modifier.fillMaxWidth(0.85f)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("PROGRESO", color = Color.White.copy(alpha = 0.4f), fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                    Text("${(progress * 100).toInt()}%", color = rankColor, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.1f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(progress)
+                                            .fillMaxHeight()
+                                            .clip(CircleShape)
+                                            .background(Brush.horizontalGradient(listOf(rankColor.copy(alpha = 0.7f), rankColor)))
+                                    )
+                                }
+                            }
                         }
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = currentRank.title,
-                            color = currentRank.color,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            text = "Rating actual: $duelElo ELO",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                 }
             }

@@ -10,6 +10,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.userProfileChangeRequest
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -161,27 +162,32 @@ class AuthManager {
 
     fun getFriendRequests(): Flow<List<Map<String, Any>>> = callbackFlow {
         val uid = auth.currentUser?.uid
-        if (uid == null) { trySend(emptyList()); close(); return@callbackFlow }
+        var listener: ListenerRegistration? = null
         
-        val listener = db.collection("users").document(uid).collection("friend_requests")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
-                if (snapshot != null) {
-                    val requests = snapshot.documents.mapNotNull { doc ->
-                        val data = doc.data?.plus("fromUid" to doc.id)
-                        if (data?.get("status") == "accepted_confirmation") {
-                            val friendId = doc.id
-                            db.collection("users").document(uid).update("friends", FieldValue.arrayUnion(friendId))
-                            db.collection("users").document(uid).collection("friend_requests").document(friendId).delete()
-                            null
-                        } else {
-                            data
+        if (uid == null) {
+            trySend(emptyList())
+            close()
+        } else {
+            listener = db.collection("users").document(uid).collection("friend_requests")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) { trySend(emptyList()); return@addSnapshotListener }
+                    if (snapshot != null) {
+                        val requests = snapshot.documents.mapNotNull { doc ->
+                            val data = doc.data?.plus("fromUid" to doc.id)
+                            if (data?.get("status") == "accepted_confirmation") {
+                                val friendId = doc.id
+                                db.collection("users").document(uid).update("friends", FieldValue.arrayUnion(friendId))
+                                db.collection("users").document(uid).collection("friend_requests").document(friendId).delete()
+                                null
+                            } else {
+                                data
+                            }
                         }
+                        trySend(requests)
                     }
-                    trySend(requests)
                 }
-            }
-        awaitClose { listener.remove() }
+        }
+        awaitClose { listener?.remove() }
     }
 
     suspend fun acceptFriendRequest(friendUid: String): Boolean {
@@ -234,29 +240,34 @@ class AuthManager {
 
     fun getFriends(): Flow<List<Map<String, Any>>> = callbackFlow {
         val uid = auth.currentUser?.uid
-        if (uid == null) { trySend(emptyList()); close(); return@callbackFlow }
+        var listener: ListenerRegistration? = null
         
-        val listener = db.collection("users").document(uid)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
-                if (snapshot != null && snapshot.exists()) {
-                    val friendUids = snapshot.get("friends") as? List<String> ?: emptyList()
-                    val favoriteUids = snapshot.get("favoriteFriends") as? List<String> ?: emptyList()
-                    
-                    if (friendUids.isEmpty()) {
-                        trySend(emptyList())
-                    } else {
-                        db.collection("users").whereIn(com.google.firebase.firestore.FieldPath.documentId(), friendUids.take(10))
-                            .get().addOnSuccessListener { friendsSnapshot ->
-                                val friendsData = friendsSnapshot.documents.mapNotNull { doc ->
-                                    doc.data?.plus("uid" to doc.id)?.plus("isFavorite" to favoriteUids.contains(doc.id))
-                                }
-                                trySend(friendsData)
-                            }.addOnFailureListener { trySend(emptyList()) }
-                    }
-                } else { trySend(emptyList()) }
-            }
-        awaitClose { listener.remove() }
+        if (uid == null) {
+            trySend(emptyList())
+            close()
+        } else {
+            listener = db.collection("users").document(uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) { trySend(emptyList()); return@addSnapshotListener }
+                    if (snapshot != null && snapshot.exists()) {
+                        val friendUids = snapshot.get("friends") as? List<String> ?: emptyList()
+                        val favoriteUids = snapshot.get("favoriteFriends") as? List<String> ?: emptyList()
+                        
+                        if (friendUids.isEmpty()) {
+                            trySend(emptyList())
+                        } else {
+                            db.collection("users").whereIn(com.google.firebase.firestore.FieldPath.documentId(), friendUids.take(10))
+                                .get().addOnSuccessListener { friendsSnapshot ->
+                                    val friendsData = friendsSnapshot.documents.mapNotNull { doc ->
+                                        doc.data?.plus("uid" to doc.id)?.plus("isFavorite" to favoriteUids.contains(doc.id))
+                                    }
+                                    trySend(friendsData)
+                                }.addOnFailureListener { trySend(emptyList()) }
+                        }
+                    } else { trySend(emptyList()) }
+                }
+        }
+        awaitClose { listener?.remove() }
     }
 
     // --- SISTEMA DE INVITACIONES DE DUELO ---
@@ -278,29 +289,35 @@ class AuthManager {
     }
 
     fun getDuelInvitations(): Flow<List<Map<String, Any>>> = callbackFlow {
-        val uid = auth.currentUser?.uid ?: return@callbackFlow
+        val uid = auth.currentUser?.uid
+        var listener: ListenerRegistration? = null
         
-        val listener = db.collection("users").document(uid).collection("game_invites")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                
-                // Margen de 5 minutos para evitar problemas de sincronización de reloj
-                val fiveMinutesAgo = System.currentTimeMillis() - (5 * 60 * 1000)
-                
-                val invites = snapshot?.documents?.mapNotNull { doc ->
-                    val data = doc.data
-                    val expiresAt = data?.get("expiresAt") as? Long ?: 0L
+        if (uid == null) {
+            trySend(emptyList())
+            close()
+        } else {
+            listener = db.collection("users").document(uid).collection("game_invites")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) return@addSnapshotListener
                     
-                    if (expiresAt > fiveMinutesAgo) {
-                        data?.plus("id" to doc.id)
-                    } else {
-                        doc.reference.delete() // Limpieza automática
-                        null
-                    }
-                } ?: emptyList()
-                trySend(invites)
-            }
-        awaitClose { listener.remove() }
+                    // Margen de 5 minutos para evitar problemas de sincronización de reloj
+                    val fiveMinutesAgo = System.currentTimeMillis() - (5 * 60 * 1000)
+                    
+                    val invites = snapshot?.documents?.mapNotNull { doc ->
+                        val data = doc.data
+                        val expiresAt = data?.get("expiresAt") as? Long ?: 0L
+                        
+                        if (expiresAt > fiveMinutesAgo) {
+                            data?.plus("id" to doc.id)
+                        } else {
+                            doc.reference.delete() // Limpieza automática
+                            null
+                        }
+                    } ?: emptyList()
+                    trySend(invites)
+                }
+        }
+        awaitClose { listener?.remove() }
     }
 
     suspend fun deleteDuelInvitation(invitationId: String) {
