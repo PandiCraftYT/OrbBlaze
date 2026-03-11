@@ -114,7 +114,7 @@ fun MenuScreen(
                         onClick = onModesClick
                     )
 
-                    // RÉCORDS Y LOGROS
+                    // RANKING Y LOGROS
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         ReferenceButton(
                             text = stringResource(id = R.string.menu_record),
@@ -125,7 +125,7 @@ fun MenuScreen(
                             onClick = onScoreClick
                         )
                         ReferenceButton(
-                            text = "LOGROS",
+                            text = stringResource(id = R.string.menu_achievements),
                             backgroundColor = NavyDark,
                             contentColor = Color.White,
                             icon = Icons.Default.Star,

@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.orbblaze.data.PlayerState
+import com.example.orbblaze.data.GameRoom
 import com.example.orbblaze.ui.theme.NavyDark
 
 @Composable
@@ -41,7 +41,7 @@ fun DuelTopBar(
     myScore: Int,
     myDanger: Float,
     myAvatar: String?,
-    opponent: PlayerState?,
+    opponent: GameRoom?,
     onSettingsClick: () -> Unit
 ) {
     if (opponent == null) return

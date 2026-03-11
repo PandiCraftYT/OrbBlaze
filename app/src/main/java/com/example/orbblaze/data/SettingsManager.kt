@@ -22,13 +22,14 @@ class SettingsManager(private val context: Context) {
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         val HIGH_SCORE = intPreferencesKey("high_score")
         val HIGH_SCORE_TIME = intPreferencesKey("high_score_time")
+        val DUEL_ELO = intPreferencesKey("duel_elo")
         val COINS = intPreferencesKey("coins")
         val ADVENTURE_PROGRESS = intPreferencesKey("adventure_progress")
         val TUTORIAL_COMPLETED = booleanPreferencesKey("tutorial_completed")
         val COLOR_BLIND_MODE = booleanPreferencesKey("color_blind_mode")
         val LAST_KNOWN_UID = stringPreferencesKey("last_known_uid")
         val NAME_CHANGES_COUNT = intPreferencesKey("name_changes_count")
-        val NAME_CHANGE_ADS_WATCHED = intPreferencesKey("name_change_ads_watched") // 🔥 Persistencia de Ads
+        val NAME_CHANGE_ADS_WATCHED = intPreferencesKey("name_change_ads_watched")
     }
 
     val lastKnownUidFlow: Flow<String?> = context.dataStore.data.map { it[LAST_KNOWN_UID] }
@@ -47,8 +48,6 @@ class SettingsManager(private val context: Context) {
     suspend fun setNameChangeAdsWatched(count: Int) {
         context.dataStore.edit { it[NAME_CHANGE_ADS_WATCHED] = count }
     }
-
-    // --- FLUJOS PROTEGIDOS ---
 
     val allStarsFlow: Flow<Map<Int, Int>> = context.dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
@@ -90,6 +89,9 @@ class SettingsManager(private val context: Context) {
     val highScoreTimeFlow: Flow<Int> = context.dataStore.data.map { (it[HIGH_SCORE_TIME] as? Number)?.toInt() ?: 0 }
     suspend fun setHighScoreTime(score: Int) { context.dataStore.edit { it[HIGH_SCORE_TIME] = score } }
 
+    val duelEloFlow: Flow<Int> = context.dataStore.data.map { (it[DUEL_ELO] as? Number)?.toInt() ?: 1000 }
+    suspend fun setDuelElo(elo: Int) { context.dataStore.edit { it[DUEL_ELO] = elo } }
+
     val adventureProgressFlow: Flow<Int> = context.dataStore.data.map { (it[ADVENTURE_PROGRESS] as? Number)?.toInt() ?: 0 }
     suspend fun setAdventureProgress(level: Int) { context.dataStore.edit { it[ADVENTURE_PROGRESS] = level } }
 
@@ -119,8 +121,6 @@ class SettingsManager(private val context: Context) {
     suspend fun clearAllData() {
         context.dataStore.edit { it.clear() }
     }
-
-    // --- SINCRONIZACIÓN ---
 
     suspend fun getSyncableData(): Map<String, Any> {
         return try {

@@ -4,7 +4,7 @@
     <!-- Menú Principal -->
     <string name="menu_play">JUGAR</string>
     <string name="menu_modes">MODOS DE JUEGO</string>
-    <string name="menu_record">RECORD</string>
+    <string name="menu_record">RANKING</string>
     <string name="menu_achievements">LOGROS</string>
     <string name="menu_version">v1.0 - OrbBlaze</string>
 

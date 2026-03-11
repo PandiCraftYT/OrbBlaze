@@ -3,10 +3,16 @@ package com.example.orbblaze.ui.components
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddReaction
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -26,20 +32,54 @@ fun EmojiReactionPicker(
     onEmojiSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val emojis = listOf("😎", "😂", "😮", "😡", "🔥", "👍")
     
-    Surface(
+    val rotation by animateFloatAsState(if (expanded) 135f else 0f, label = "icon_rotation")
+
+    Column(
         modifier = modifier,
-        color = Color.Black.copy(alpha = 0.4f),
-        shape = RoundedCornerShape(24.dp)
+        horizontalAlignment = Alignment.End
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        // Selector Expandible
+        AnimatedVisibility(
+            visible = expanded,
+            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
         ) {
-            emojis.forEach { emoji ->
-                EmojiButton(emoji = emoji, onClick = { onEmojiSelected(emoji) })
+            Surface(
+                color = Color.Black.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(32.dp),
+                modifier = Modifier.padding(bottom = 8.dp).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    emojis.forEach { emoji ->
+                        EmojiButton(emoji = emoji, onClick = { 
+                            onEmojiSelected(emoji)
+                            expanded = false 
+                        })
+                    }
+                }
             }
+        }
+
+        // Botón Principal
+        IconButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(if (expanded) Color.White else Color.Black.copy(alpha = 0.4f))
+        ) {
+            Icon(
+                imageVector = if (expanded) Icons.Default.Close else Icons.Default.AddReaction,
+                contentDescription = "Emojis",
+                tint = if (expanded) Color.Black else Color.White,
+                modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = rotation }
+            )
         }
     }
 }
@@ -55,7 +95,7 @@ fun EmojiButton(emoji: String, onClick: () -> Unit) {
 
     Text(
         text = emoji,
-        fontSize = 24.sp,
+        fontSize = 26.sp,
         modifier = Modifier
             .graphicsLayer {
                 scaleX = scale

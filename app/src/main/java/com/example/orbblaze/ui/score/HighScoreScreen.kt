@@ -28,14 +28,17 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.orbblaze.R
 import com.example.orbblaze.data.LeaderboardManager
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.model.LeaderboardEntry
+import com.example.orbblaze.domain.model.Rank
 import com.example.orbblaze.ui.components.ReferenceButton
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
@@ -56,6 +59,7 @@ fun HighScoreScreen(
     val highScore by settingsManager.highScoreFlow.collectAsState(initial = 0)
     val highScoreTime by settingsManager.highScoreTimeFlow.collectAsState(initial = 0)
     val adventureProgress by settingsManager.adventureProgressFlow.collectAsState(initial = 0)
+    val duelElo by settingsManager.duelEloFlow.collectAsState(initial = 1000)
 
     val classicLeaderboard by produceState<List<LeaderboardEntry>?>(initialValue = null, leaderboardManager) {
         leaderboardManager.getLeaderboard("CLASSIC").catch { 
@@ -98,7 +102,7 @@ fun HighScoreScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Header con botón de volver estático y título con movimiento
+                // Header
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -127,7 +131,7 @@ fun HighScoreScreen(
                         modifier = Modifier.graphicsLayer { translationY = titleFloat }
                     ) {
                         Text(
-                            text = "RÉCORDS",
+                            text = stringResource(id = R.string.menu_record),
                             textAlign = TextAlign.Center,
                             style = TextStyle(
                                 fontSize = (38 * fontScale).sp,
@@ -168,21 +172,17 @@ fun HighScoreScreen(
                     var myRecord by remember { mutableStateOf("") }
                     var myUid by remember { mutableStateOf<String?>(null) }
                     
-                    LaunchedEffect(selectedTab, highScore, highScoreTime, adventureProgress, duelLeaderboard) {
+                    LaunchedEffect(selectedTab, highScore, highScoreTime, adventureProgress, duelElo, duelLeaderboard) {
                         val uid = settingsManager.lastKnownUidFlow.firstOrNull()
                         myUid = uid
                         myRecord = when(selectedTab) {
                             0 -> highScore.toString()
                             1 -> highScoreTime.toString()
-                            3 -> {
-                                val myDuelEntry = duelLeaderboard?.find { it.userId == uid }
-                                (myDuelEntry?.score ?: 1000).toString()
-                            }
+                            3 -> duelElo.toString()
                             else -> "NIVEL $adventureProgress"
                         }
                     }
 
-                    // ✅ Lógica para inyectarme en el Top Mundial de Duelo si no estoy pero tengo puntos
                     val leaderboard = remember(leaderboardRaw, selectedTab, myUid, myRecord) {
                         if (selectedTab == 3 && leaderboardRaw != null && myUid != null) {
                             val exists = leaderboardRaw.any { it.userId == myUid }
@@ -206,7 +206,7 @@ fun HighScoreScreen(
 
                     LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
                         item {
-                            Text(if(selectedTab == 3) "MI RATING" else "MI RÉCORD", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
+                            Text(if(selectedTab == 3) "MI RATING Y RANGO" else "MI RANKING Y RANGO", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
                             MyRecordCard(value = myRecord, color = modeColor, fontScale = fontScale, isDuel = selectedTab == 3)
                         }
 
@@ -252,14 +252,46 @@ fun TabItem(text: String, isSelected: Boolean, modifier: Modifier, onClick: () -
 
 @Composable
 fun MyRecordCard(value: String, color: Color, fontScale: Float, isDuel: Boolean = false) {
-    Surface(color = Color.White, shape = RoundedCornerShape(28.dp), shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth().height((85 * fontScale).dp)) {
-        Row(modifier = Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                Icon(if(isDuel) Icons.Default.SportsKabaddi else Icons.Default.Star, null, tint = color, modifier = Modifier.size(24.dp))
+    val numericValue = value.filter { it.isDigit() }.toIntOrNull() ?: 0
+    val currentRank = if (isDuel) Rank.fromElo(numericValue) else Rank.fromScore(numericValue)
+
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(28.dp),
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth().height((100 * fontScale).dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Medalla del Rango
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(currentRank.color.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(currentRank.medalName, fontSize = 32.sp)
             }
+            
             Spacer(Modifier.width(16.dp))
+            
             Column(modifier = Modifier.weight(1f)) {
-                Text(if(isDuel) "RATING ELO" else "PUNTUACIÓN ACTUAL", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = currentRank.title,
+                    color = currentRank.color,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = if(isDuel) "RATING ELO" else "PUNTUACIÓN ACTUAL",
+                    color = Color.Gray,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 Text(value, color = NavyDark, fontSize = 28.sp, fontWeight = FontWeight.Black)
             }
         }
@@ -268,21 +300,41 @@ fun MyRecordCard(value: String, color: Color, fontScale: Float, isDuel: Boolean 
 
 @Composable
 fun LeaderboardRow(rank: Int, entry: LeaderboardEntry, fontScale: Float, isDuel: Boolean = false, isMe: Boolean = false) {
-    val rankColor = when(rank) {
+    val rankInfo = if (isDuel) Rank.fromElo(entry.score) else Rank.fromScore(entry.score)
+    val positionColor = when(rank) {
         1 -> Color(0xFFFFD700) 
         2 -> Color(0xFFC0C0C0) 
         3 -> Color(0xFFCD7F32) 
         else -> if (isMe) Color(0xFFFFD700) else Color.Gray.copy(alpha = 0.3f)
     }
+    
     Surface(
-        color = if (isMe) Color(0xFFFFD700) else Color.White.copy(alpha = 0.9f), 
+        color = if (isMe) Color(0xFFFFD700) else Color.White.copy(alpha = 0.9f),
         shape = RoundedCornerShape(24.dp), 
         shadowElevation = if (isMe) 8.dp else 2.dp,
-        modifier = Modifier.fillMaxWidth().height((65 * fontScale).dp)
+        modifier = Modifier.fillMaxWidth().height((70 * fontScale).dp)
     ) {
         Row(modifier = Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("#$rank", color = if (isMe && rank > 3) Color.White else rankColor, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.width(45.dp))
-            Text(if(isMe) "TÚ" else entry.username.uppercase(), color = if(isMe) Color.White else NavyDark, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Text("#$rank", color = if (isMe && rank > 3) Color.White else positionColor, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.width(45.dp))
+            
+            // Medalla pequeña según el rango alcanzado
+            Text(rankInfo.medalName, fontSize = 22.sp, modifier = Modifier.padding(end = 12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if(isMe) "TÚ" else entry.username.uppercase(),
+                    color = if(isMe) Color.White else NavyDark,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    rankInfo.title,
+                    color = if(isMe) Color.White.copy(alpha = 0.8f) else rankInfo.color,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 9.sp
+                )
+            }
+
             Text("${entry.score}", color = if (isMe) Color.White else if(isDuel) Color(0xFFF44336) else SageGreen, fontWeight = FontWeight.Black, fontSize = 18.sp)
         }
     }

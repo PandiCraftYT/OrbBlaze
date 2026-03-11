@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -44,12 +45,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.data.GameRoom
 import com.example.orbblaze.domain.model.*
 import com.example.orbblaze.ui.components.*
 import com.example.orbblaze.ui.theme.*
@@ -572,8 +575,12 @@ fun LevelScreen(
                     }
                 } else null,
                 onExit = { 
-                    duelViewModel?.resetMatchmaking()
-                    onMenuClick() 
+                    if (duelViewModel != null) {
+                        duelViewModel.resetMatchmaking()
+                        onMenuClick()
+                    } else {
+                        onMenuClick()
+                    }
                 },
                 score = score,
                 isWin = gameState == GameState.WON,
@@ -583,7 +590,7 @@ fun LevelScreen(
                 opponentStats = if (duelViewModel != null && opp != null) opp else null,
                 myStats = if (duelViewModel != null && myPlayerState != null) myPlayerState else null,
                 onShowAd = if (currentGameMode == GameMode.ADVENTURE && gameState == GameState.WON) null else if(duelViewModel != null) null else { { 
-                    onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } } 
+                    onShowAd { _ -> if (currentGameMode == GameMode.ADVENTURE) { (viewModel as? AdventureViewModel)?.reviveWithAd() } else { viewModel.addCoins(50); Toast.makeText(context, "¡Ganaste 50 monedas!", Toast.LENGTH_SHORT).show() } }
                 } }
             )
         }
@@ -619,6 +626,130 @@ fun LevelScreen(
                 opponentAvatar = opponentState?.avatarUrl,
                 progress = matchLoadingProgress
             )
+        }
+
+        // ✅ Nueva Animación de Rango al Terminar
+        if (duelViewModel?.showRankAnimation == true) {
+            RankUpdateOverlay(
+                previousElo = duelViewModel.previousElo,
+                eloChange = duelViewModel.lastEloChange,
+                soundManager = soundManager,
+                onFinish = {
+                    duelViewModel.showRankAnimation = false
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun RankUpdateOverlay(
+    previousElo: Int,
+    eloChange: Int,
+    soundManager: SoundManager,
+    onFinish: () -> Unit
+) {
+    var animatedElo by remember { mutableIntStateOf(previousElo) }
+    val targetElo = (previousElo + eloChange).coerceAtLeast(0)
+    val previousRank = Rank.fromElo(previousElo)
+    val newRank = Rank.fromElo(targetElo)
+    val isRankUp = targetElo > previousElo && newRank != previousRank
+    val isRankDown = targetElo < previousElo && newRank != previousRank
+
+    val eloAnimation = remember { Animatable(previousElo.toFloat()) }
+
+    LaunchedEffect(Unit) {
+        delay(500)
+        eloAnimation.animateTo(
+            targetValue = targetElo.toFloat(),
+            animationSpec = tween(durationMillis = 2000, easing = LinearOutSlowInEasing)
+        ) {
+            animatedElo = value.toInt()
+        }
+        delay(1000)
+        onFinish()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.9f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Medalla Animada
+            val medalScale by animateFloatAsState(
+                targetValue = 1.2f,
+                animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse),
+                label = "medal_pulse"
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(150.dp)
+                    .graphicsLayer { scaleX = medalScale; scaleY = medalScale },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (animatedElo >= newRank.minScore || animatedElo > previousElo) newRank.medalName else previousRank.medalName,
+                    fontSize = 80.sp
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                text = if (animatedElo >= newRank.minScore || animatedElo > previousElo) newRank.title else previousRank.title,
+                color = if (animatedElo >= newRank.minScore || animatedElo > previousElo) newRank.color else previousRank.color,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            )
+
+            Text(
+                text = "RATING ELO",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "$animatedElo",
+                color = Color.White,
+                fontSize = 60.sp,
+                fontWeight = FontWeight.Black
+            )
+
+            // Indicador de cambio (+25 / -20)
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn() + slideInVertically()
+            ) {
+                Text(
+                    text = if (eloChange >= 0) "+$eloChange" else "$eloChange",
+                    color = if (eloChange >= 0) SageGreen else Color(0xFFEF4444),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+
+            if (isRankUp || isRankDown) {
+                Spacer(Modifier.height(32.dp))
+                val announcementColor = if (isRankUp) Color(0xFFFFD700) else Color(0xFFEF4444)
+                Text(
+                    text = if (isRankUp) "¡ASCENSO DE RANGO!" else "DESCENSO DE RANGO",
+                    color = announcementColor,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier
+                        .border(2.dp, announcementColor, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
         }
     }
 }
@@ -741,14 +872,14 @@ private fun Int.mapProgress(total: Int): Float = if (total <= 1) 0f else this.to
 fun QuickShopOverlay(
     soundManager: SoundManager,
     fireballsBoughtCount: Int,
-    onDismiss: () -> Unit, 
+    onDismiss: () -> Unit,
     onBuyFireball: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.85f))
-            .clickable(enabled = false) {}, 
+            .clickable(enabled = false) {},
         contentAlignment = Alignment.Center
     ) {
         Surface(
@@ -771,7 +902,7 @@ fun QuickShopOverlay(
                     )
                 )
                 Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
-                
+
                 Spacer(Modifier.height(24.dp))
 
                 ItemRow(
@@ -813,10 +944,10 @@ fun QuickShopOverlay(
 
 @Composable
 fun ItemRow(
-    name: String, 
-    desc: String, 
-    price: Int, 
-    icon: String, 
+    name: String,
+    desc: String,
+    price: Int,
+    icon: String,
     isFireball: Boolean = false,
     isLocked: Boolean = false,
     soundManager: SoundManager,
@@ -838,7 +969,7 @@ fun ItemRow(
         shadowElevation = if (isPressed && !isLocked) 2.dp else 4.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer { 
+            .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
                 alpha = if (isLocked) 0.6f else 1f
@@ -862,9 +993,9 @@ fun ItemRow(
                     Text(icon, fontSize = 24.sp)
                 }
             }
-            
+
             Spacer(Modifier.width(16.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = name.uppercase(),
@@ -883,7 +1014,7 @@ fun ItemRow(
                     )
                 )
             }
-            
+
             if (!isLocked) {
                 Surface(
                     color = Color.White,
@@ -918,7 +1049,7 @@ fun ModeStartOverlay(gameMode: GameMode, highScore: Int, soundManager: SoundMana
         ) {
             Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 val isTimeAttack = gameMode == GameMode.TIME_ATTACK
-                
+
                 Text(
                     text = if (isTimeAttack) "CONTRA TIEMPO" else "MODO CLÁSICO",
                     style = TextStyle(
@@ -930,9 +1061,9 @@ fun ModeStartOverlay(gameMode: GameMode, highScore: Int, soundManager: SoundMana
                     )
                 )
                 Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
-                
+
                 Spacer(Modifier.height(16.dp))
-                
+
                 Text(
                     text = if (isTimeAttack) stringResource(id = R.string.mode_desc_time) else stringResource(id = R.string.mode_desc_classic),
                     color = Color.Gray,
@@ -941,7 +1072,7 @@ fun ModeStartOverlay(gameMode: GameMode, highScore: Int, soundManager: SoundMana
                     fontWeight = FontWeight.Bold,
                     lineHeight = 22.sp
                 )
-                
+
                 if (highScore > 0) {
                     Spacer(Modifier.height(24.dp))
                     Surface(
@@ -956,9 +1087,9 @@ fun ModeStartOverlay(gameMode: GameMode, highScore: Int, soundManager: SoundMana
                         }
                     }
                 }
-                
+
                 Spacer(Modifier.height(32.dp))
-                
+
                 ReferenceButton(
                     text = "¡JUGAR AHORA!",
                     backgroundColor = SageGreen,
@@ -982,9 +1113,9 @@ fun ReviveAlertOverlay(soundManager: SoundManager, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Text(text = stringResource(id = R.string.adventure_revive_desc), color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
                 Spacer(Modifier.height(32.dp))
-                Button(onClick = { 
+                Button(onClick = {
                     soundManager.play(SoundType.POP)
-                    onDismiss() 
+                    onDismiss()
                 }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64FFDA)), shape = RoundedCornerShape(16.dp)) { Text(stringResource(id = R.string.adventure_ready), color = Color(0xFF1A237E), fontWeight = FontWeight.Black, fontSize = 16.sp) }
             }
         }
@@ -1002,10 +1133,9 @@ fun OverlayMenu(
     isDuel: Boolean = false,
     onRematch: (() -> Unit)? = null,
     isRematchAccepted: Boolean = false,
-    opponentStats: com.example.orbblaze.data.PlayerState? = null,
-    myStats: com.example.orbblaze.data.PlayerState? = null
+    opponentStats: GameRoom? = null,
+    myStats: GameRoom? = null
 ) {
-    val isPause = title == stringResource(id = R.string.game_pause)
     val scope = rememberCoroutineScope()
     var rematchRequested by remember { mutableStateOf(false) }
 
@@ -1030,7 +1160,7 @@ fun OverlayMenu(
                     )
                 )
                 Box(modifier = Modifier.padding(top = 4.dp).width(60.dp).height(4.dp).clip(CircleShape).background(NavyDark.copy(alpha = 0.1f)))
-                
+
                 Spacer(Modifier.height(24.dp))
 
                 if (isDuel && opponentStats != null && myStats != null) {
@@ -1065,7 +1195,7 @@ fun OverlayMenu(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text("SONIDO", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         Slider(
-                            value = sfxVol, 
+                            value = sfxVol,
                             onValueChange = { onVolumeChange(it); scope.launch { settingsManager.setSfxVolume(it) } },
                             colors = SliderDefaults.colors(thumbColor = SageGreen, activeTrackColor = SageGreen, inactiveTrackColor = SageGreen.copy(alpha = 0.2f))
                         )
@@ -1073,8 +1203,8 @@ fun OverlayMenu(
                             Text("DALTONISMO", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             Switch(
                                 checked = colorBlind,
-                                onCheckedChange = { 
-                                    scope.launch { settingsManager.setColorBlindMode(it) } 
+                                onCheckedChange = {
+                                    scope.launch { settingsManager.setColorBlindMode(it) }
                                 },
                                 colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SageGreen)
                             )
@@ -1113,9 +1243,9 @@ fun OverlayMenu(
                         text = buttonText,
                         backgroundColor = if (rematchRequested) Color.LightGray else SageGreen,
                         contentColor = Color.White,
-                        onClick = { 
+                        onClick = {
                             rematchRequested = true
-                            onRematch() 
+                            onRematch()
                         }
                     )
                     Spacer(Modifier.height(16.dp))
@@ -1133,7 +1263,7 @@ fun OverlayMenu(
                             onClick = onRestart
                         )
                     }
-                    
+
                     val exitIcon = if (isAdventure) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Home
                     ReferenceButton(
                         text = "",
@@ -1151,27 +1281,160 @@ fun OverlayMenu(
 }
 
 @Composable
-fun DuelResultsTable(my: com.example.orbblaze.data.PlayerState, opp: com.example.orbblaze.data.PlayerState, isWin: Boolean) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        ResultRow("PUNTUACIÓN", "${if(my.score == -1) 0 else my.score}", "${if(opp.score == -1) 0 else opp.score}", isWin)
-        Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.3f))
-        ResultRow("BURBUJAS", "${my.bubblesPopped}", "${opp.bubblesPopped}", my.bubblesPopped >= opp.bubblesPopped)
-        Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.3f))
-        ResultRow("MAX COMBO", "x${my.maxCombo}", "x${opp.maxCombo}", my.maxCombo >= opp.maxCombo)
-        Divider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.3f))
-        ResultRow("ATAQUES", "${my.attacksSent}", "${opp.attacksSent}", my.attacksSent >= opp.attacksSent)
+fun DuelResultsTable(my: GameRoom, opp: GameRoom, isWin: Boolean) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Cabecera de Mini Perfiles
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PlayerMiniProfile(name = "TÚ", avatar = my.avatarUrl, isLeft = true, isWinner = isWin)
+            Text("VS", fontWeight = FontWeight.Black, fontSize = 14.sp, color = Color.LightGray)
+            PlayerMiniProfile(name = opp.displayName, avatar = opp.avatarUrl, isLeft = false, isWinner = !isWin && opp.score != -1)
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Filas de Estadísticas
+        ResultRow(
+            icon = Icons.Default.EmojiEvents,
+            label = "PUNTUACIÓN",
+            myVal = "${if (my.score == -1) 0 else my.score}",
+            oppVal = "${if (opp.score == -1) 0 else opp.score}",
+            myBetter = isWin
+        )
+        ResultRow(
+            icon = Icons.Default.RadioButtonChecked,
+            label = "BURBUJAS",
+            myVal = "${my.bubblesPopped}",
+            oppVal = "${opp.bubblesPopped}",
+            myBetter = my.bubblesPopped >= opp.bubblesPopped
+        )
+        ResultRow(
+            icon = Icons.Default.Bolt,
+            label = "MAX COMBO",
+            myVal = "x${my.maxCombo}",
+            oppVal = "x${opp.maxCombo}",
+            myBetter = my.maxCombo >= opp.maxCombo
+        )
+        ResultRow(
+            icon = Icons.Default.Whatshot,
+            label = "ATAQUES",
+            myVal = "${my.attacksSent}",
+            oppVal = "${opp.attacksSent}",
+            myBetter = my.attacksSent >= opp.attacksSent
+        )
     }
 }
 
 @Composable
-fun ResultRow(label: String, myVal: String, oppVal: String, isBetter: Boolean) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-            Text(myVal, color = if(isBetter) SageGreen else NavyDark, fontSize = 18.sp, fontWeight = FontWeight.Black)
+fun PlayerMiniProfile(name: String, avatar: String?, isLeft: Boolean, isWinner: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (isLeft) Arrangement.Start else Arrangement.End,
+        modifier = Modifier.width(120.dp)
+    ) {
+        if (!isLeft) {
+            Text(
+                name.uppercase(),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isWinner) SageGreen else NavyDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            )
         }
-        Text(label, modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-            Text(oppVal, color = if(!isBetter) SageGreen else NavyDark, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        
+        Box(contentAlignment = Alignment.Center) {
+            AsyncImage(
+                model = avatar,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, if (isWinner) Color(0xFFFFD700) else Color.Transparent, CircleShape),
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.ic_launcher_background)
+            )
+            if (isWinner) {
+                Text("👑", fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp))
+            }
+        }
+
+        if (isLeft) {
+            Text(
+                name.uppercase(),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isWinner) SageGreen else NavyDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(start = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun ResultRow(icon: ImageVector, label: String, myVal: String, oppVal: String, myBetter: Boolean) {
+    Surface(
+        color = Color(0xFFF8F9FA),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Valor Mío
+            Text(
+                text = myVal,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Start,
+                style = TextStyle(
+                    color = if (myBetter) SageGreen else NavyDark.copy(alpha = 0.6f),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black
+                )
+            )
+
+            // Etiqueta Central con Icono
+            Column(
+                modifier = Modifier.weight(1.5f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(icon, null, modifier = Modifier.size(14.dp), tint = Color.Gray.copy(alpha = 0.4f))
+                Text(
+                    text = label,
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(
+                        color = Color.Gray,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+                )
+            }
+
+            // Valor Oponente
+            Text(
+                text = oppVal,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.End,
+                style = TextStyle(
+                    color = if (!myBetter) SageGreen else NavyDark.copy(alpha = 0.6f),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black
+                )
+            )
         }
     }
 }

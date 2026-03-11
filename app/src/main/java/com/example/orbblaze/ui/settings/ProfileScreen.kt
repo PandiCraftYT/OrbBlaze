@@ -48,6 +48,7 @@ import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.domain.model.Rank
 import com.example.orbblaze.ui.components.rememberGoogleSignInHandler
 import com.example.orbblaze.ui.game.AdsManager
 import com.example.orbblaze.ui.game.SoundManager
@@ -77,8 +78,12 @@ fun ProfileScreen(
     val totalStars = allStars.values.sum()
     val coins by settingsManager.coinsFlow.collectAsState(initial = 0)
     val adventureProgress by settingsManager.adventureProgressFlow.collectAsState(initial = 0)
+    val highScore by settingsManager.highScoreFlow.collectAsState(initial = 0)
+    val duelElo by settingsManager.duelEloFlow.collectAsState(initial = 1000)
     val nameChangesCount by settingsManager.nameChangesCountFlow.collectAsState(initial = 0)
     val adsWatchedForName by settingsManager.nameChangeAdsWatchedFlow.collectAsState(initial = 0)
+
+    val currentRank = Rank.fromElo(duelElo)
 
     var showAvatarPicker by remember { mutableStateOf(false) }
     var showNameEditor by remember { mutableStateOf(false) }
@@ -108,7 +113,7 @@ fun ProfileScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Header con botón de volver estático y título con movimiento
+            // Header
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -177,94 +182,138 @@ fun ProfileScreen(
                         Text("Debes iniciar sesión con Google para tener un perfil y guardar tu progreso.", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 13.sp)
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // FOTO
-                        Box(contentAlignment = Alignment.BottomEnd) {
-                            Box(
-                                modifier = Modifier
-                                    .size(85.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                                    .border(3.dp, Color(0xFF4CAF50), CircleShape)
-                                    .clickable { showAvatarPicker = true }
-                            ) {
-                                AsyncImage(
-                                    model = currentUser?.photoUrl?.toString(),
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(R.drawable.ic_launcher_background),
-                                    placeholder = painterResource(R.drawable.ic_launcher_background)
-                                )
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // FOTO
+                            Box(contentAlignment = Alignment.BottomEnd) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(85.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White)
+                                        .border(3.dp, currentRank.color, CircleShape)
+                                        .clickable { showAvatarPicker = true }
+                                ) {
+                                    AsyncImage(
+                                        model = currentUser?.photoUrl?.toString(),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop,
+                                        error = painterResource(R.drawable.ic_launcher_background),
+                                        placeholder = painterResource(R.drawable.ic_launcher_background)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier.size(28.dp).background(NavyDark, CircleShape).border(2.dp, Color.White, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                }
                             }
-                            Box(
-                                modifier = Modifier.size(28.dp).background(NavyDark, CircleShape).border(2.dp, Color.White, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(14.dp))
+
+                            Spacer(Modifier.width(20.dp))
+
+                            // INFO
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { 
+                                    if (nameChangesCount >= 1) showPayDialog = true else { newName = currentUser?.displayName ?: ""; showNameEditor = true }
+                                }) {
+                                    Text(text = currentUser?.displayName ?: "Jugador", fontWeight = FontWeight.Black, fontSize = 20.sp, color = NavyDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Spacer(Modifier.width(6.dp))
+                                    Icon(Icons.Default.Edit, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                }
+                                
+                                Text(
+                                    text = "RANGO ${currentRank.title}",
+                                    color = currentRank.color,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.sp
+                                )
+
+                                val playerId = authManager.getPlayerId()
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = 2.dp).clickable {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("Player ID", playerId)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "ID copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Text(text = "ID: $playerId", style = TextStyle(fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar ID", tint = Color.LightGray, modifier = Modifier.size(12.dp))
+                                }
                             }
                         }
 
-                        Spacer(Modifier.width(20.dp))
+                        Spacer(Modifier.height(24.dp))
 
-                        // INFO
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { 
-                                if (nameChangesCount >= 1) showPayDialog = true else { newName = currentUser?.displayName ?: ""; showNameEditor = true }
-                            }) {
-                                Text(text = currentUser?.displayName ?: "Jugador", fontWeight = FontWeight.Black, fontSize = 20.sp, color = NavyDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Spacer(Modifier.width(6.dp))
-                                Icon(Icons.Default.Edit, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                            }
-                            
-                            val playerId = authManager.getPlayerId()
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(top = 2.dp).clickable {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("Player ID", playerId)
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "ID copiado al portapapeles", Toast.LENGTH_SHORT).show()
-                                }
-                            ) {
-                                Text(text = "ID: $playerId", style = TextStyle(fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp))
-                                Spacer(Modifier.width(6.dp))
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar ID", tint = Color.LightGray, modifier = Modifier.size(14.dp))
-                            }
-                            
-                            Spacer(Modifier.height(8.dp))
-                            
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                ProfileStatItem(Icons.Default.Star, "$totalStars", StarGold)
-                                ProfileStatItem(Icons.Default.Place, "Lvl $adventureProgress", Color(0xFF2196F3))
-                                ProfileStatItem(Icons.Default.ShoppingCart, "$coins", Color(0xFF4CAF50))
-                            }
+                        // Estadísticas Detalladas
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            ProfileStatBlock(Icons.Default.Star, "ESTRELLAS", "$totalStars", StarGold)
+                            ProfileStatBlock(Icons.Default.EmojiEvents, "RÉCORD", "$highScore", Color(0xFFFF9800))
+                            ProfileStatBlock(Icons.Default.SportsKabaddi, "RATING", "$duelElo", Color(0xFFF44336))
+                            ProfileStatBlock(Icons.Default.ShoppingCart, "MONEDAS", "$coins", Color(0xFF4CAF50))
                         }
                     }
                 }
             }
 
             if (!isAnonymous) {
+                // Rango y Medalla Grande
                 Surface(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier.fillMaxWidth().shadow(10.dp, RoundedCornerShape(32.dp)),
                     shape = RoundedCornerShape(32.dp),
                     color = Color.White.copy(alpha = 0.15f),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Lock, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(40.dp))
-                            Spacer(Modifier.height(12.dp))
-                            Text("PRÓXIMAMENTE:\nLOGROS GLOBALES", textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.8f), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "ESTADO DE RANGO",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 2.sp
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(CircleShape)
+                                .background(currentRank.color.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(currentRank.medalName, fontSize = 60.sp)
                         }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = currentRank.title,
+                            color = currentRank.color,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = "Rating actual: $duelElo ELO",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
-            } else {
-                Spacer(Modifier.weight(1f))
             }
+            
+            Spacer(Modifier.weight(1f))
         }
     }
 
@@ -335,11 +384,11 @@ fun ProfileScreen(
 }
 
 @Composable
-fun ProfileStatItem(icon: ImageVector, text: String, color: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, modifier = Modifier.size(16.dp), tint = color)
-        Spacer(Modifier.width(4.dp))
-        Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2D324F))
+fun ProfileStatBlock(icon: ImageVector, label: String, value: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, null, modifier = Modifier.size(20.dp), tint = color)
+        Text(label, fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color.Gray)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Black, color = NavyDark)
     }
 }
 

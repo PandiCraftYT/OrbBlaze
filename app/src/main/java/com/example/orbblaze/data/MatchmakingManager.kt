@@ -21,7 +21,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
             return@callbackFlow 
         }
         
-        val myPlayerState = PlayerState(
+        val myPlayerState = GameRoom(
             userId = currentUser.uid,
             displayName = currentUser.displayName ?: "Jugador",
             avatarUrl = currentUser.photoUrl?.toString()
@@ -126,6 +126,38 @@ class MatchmakingManager(private val authManager: AuthManager) {
         awaitClose { roomListener?.remove() }
     }
 
+    suspend fun addBotToRoom(roomId: String) {
+        val botId = "BOT_${UUID.randomUUID().toString().take(8)}"
+        val botNames = listOf("OrbMaster", "PandaBot", "BlazeRunner", "BubbleGhost", "NeoPlayer", "ZenShot")
+        val botAvatars = listOf(
+            "https://api.dicebear.com/7.x/bottts/png?seed=B1",
+            "https://api.dicebear.com/7.x/bottts/png?seed=B2",
+            "https://api.dicebear.com/7.x/bottts/png?seed=B3"
+        )
+        
+        val botState = GameRoom(
+            userId = botId,
+            displayName = botNames.random(),
+            avatarUrl = botAvatars.random(),
+            isBot = true
+        )
+
+        try {
+            db.runTransaction { transaction ->
+                val roomRef = roomsCollection.document(roomId)
+                val roomSnap = transaction.get(roomRef)
+                if (roomSnap.exists() && roomSnap.getLong("playerCount") == 1L) {
+                    transaction.update(roomRef, "players.$botId", botState)
+                    transaction.update(roomRef, "playerCount", 2)
+                    transaction.update(roomRef, "status", "PLAYING")
+                    transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
+                }
+            }.await()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     suspend fun leaveRoom(roomId: String) {
         val myId = authManager.currentUser?.uid ?: return
         try {
@@ -140,6 +172,14 @@ class MatchmakingManager(private val authManager: AuthManager) {
                 } else {
                     transaction.update(roomRef, "players.$myId", FieldValue.delete())
                     transaction.update(roomRef, "playerCount", currentCount - 1)
+                    
+                    // Si el que se queda es un bot, borrar la sala
+                    @Suppress("UNCHECKED_CAST")
+                    val players = roomSnap.get("players") as? Map<String, Any>
+                    val remainingPlayers = players?.keys?.filter { it != myId }
+                    if (remainingPlayers?.size == 1 && remainingPlayers.first().startsWith("BOT_")) {
+                        transaction.delete(roomRef)
+                    }
                 }
             }.await()
         } catch (e: Exception) {
@@ -186,7 +226,9 @@ class MatchmakingManager(private val authManager: AuthManager) {
                 transaction.update(roomRef, "players.$myId.rematchReady", ready)
 
                 val otherPlayer = room.players.values.firstOrNull { it.userId != myId }
-                if (ready && otherPlayer?.rematchReady == true) {
+                
+                // Si el otro jugador es un bot, aceptar revancha instantáneamente
+                if (ready && (otherPlayer?.rematchReady == true || otherPlayer?.isBot == true)) {
                     transaction.update(roomRef, "status", "PLAYING")
                     room.players.keys.forEach { uid ->
                         transaction.update(roomRef, "players.$uid.score", 0)

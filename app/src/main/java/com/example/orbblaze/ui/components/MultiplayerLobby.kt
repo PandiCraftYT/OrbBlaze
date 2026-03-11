@@ -18,8 +18,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.ui.game.AdsManager
 import com.example.orbblaze.ui.game.DuelViewModel
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
@@ -53,6 +52,7 @@ fun MultiplayerLobby(
     onClose: () -> Unit,
     onMatchFound: (roomId: String) -> Unit,
     soundManager: SoundManager? = null,
+    adsManager: AdsManager? = null,
     viewModel: DuelViewModel = hiltViewModel(),
     authManager: AuthManager
 ) {
@@ -110,7 +110,7 @@ fun MultiplayerLobby(
         },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false // Clave para cubrir toda la pantalla
+            decorFitsSystemWindows = false
         )
     ) {
         Box(
@@ -168,6 +168,7 @@ fun MultiplayerLobby(
                     }
 
                     Spacer(Modifier.height(32.dp))
+
                     Text(
                         text = "Compite contra maestros de todo el mundo en tiempo real.",
                         textAlign = TextAlign.Center,
@@ -229,6 +230,7 @@ fun MultiplayerLobby(
                     }
 
                     Spacer(Modifier.height(32.dp))
+                    
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(0.8f).height(8.dp).clip(CircleShape),
                         color = Color(0xFF64FFDA),
@@ -243,37 +245,6 @@ fun MultiplayerLobby(
                         soundManager?.switchToMenuMusic()
                     }) {
                         Text("CANCELAR", color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                }
-            }
-
-            // BARRERA DEL ANUNCIO (Parte inferior)
-            // Esto asegura que el fondo sea continuo pero deja el espacio del anuncio visible
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 8.dp)
-                    .fillMaxWidth()
-                    .height(80.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                // El "Pill" blanco del anuncio que pediste mantener
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .fillMaxHeight(0.8f),
-                    shape = RoundedCornerShape(50.dp),
-                    color = Color.White,
-                    shadowElevation = 4.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            "ZONA DE ANUNCIO",
-                            color = Color.Gray.copy(alpha = 0.5f),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                 }
             }
@@ -322,7 +293,7 @@ fun FriendSelectorDialog(
             Column(modifier = Modifier.padding(24.dp)) {
                 Text("INVITAR AMIGO", fontWeight = FontWeight.Black, fontSize = 20.sp, color = Color.White)
                 Spacer(Modifier.height(16.dp))
-
+                
                 if (friends.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Text("No tienes amigos agregados", color = Color.White.copy(alpha = 0.5f), textAlign = TextAlign.Center)
@@ -333,7 +304,7 @@ fun FriendSelectorDialog(
                             val name = friend["displayName"] as? String ?: "Jugador"
                             val uid = friend["uid"] as String
                             val photoUrl = friend["photoUrl"] as? String
-
+                            
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
