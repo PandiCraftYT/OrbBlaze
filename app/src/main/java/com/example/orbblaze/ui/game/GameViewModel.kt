@@ -143,7 +143,6 @@ open class GameViewModel @Inject constructor(
     var trajectoryPoints by mutableStateOf<List<Offset>>(emptyList())
         protected set
 
-    // Estadísticas para pantalla de resultados
     var bubblesPoppedInMatch by mutableIntStateOf(0)
         protected set
     var maxComboInMatch by mutableIntStateOf(0)
@@ -388,7 +387,7 @@ open class GameViewModel @Inject constructor(
     }
 
     protected open fun updateHighScore() {
-        if (gameMode == GameMode.DUEL) return // ✅ No actualizar récord ni ranking en modo duelo
+        if (gameMode == GameMode.DUEL) return 
 
         viewModelScope.launch {
             val isTimeMode = gameMode == GameMode.TIME_ATTACK
@@ -397,7 +396,6 @@ open class GameViewModel @Inject constructor(
                 if (isTimeMode) settingsManager.setHighScoreTime(score) else settingsManager.setHighScore(score)
                 addCoins(10) 
                 
-                // 🔥 SUBIR AL RANKING GLOBAL
                 val user = authManager.currentUser
                 if (user != null) {
                     val modeStr = if (isTimeMode) "TIME_ATTACK" else "CLASSIC"
@@ -492,7 +490,9 @@ open class GameViewModel @Inject constructor(
             bubblesPoppedInMatch += toRemove.size
             triggerShake(pts.toFloat() / 50f)
             toRemove.forEach { pos -> newGrid.remove(pos); val (cx, cy) = getBubbleCenter(pos); spawnExplosion(cx, cy, BubbleColor.entries.random()) }
-            bubblesByPosition = newGrid; removeFloatingBubbles(newGrid.toMutableMap())
+            bubblesByPosition = newGrid
+            removeFloatingBubbles(newGrid.toMutableMap())
+            metrics?.let { checkGameConditions(it) }
         }
     }
 
@@ -506,6 +506,11 @@ open class GameViewModel @Inject constructor(
                 lastTime = currentTime
 
                 if (!isPaused) {
+                    // ✅ SEGURIDAD DE VICTORIA: Si el mapa está vacío y seguimos jugando, forzar chequeo
+                    if (bubblesByPosition.isEmpty() && gameState == GameState.PLAYING) {
+                        metrics?.let { checkGameConditions(it) }
+                    }
+
                     if (particles.isNotEmpty()) {
                         particles = particles.mapNotNull { p ->
                             if (p.life <= 0f) null
@@ -601,9 +606,13 @@ open class GameViewModel @Inject constructor(
             if (comboMultiplier >= 5) unlockAchievement("combo_king")
             
             bubblesByPosition = newGrid
-            if (matched) removeFloatingBubbles(newGrid.toMutableMap())
+            if (matched) {
+                removeFloatingBubbles(newGrid.toMutableMap())
+            } else {
+                onPostSnap()
+            }
             
-            activeProjectile = null; onPostSnap()
+            activeProjectile = null
         }
     }
 
@@ -677,7 +686,11 @@ open class GameViewModel @Inject constructor(
     protected fun removeFloatingBubbles(grid: MutableMap<GridPosition, Bubble>) {
         viewModelScope.launch {
             val floating = withContext(Dispatchers.Default) { engine.findFloatingBubbles(grid, rowsDroppedCount) }
-            if (floating.isEmpty()) return@launch
+            if (floating.isEmpty()) {
+                bubblesByPosition = grid.toMap()
+                onPostSnap()
+                return@launch
+            }
             bubblesPoppedInMatch += floating.size
             if (floating.size >= 15) unlockAchievement("avalanche")
             
@@ -688,11 +701,13 @@ open class GameViewModel @Inject constructor(
                 addCoins(1); score += (20 * comboMultiplier)
             }
             bubblesByPosition = grid.toMap()
+            onPostSnap()
         }
     }
 
     protected open fun checkGameConditions(m: BoardMetricsPx) {
         if (gameState != GameState.PLAYING) return
+        
         if (bubblesByPosition.isEmpty()) { 
             gameState = GameState.WON; soundEvent = SoundType.WIN; addCoins(100)
             unlockAchievement("victory_lap")
@@ -739,8 +754,8 @@ open class GameViewModel @Inject constructor(
         startParticleLoop()
     }
 
-    fun spawnFloatingText(x: Float, y: Float, text: String) { 
-        floatingTexts = floatingTexts + FloatingText(textIdCounter++, x, y, text, 1.0f); startParticleLoop()
+    fun spawnFloatingText(x: Float, y: Float, text: String, isOpponent: Boolean = false) { 
+        floatingTexts = floatingTexts + FloatingText(textIdCounter++, x, y, text, 1.0f, isOpponent); startParticleLoop()
     }
 
     fun unlockAchievement(id: String) {

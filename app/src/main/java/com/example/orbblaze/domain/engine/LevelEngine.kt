@@ -52,23 +52,48 @@ class LevelEngine {
     }
 
     /**
-     * Genera un color para el proyectil basado solo en los colores que existen en el tablero.
+     * Genera un color para el proyectil basado en los colores del tablero con pesos inteligentes.
      * allowSpecials permite o bloquea la generación de Bombas y Arcoíris.
+     * comboMultiplier influye en la probabilidad de obtener burbujas especiales.
      */
-    fun getSmartProjectileColor(grid: Map<GridPosition, Bubble>, allowSpecials: Boolean = true): BubbleColor {
+    fun getSmartProjectileColor(
+        grid: Map<GridPosition, Bubble>, 
+        allowSpecials: Boolean = true,
+        comboMultiplier: Int = 1
+    ): BubbleColor {
+        // 1. Probabilidad dinámica de Especiales basada en el Combo actual
         if (allowSpecials) {
             val rand = Math.random()
-            if (rand < 0.02) return BubbleColor.RAINBOW
-            if (rand < 0.05) return BubbleColor.BOMB
+            // Aumentamos la probabilidad base (2% y 5%) según el combo
+            val bonusChance = (comboMultiplier - 1) * 0.015 
+            if (rand < (0.02 + bonusChance)) return BubbleColor.RAINBOW
+            if (rand < (0.05 + bonusChance)) return BubbleColor.BOMB
         }
 
-        val currentColors = grid.values.map { it.color }.distinct()
-            .filter { it != BubbleColor.RAINBOW && it != BubbleColor.BOMB }
+        // 2. Conteo de colores presentes para equilibrar el juego
+        val colorCounts = grid.values
+            .filter { it.color != BubbleColor.RAINBOW && it.color != BubbleColor.BOMB }
+            .groupingBy { it.color }
+            .eachCount()
 
-        return if (currentColors.isNotEmpty()) {
-            currentColors.random()
-        } else {
-            generateBaseColor()
+        if (colorCounts.isEmpty()) return generateBaseColor()
+
+        // 3. Sistema de Pesos: Favorecemos ligeramente los colores con menos presencia
+        // para ayudar al jugador a limpiar el tablero ("Limpieza Inteligente").
+        val totalBubbles = colorCounts.values.sum().toFloat()
+        val weights = colorCounts.mapValues { (_, count) ->
+            // Peso inverso: a menos burbujas de ese color, más probabilidad de que salga
+            (1f - (count.toFloat() / totalBubbles)).coerceAtLeast(0.2f)
         }
+
+        val totalWeight = weights.values.sum()
+        var randomThreshold = Math.random() * totalWeight
+        
+        for ((color, weight) in weights) {
+            randomThreshold -= weight
+            if (randomThreshold <= 0) return color
+        }
+
+        return colorCounts.keys.random()
     }
 }

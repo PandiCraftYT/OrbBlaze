@@ -12,9 +12,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,14 +50,19 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.data.MatchHistoryManager
 import com.example.orbblaze.data.SettingsManager
+import com.example.orbblaze.domain.model.DuelMatch
 import com.example.orbblaze.domain.model.Rank
 import com.example.orbblaze.ui.components.rememberGoogleSignInHandler
 import com.example.orbblaze.ui.game.AdsManager
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
+import com.example.orbblaze.ui.theme.SageGreen
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 private val NavyDark = Color(0xFF2D324F)
 private val StarGold = Color(0xFFF4C491)
@@ -66,6 +73,7 @@ fun ProfileScreen(
     settingsManager: SettingsManager,
     adsManager: AdsManager,
     soundManager: SoundManager,
+    matchHistoryManager: MatchHistoryManager,
     onBackClick: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -91,329 +99,176 @@ fun ProfileScreen(
     var showPayDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
 
-    // Sincronizar al entrar
+    var matchHistory by remember { mutableStateOf<List<DuelMatch>>(emptyList()) }
+    var isLoadingHistory by remember { mutableStateOf(false) }
+
     LaunchedEffect(currentUser) {
         if (currentUser != null && !isAnonymous) {
             authManager.saveProgressToCloud(settingsManager.getSyncableData())
+            isLoadingHistory = true
+            matchHistory = matchHistoryManager.getMatchHistory(currentUser!!.uid)
+            isLoadingHistory = false
         }
     }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "profile_animations")
-    val titleFloat by infiniteTransition.animateFloat(
-        initialValue = -8f, targetValue = 8f,
-        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "title_float"
-    )
 
     val configuration = LocalConfiguration.current
     val fontScale = (configuration.screenWidthDp.toFloat() / 411f).coerceIn(0.6f, 1.5f)
 
     Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 24.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            contentPadding = PaddingValues(bottom = 40.dp, top = 24.dp)
         ) {
             // Header
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                IconButton(
-                    onClick = { 
-                        soundManager.play(SoundType.POP)
-                        onBackClick() 
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .shadow(4.dp, CircleShape)
-                        .background(Color.White, CircleShape)
-                        .size((48 * fontScale).dp)
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Volver",
-                        tint = NavyDark,
-                        modifier = Modifier.size((28 * fontScale).dp)
-                    )
-                }
+                    IconButton(
+                        onClick = { 
+                            soundManager.play(SoundType.POP)
+                            onBackClick() 
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .shadow(4.dp, CircleShape)
+                            .background(Color.White, CircleShape)
+                            .size((48 * fontScale).dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                            tint = NavyDark,
+                            modifier = Modifier.size((28 * fontScale).dp)
+                        )
+                    }
 
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.graphicsLayer { translationY = titleFloat }
-                ) {
                     Text(
-                        text = "MI PERFIL",
-                        textAlign = TextAlign.Center,
+                        text = "PERFIL",
                         style = TextStyle(
-                            fontSize = (38 * fontScale).sp,
+                            fontSize = (32 * fontScale).sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White,
-                            letterSpacing = 2.sp,
-                            shadow = Shadow(Color.Black.copy(alpha = 0.15f), Offset(0f, 8f), 12f)
+                            letterSpacing = 2.sp
                         )
-                    )
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 2.dp)
-                            .width(80.dp)
-                            .height(4.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.5f))
                     )
                 }
             }
-            
-            if (isAnonymous) {
-                Spacer(Modifier.weight(0.2f))
-            }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth().shadow(15.dp, RoundedCornerShape(32.dp)),
-                shape = RoundedCornerShape(32.dp),
-                color = Color.White.copy(alpha = 0.92f),
-                border = BorderStroke(2.dp, Color.White.copy(alpha = 0.5f))
-            ) {
-                if (isAnonymous) {
-                    Column(Modifier.padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Lock, null, tint = Color.LightGray, modifier = Modifier.size(64.dp))
-                        Spacer(Modifier.height(16.dp))
-                        Text("¡CONECTA TU CUENTA!", textAlign = TextAlign.Center, color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Spacer(Modifier.height(12.dp))
-                        Text("Debes iniciar sesión con Google para tener un perfil y guardar tu progreso.", textAlign = TextAlign.Center, color = Color.Gray, fontSize = 13.sp)
-                    }
-                } else {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // FOTO
-                            Box(contentAlignment = Alignment.BottomEnd) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(85.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White)
-                                        .border(3.dp, currentRank.color, CircleShape)
-                                        .clickable { showAvatarPicker = true }
-                                ) {
-                                    AsyncImage(
-                                        model = currentUser?.photoUrl?.toString(),
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop,
-                                        error = painterResource(R.drawable.ic_launcher_background),
-                                        placeholder = painterResource(R.drawable.ic_launcher_background)
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier.size(28.dp).background(NavyDark, CircleShape).border(2.dp, Color.White, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                }
-                            }
-
-                            Spacer(Modifier.width(20.dp))
-
-                            // INFO
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { 
-                                    if (nameChangesCount >= 1) showPayDialog = true else { newName = currentUser?.displayName ?: ""; showNameEditor = true }
-                                }) {
-                                    Text(text = currentUser?.displayName ?: "Jugador", fontWeight = FontWeight.Black, fontSize = 20.sp, color = NavyDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Spacer(Modifier.width(6.dp))
-                                    Icon(Icons.Default.Edit, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                                }
-                                
-                                Text(
-                                    text = "RANGO ${currentRank.title}",
-                                    color = currentRank.color,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.sp
-                                )
-
-                                val playerId = authManager.getPlayerId()
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(top = 2.dp).clickable {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("Player ID", playerId)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "ID copiado al portapapeles", Toast.LENGTH_SHORT).show()
-                                    }
-                                ) {
-                                    Text(text = "ID: $playerId", style = TextStyle(fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar ID", tint = Color.LightGray, modifier = Modifier.size(12.dp))
-                                }
-                            }
+            // Info Card
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().shadow(15.dp, RoundedCornerShape(32.dp)),
+                    shape = RoundedCornerShape(32.dp),
+                    color = Color.White.copy(alpha = 0.92f),
+                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.5f))
+                ) {
+                    if (isAnonymous) {
+                        Column(Modifier.padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Lock, null, tint = Color.LightGray, modifier = Modifier.size(64.dp))
+                            Spacer(Modifier.height(16.dp))
+                            Text("¡CONECTA TU CUENTA!", textAlign = TextAlign.Center, color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
+                    } else {
+                        Column(modifier = Modifier.padding(24.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(contentAlignment = Alignment.BottomEnd) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(85.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White)
+                                            .border(3.dp, currentRank.color, CircleShape)
+                                            .clickable { showAvatarPicker = true }
+                                    ) {
+                                        AsyncImage(
+                                            model = currentUser?.photoUrl?.toString(),
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop,
+                                            error = painterResource(R.drawable.ic_launcher_background)
+                                        )
+                                    }
+                                    Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(24.dp).background(NavyDark, CircleShape).border(2.dp, Color.White, CircleShape).padding(4.dp))
+                                }
 
-                        Spacer(Modifier.height(24.dp))
+                                Spacer(Modifier.width(20.dp))
 
-                        // Estadísticas Detalladas
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            ProfileStatBlock(Icons.Default.Star, "ESTRELLAS", "$totalStars", StarGold)
-                            ProfileStatBlock(Icons.Default.EmojiEvents, "RÉCORD", "$highScore", Color(0xFFFF9800))
-                            ProfileStatBlock(Icons.Default.SportsKabaddi, "RATING", "$duelElo", Color(0xFFF44336))
-                            ProfileStatBlock(Icons.Default.ShoppingCart, "MONEDAS", "$coins", Color(0xFF4CAF50))
+                                Column(Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { 
+                                        if (nameChangesCount >= 1) showPayDialog = true else { newName = currentUser?.displayName ?: ""; showNameEditor = true }
+                                    }) {
+                                        Text(text = currentUser?.displayName ?: "Jugador", fontWeight = FontWeight.Black, fontSize = 20.sp, color = NavyDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Spacer(Modifier.width(6.dp))
+                                        Icon(Icons.Default.Edit, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                    
+                                    Text(text = "RANGO ${currentRank.title}", color = currentRank.color, fontSize = 11.sp, fontWeight = FontWeight.Black)
+
+                                    val playerId = authManager.getPlayerId()
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(top = 2.dp).clickable {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("Player ID", playerId)
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "ID copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Text(text = "ID: $playerId", style = TextStyle(fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold))
+                                        Spacer(Modifier.width(6.dp))
+                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copiar ID", tint = Color.LightGray, modifier = Modifier.size(12.dp))
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(24.dp))
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                ProfileStatBlock(Icons.Default.Star, "ESTRELLAS", "$totalStars", StarGold)
+                                ProfileStatBlock(Icons.Default.EmojiEvents, "RÉCORD", "$highScore", Color(0xFFFF9800))
+                                ProfileStatBlock(Icons.Default.SportsKabaddi, "RATING", "$duelElo", Color(0xFFF44336))
+                                ProfileStatBlock(Icons.Default.ShoppingCart, "MONEDAS", "$coins", Color(0xFF4CAF50))
+                            }
                         }
                     }
                 }
             }
 
             if (!isAnonymous) {
-                // Rango y Medalla Grande - DISEÑO RADICALMENTE MEJORADO
-                val rankColor = currentRank.color
-                
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .shadow(20.dp, RoundedCornerShape(32.dp)),
-                    shape = RoundedCornerShape(32.dp),
-                    color = Color(0xFF1A1C2E), // Fondo oscuro profundo para que resalten los colores
-                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(rankColor.copy(alpha = 0.6f), Color.Transparent)))
-                ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        // Resplandor de fondo temático
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.radialGradient(
-                                        0.0f to rankColor.copy(alpha = 0.15f),
-                                        1.0f to Color.Transparent,
-                                        center = Offset(200f, 200f)
-                                    )
-                                )
+                // Historial de Partidas
+                item {
+                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "HISTORIAL DE DUELOS",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp,
+                            letterSpacing = 2.sp,
+                            modifier = Modifier.padding(start = 8.dp)
                         )
 
-                        Column(
-                            modifier = Modifier.fillMaxSize().padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
+                        if (isLoadingHistory) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.CenterHorizontally))
+                        } else if (matchHistory.isEmpty()) {
                             Text(
-                                text = "ESTADO DE RANGO",
+                                "No hay duelos registrados aún.",
                                 color = Color.White.copy(alpha = 0.5f),
-                                style = TextStyle(
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 4.sp
-                                )
+                                fontSize = 12.sp,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                                textAlign = TextAlign.Center
                             )
-                            
-                            Spacer(Modifier.height(12.dp))
-                            
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                // Medalla con efecto de elevación
-                                Surface(
-                                    modifier = Modifier.size(100.dp),
-                                    shape = CircleShape,
-                                    color = Color.White.copy(alpha = 0.05f),
-                                    border = BorderStroke(1.dp, rankColor.copy(alpha = 0.3f))
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        // Brillo detrás de la medalla
-                                        Box(
-                                            modifier = Modifier.size(70.dp).graphicsLayer { alpha = 0.4f }
-                                            .background(Brush.radialGradient(listOf(rankColor, Color.Transparent)), CircleShape)
-                                        )
-                                        Text(text = currentRank.medalName, fontSize = 56.sp)
-                                    }
-                                }
-
-                                Spacer(Modifier.width(24.dp))
-
-                                Column {
-                                    Text(
-                                        text = currentRank.title,
-                                        color = rankColor,
-                                        style = TextStyle(
-                                            fontSize = 32.sp,
-                                            fontWeight = FontWeight.Black,
-                                            shadow = Shadow(rankColor.copy(alpha = 0.5f), Offset(0f, 0f), 15f)
-                                        )
-                                    )
-                                    
-                                    Spacer(Modifier.height(4.dp))
-                                    
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.TrendingUp, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            text = "$duelElo PUNTOS ELO",
-                                            color = Color.White,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                            
-                            Spacer(Modifier.height(20.dp))
-                            
-                            // Barra de progreso elegante
-                            val nextRank = when(currentRank) {
-                                Rank.BRONZE -> 1200
-                                Rank.SILVER -> 1500
-                                Rank.GOLD -> 1800
-                                Rank.PLATINUM -> 2100
-                                Rank.DIAMOND -> 2400
-                                Rank.MASTER -> 3000
-                            }
-                            val prevMin = currentRank.minScore // Esto asume que tienes minScore en el Enum
-                            // Como Rank.kt usa minScore pero para puntos normales, usaré los valores de fromElo
-                            val currentRangeStart = when(currentRank) {
-                                Rank.BRONZE -> 0
-                                Rank.SILVER -> 1200
-                                Rank.GOLD -> 1500
-                                Rank.PLATINUM -> 1800
-                                Rank.DIAMOND -> 2100
-                                Rank.MASTER -> 2400
-                            }
-                            
-                            val progress = ((duelElo - currentRangeStart).toFloat() / (nextRank - currentRangeStart).toFloat()).coerceIn(0f, 1f)
-                            
-                            Column(modifier = Modifier.fillMaxWidth(0.85f)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("PROGRESO", color = Color.White.copy(alpha = 0.4f), fontSize = 9.sp, fontWeight = FontWeight.Black)
-                                    Text("${(progress * 100).toInt()}%", color = rankColor, fontSize = 9.sp, fontWeight = FontWeight.Black)
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.1f))
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth(progress)
-                                            .fillMaxHeight()
-                                            .clip(CircleShape)
-                                            .background(Brush.horizontalGradient(listOf(rankColor.copy(alpha = 0.7f), rankColor)))
-                                    )
-                                }
-                            }
                         }
                     }
                 }
+
+                items(matchHistory) { match ->
+                    MatchHistoryItem(match)
+                }
             }
-            
-            Spacer(Modifier.weight(1f))
         }
     }
 
@@ -465,7 +320,7 @@ fun ProfileScreen(
     if (showNameEditor) {
         AlertDialog(
             onDismissRequest = { showNameEditor = false },
-            title = { Text("EDITAR NOMBRE") },
+            title = { Text("EDITAR NOMBRE", fontWeight = FontWeight.Black) },
             text = { TextField(value = newName, onValueChange = { if (it.length <= 15) newName = it }, placeholder = { Text("Nuevo nombre...") }) },
             confirmButton = {
                 Button(onClick = {
@@ -480,6 +335,78 @@ fun ProfileScreen(
             },
             dismissButton = { TextButton(onClick = { showNameEditor = false }) { Text("CANCELAR") } }
         )
+    }
+}
+
+@Composable
+fun MatchHistoryItem(match: DuelMatch) {
+    val isWin = match.result == "WIN"
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault()) }
+    
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.15f),
+        border = BorderStroke(1.dp, if (isWin) SageGreen.copy(alpha = 0.5f) else Color.Red.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(if (isWin) SageGreen.copy(alpha = 0.2f) else Color.Red.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isWin) Icons.Default.EmojiEvents else Icons.Default.SentimentVeryDissatisfied,
+                    contentDescription = null,
+                    tint = if (isWin) SageGreen else Color.Red,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isWin) "VICTORIA" else "DERROTA",
+                    color = if (isWin) SageGreen else Color.Red,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = "vs ${match.opponentName}",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = match.timestamp?.let { dateFormat.format(it) } ?: "Reciente",
+                    color = Color.White.copy(alpha = 0.5f),
+                    fontSize = 10.sp
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = if (match.eloChange >= 0) "+${match.eloChange} ELO" else "${match.eloChange} ELO",
+                    color = if (match.eloChange >= 0) SageGreen else Color.Red,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "${match.score} - ${match.opponentScore}",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 

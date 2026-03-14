@@ -37,11 +37,11 @@ class SyncUserDataUseCase @Inject constructor(
 
                 // Sincronizar ELO de Duelo
                 val currentElo = settingsManager.duelEloFlow.first()
-                leaderboardManager.syncDuelRating(
+                leaderboardManager.updateDuelRating(
                     userId = user.uid,
                     username = username,
                     avatarUrl = avatarUrl,
-                    currentElo = currentElo
+                    finalElo = currentElo
                 )
 
                 // Sincronizar Progreso de Aventura

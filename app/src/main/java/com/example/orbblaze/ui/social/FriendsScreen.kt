@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -44,10 +43,15 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.orbblaze.R
 import com.example.orbblaze.data.AuthManager
+import com.example.orbblaze.data.MatchHistoryManager
+import com.example.orbblaze.domain.model.DuelMatch
 import com.example.orbblaze.domain.model.Rank
 import com.example.orbblaze.ui.game.SoundManager
 import com.example.orbblaze.ui.game.SoundType
 import com.example.orbblaze.ui.menu.LocalFontScale
+import com.example.orbblaze.ui.components.MatchHistoryMiniItem
+import com.example.orbblaze.ui.theme.NavyDark
+import com.example.orbblaze.ui.theme.SageGreen
 import kotlinx.coroutines.launch
 
 private val NavyDark = Color(0xFF2D324F)
@@ -57,12 +61,12 @@ private val StarGold = Color(0xFFFFD700)
 fun FriendsScreen(
     authManager: AuthManager,
     soundManager: SoundManager,
+    matchHistoryManager: MatchHistoryManager,
     onBackClick: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("MIS AMIGOS", "SOLICITUDES", "BUSCAR")
     
-    // Cargamos la lista de amigos una sola vez para toda la pantalla
     val friends by authManager.getFriends().collectAsState(initial = emptyList())
     val friendUids = remember(friends) { friends.map { it["uid"] as String } }
 
@@ -84,7 +88,6 @@ fun FriendsScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Header con botón de volver estático y título con movimiento
         Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
@@ -176,9 +179,9 @@ fun FriendsScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 when (selectedTab) {
-                    0 -> MyFriendsList(authManager, friends)
-                    1 -> RequestsList(authManager)
-                    2 -> SearchFriendsTab(authManager, friendUids)
+                    0 -> MyFriendsList(authManager, friends, matchHistoryManager)
+                    1 -> RequestsList(authManager, matchHistoryManager)
+                    2 -> SearchFriendsTab(authManager, friendUids, matchHistoryManager)
                 }
             }
         }
@@ -186,7 +189,7 @@ fun FriendsScreen(
 }
 
 @Composable
-fun SearchFriendsTab(authManager: AuthManager, friendUids: List<String>) {
+fun SearchFriendsTab(authManager: AuthManager, friendUids: List<String>, matchHistoryManager: MatchHistoryManager) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val currentUser by authManager.user.collectAsState()
@@ -286,6 +289,7 @@ fun SearchFriendsTab(authManager: AuthManager, friendUids: List<String>) {
 
         FriendProfileDialog(
             data = selectedUserForProfile!!,
+            matchHistoryManager = matchHistoryManager,
             onDismiss = { selectedUserForProfile = null },
             isMe = isMe,
             isFriend = isFriend,
@@ -304,7 +308,7 @@ fun SearchFriendsTab(authManager: AuthManager, friendUids: List<String>) {
 }
 
 @Composable
-fun RequestsList(authManager: AuthManager) {
+fun RequestsList(authManager: AuthManager, matchHistoryManager: MatchHistoryManager) {
     val requests by authManager.getFriendRequests().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -352,6 +356,7 @@ fun RequestsList(authManager: AuthManager) {
     if (selectedRequestProfile != null) {
         FriendProfileDialog(
             data = selectedRequestProfile!!,
+            matchHistoryManager = matchHistoryManager,
             onDismiss = { selectedRequestProfile = null },
             isMe = false,
             isFriend = false,
@@ -378,7 +383,7 @@ fun RequestsList(authManager: AuthManager) {
 }
 
 @Composable
-fun MyFriendsList(authManager: AuthManager, friends: List<Map<String, Any>>) {
+fun MyFriendsList(authManager: AuthManager, friends: List<Map<String, Any>>, matchHistoryManager: MatchHistoryManager) {
     var selectedFriend by remember { mutableStateOf<Map<String, Any>?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -409,6 +414,7 @@ fun MyFriendsList(authManager: AuthManager, friends: List<Map<String, Any>>) {
     if (selectedFriend != null) {
         FriendProfileDialog(
             data = selectedFriend!!,
+            matchHistoryManager = matchHistoryManager,
             onDismiss = { selectedFriend = null },
             isMe = false,
             isFriend = true,
@@ -436,6 +442,7 @@ fun MyFriendsList(authManager: AuthManager, friends: List<Map<String, Any>>) {
 @Composable
 fun FriendProfileDialog(
     data: Map<String, Any>, 
+    matchHistoryManager: MatchHistoryManager,
     onDismiss: () -> Unit, 
     isMe: Boolean,
     isFriend: Boolean,
@@ -449,20 +456,33 @@ fun FriendProfileDialog(
     val name = data["displayName"] as? String ?: "Jugador"
     val photoUrl = data["photoUrl"] as? String
     val isFavorite = data["isFavorite"] as? Boolean ?: false
+    
+    // ✅ Corregido: Leer nombres exactos de los campos de Firestore
     val stars = (data["level_stars_all_total"] as? Number)?.toInt() ?: 0 
     val level = (data["adventure_progress"] as? Number)?.toInt() ?: 0
     val coins = (data["coins"] as? Number)?.toInt() ?: 0
     val duelElo = (data["duel_elo"] as? Number)?.toInt() ?: 1000
     val rank = Rank.fromElo(duelElo)
+    
+    var history by remember { mutableStateOf<List<DuelMatch>?>(null) }
+    var isLoadingHistory by remember { mutableStateOf(true) }
+
+    LaunchedEffect(data["uid"]) {
+        val uid = data["uid"] as? String
+        if (uid != null) {
+            isLoadingHistory = true
+            history = matchHistoryManager.getMatchHistory(uid).take(3)
+            isLoadingHistory = false
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(32.dp), 
-            color = Color(0xFFF8F9FF), // Un blanco azulado muy limpio
+            color = Color(0xFFF8F9FF),
             modifier = Modifier.padding(16.dp).shadow(24.dp, RoundedCornerShape(32.dp))
         ) {
             Column(modifier = Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                // AVATAR CON ANILLO DE GRADIENTE DEL RANGO
                 Box(contentAlignment = Alignment.Center) {
                     Box(
                         modifier = Modifier
@@ -482,8 +502,6 @@ fun FriendProfileDialog(
                         contentScale = ContentScale.Crop,
                         error = painterResource(R.drawable.ic_launcher_background)
                     )
-                    
-                    // Medalla de rango pequeña en la esquina
                     Box(
                         modifier = Modifier.size(32.dp).align(Alignment.BottomEnd).offset(x = (-4).dp, y = (-4).dp)
                             .background(Color.White, CircleShape).border(1.dp, rank.color, CircleShape),
@@ -503,7 +521,6 @@ fun FriendProfileDialog(
                     textAlign = TextAlign.Center
                 )
                 
-                // RANGO TEXTO
                 Text(
                     text = "RANGO ${rank.title}",
                     color = rank.color,
@@ -528,7 +545,6 @@ fun FriendProfileDialog(
                 
                 Spacer(Modifier.height(28.dp))
                 
-                // STATS CARDS
                 Row(
                     modifier = Modifier.fillMaxWidth(), 
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -538,7 +554,31 @@ fun FriendProfileDialog(
                     StatCard(Modifier.weight(1f), Icons.Default.MonetizationOn, "$coins", "ORBES", Color(0xFF4CAF50))
                 }
 
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    "ÚLTIMOS DUELOS",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    letterSpacing = 2.sp
+                )
+                
+                Spacer(Modifier.height(8.dp))
+
+                if (isLoadingHistory) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = SageGreen)
+                } else if (history.isNullOrEmpty()) {
+                    Text("Sin historial reciente", color = Color.LightGray, fontSize = 11.sp)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        history!!.forEach { match ->
+                            MatchHistoryMiniItem(match)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(28.dp))
 
                 if (!isMe) {
                     if (isFriend) {
@@ -603,7 +643,7 @@ fun FriendProfileDialog(
                 
                 TextButton(
                     onClick = onDismiss, 
-                    modifier = Modifier.padding(top = 16.dp).fillMaxWidth()
+                    modifier = Modifier.padding(top = 8.dp).fillMaxWidth()
                 ) {
                     Text("VOLVER", color = Color.Gray, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                 }

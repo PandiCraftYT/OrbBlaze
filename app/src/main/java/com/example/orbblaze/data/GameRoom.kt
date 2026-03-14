@@ -6,14 +6,14 @@ import java.util.Date
 
 /**
  * Clase unificada para representar tanto el estado de una sala de juego como el estado de un jugador.
- * Corregido: Nombres de variables simplificados para evitar conflictos de mapeo con Firebase.
  */
 data class GameRoom(
     // --- Campos de Estado de Jugador ---
     val userId: String = "",
     val displayName: String = "Jugador",
     val avatarUrl: String? = null,
-    val score: Int = 0,
+    val score: Int = 0, // Puntos en la partida actual
+    val elo: Int = 1000, // Rango competitivo
     val dangerLevel: Float = 0f,
     
     @get:PropertyName("ready")
@@ -44,6 +44,11 @@ data class GameRoom(
     val playerCount: Int = 0, 
     val status: String = "WAITING", // WAITING, PLAYING, FINISHED, REMATCH_REQUESTED
     val winnerId: String? = null,
+    
+    // Rango de ELO de la sala (para matchmaking)
+    val minElo: Int = 0,
+    val maxElo: Int = 9999,
+
     @ServerTimestamp
     val createdAt: Date? = null,
     @ServerTimestamp

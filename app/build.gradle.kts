@@ -9,12 +9,12 @@ plugins {
 
 android {
     namespace = "com.example.orbblaze"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.orbblaze"
         minSdk = 29
-        targetSdk = 36
+        targetSdk = 34 // Bajado a 34 para solucionar IncompatibleClassChangeError en Android 10-13
         versionCode = 1
         versionName = "1.0"
 
@@ -37,8 +37,9 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
@@ -48,7 +49,7 @@ android {
 // Migrate to compilerOptions as per AGP 9.0 / Kotlin migration
 kotlin {
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -57,6 +58,8 @@ kapt {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -66,8 +69,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.core.ktx)
-    implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.compose.ui.geometry)
     
     implementation(libs.androidx.navigation.compose)
@@ -89,7 +90,6 @@ dependencies {
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
     kapt(libs.kotlinx.metadata.jvm)
-    // Fixed: changed hyphen to dot for version catalog accessor
     implementation(libs.androidx.hilt.navigation.compose)
 
     testImplementation(libs.junit)

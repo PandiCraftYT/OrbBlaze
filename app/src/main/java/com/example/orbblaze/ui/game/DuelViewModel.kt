@@ -14,12 +14,14 @@ import com.example.orbblaze.domain.usecase.SyncUserDataUseCase
 import com.example.orbblaze.domain.usecase.UnlockAchievementUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.random.Random
 
@@ -30,7 +32,8 @@ class DuelViewModel @Inject constructor(
     authManager: AuthManager,
     syncUserDataUseCase: SyncUserDataUseCase,
     unlockAchievementUseCase: UnlockAchievementUseCase,
-    leaderboardManager: LeaderboardManager
+    leaderboardManager: LeaderboardManager,
+    private val matchHistoryManager: MatchHistoryManager
 ) : GameViewModel(application, settingsManager, authManager, syncUserDataUseCase, unlockAchievementUseCase, leaderboardManager) {
 
     private val matchmakingManager = MatchmakingManager(authManager)
@@ -39,6 +42,8 @@ class DuelViewModel @Inject constructor(
     private var loadingJob: Job? = null
     private var matchmakingTimerJob: Job? = null
     private var botSimulationJob: Job? = null
+    private var heartbeatJob: Job? = null
+    private var connectionCheckJob: Job? = null
 
     private val _room = MutableStateFlow<GameRoom?>(null)
     val room = _room.asStateFlow()
@@ -70,17 +75,24 @@ class DuelViewModel @Inject constructor(
 
     var incomingAttackNotice by mutableStateOf<String?>(null)
         private set
+    var incomingAttackDetail by mutableStateOf<String?>(null)
+        private set
+
+    private var lastOpponentScore = 0
 
     fun findMatch(targetRoomId: String? = null) {
-        // ✅ Limpiar todo antes de empezar una nueva búsqueda
         resetMatchmaking() 
         
         roomListenerJob = viewModelScope.launch {
-            previousElo = settingsManager.duelEloFlow.first()
+            val myElo = settingsManager.duelEloFlow.first()
+            previousElo = myElo
             
-            matchmakingManager.findOrCreateRoom(targetRoomId).collectLatest { gameRoom ->
-                // Ignorar actualizaciones si la sala está terminada y no hemos pedido revancha
+            matchmakingManager.findOrCreateRoom(targetRoomId, myElo).collectLatest { gameRoom ->
                 if (gameRoom?.status == "FINISHED" && !isRematchRequestedByMe) {
+                    if (!isMatchEndingHandled) {
+                        val myId = authManager.currentUser?.uid ?: ""
+                        handleMatchEnd(gameRoom.winnerId == myId, gameRoom.roomId)
+                    }
                     return@collectLatest
                 }
 
@@ -107,7 +119,6 @@ class DuelViewModel @Inject constructor(
 
                             isRematchAcceptedByOpponent = newOpponentState?.rematchReady == true
 
-                            // ✅ Iniciar presentación si estamos limpios (IDLE) o si es una revancha
                             if (gameRoom.status == "PLAYING" && !isShowingVS) {
                                 if (gameState == GameState.IDLE || isRematchRequestedByMe) {
                                     if (gameState != GameState.IDLE) restartGameLocal()
@@ -120,6 +131,13 @@ class DuelViewModel @Inject constructor(
                                 handleIncomingAttack(newOpponentState.lastAttack)
                             }
                             
+                            if (newOpponentState != null && newOpponentState.score > lastOpponentScore && gameState == GameState.PLAYING) {
+                                spawnOpponentScoreEffect(newOpponentState.score - lastOpponentScore)
+                                lastOpponentScore = newOpponentState.score
+                            } else if (newOpponentState != null && newOpponentState.score <= 0) {
+                                lastOpponentScore = 0
+                            }
+
                             _opponent.value = newOpponentState
 
                             if ((newOpponentState?.bot == true || newOpponentState?.userId?.startsWith("BOT_") == true) && gameState == GameState.PLAYING) {
@@ -132,6 +150,10 @@ class DuelViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun spawnOpponentScoreEffect(diff: Int) {
+        spawnFloatingText(metrics?.screenWidth?.minus(100f) ?: 0f, 150f, "+$diff", isOpponent = true)
     }
 
     private fun startMatchmakingTimer(roomId: String) {
@@ -162,8 +184,9 @@ class DuelViewModel @Inject constructor(
                     botScore += Random.nextInt(50, 250)
                     botDanger = (botDanger + Random.nextFloat() * 0.04f - 0.02f).coerceIn(0f, 1f)
                     
-                    val attackType = if (Random.nextFloat() < 0.15f) "ROW_1" else if (Random.nextFloat() < 0.04f) "ROW_2" else null
-                    val attack = if (attackType != null) "${attackType}_${System.currentTimeMillis()}" else null
+                    val combo = Random.nextInt(2, 6)
+                    val attackType = if (combo >= 4) "ROW_2" else if (combo >= 2) "ROW_1" else null
+                    val attack = if (attackType != null) "${attackType}_COMBO${combo}_${System.currentTimeMillis()}" else null
                     
                     val updates = mutableMapOf<String, Any>(
                         "players.${botState.userId}.score" to botScore,
@@ -172,15 +195,8 @@ class DuelViewModel @Inject constructor(
                     )
                     attack?.let { updates["players.${botState.userId}.lastAttack"] = it }
                     
-                    if (Random.nextFloat() < 0.08f) {
-                        val emojis = listOf("😎", "🔥", "😲", "😜", "🤖", "💪")
-                        updates["players.${botState.userId}.currentReaction"] = emojis.random()
-                        updates["players.${botState.userId}.reactionTimestamp"] = System.currentTimeMillis()
-                    }
                     db.collection("gameRooms").document(roomId).update(updates)
                 }
-
-                if (botSecondsSinceShot >= 20) botDanger = 1.0f
 
                 if (botDanger >= 1.0f) {
                     db.collection("gameRooms").document(roomId).update("players.${botState.userId}.score", -1)
@@ -235,7 +251,42 @@ class DuelViewModel @Inject constructor(
         isRematchRequestedByMe = false
         secondsSinceLastShot = 0
         incomingAttackNotice = null
+        incomingAttackDetail = null
+        lastOpponentScore = 0
         startDifficultyBalanceLoop()
+        startHeartbeatLoop()
+        startConnectionCheckLoop()
+    }
+
+    private fun startHeartbeatLoop() {
+        heartbeatJob?.cancel()
+        heartbeatJob = viewModelScope.launch {
+            while (gameState == GameState.PLAYING) {
+                val roomId = _room.value?.roomId
+                if (roomId != null) {
+                    matchmakingManager.updateHeartbeat(roomId)
+                }
+                delay(5000)
+            }
+        }
+    }
+
+    private fun startConnectionCheckLoop() {
+        connectionCheckJob?.cancel()
+        connectionCheckJob = viewModelScope.launch {
+            while (gameState == GameState.PLAYING) {
+                delay(10000)
+                val opp = _opponent.value
+                val roomId = _room.value?.roomId
+                if (opp != null && roomId != null && !opp.bot) {
+                    val lastHeartbeat = opp.reactionTimestamp
+                    if (System.currentTimeMillis() - lastHeartbeat > 20000) { 
+                        handleMatchEnd(isWin = true, roomId)
+                        spawnFloatingText(metrics?.screenWidth?.div(2) ?: 0f, 200f, "RIVAL DESCONECTADO")
+                    }
+                }
+            }
+        }
     }
 
     private fun restartGameLocal() {
@@ -247,7 +298,12 @@ class DuelViewModel @Inject constructor(
         isMatchEndingHandled = false
         showRankAnimation = false
         showDuelResults = false
+        incomingAttackNotice = null
+        incomingAttackDetail = null
+        lastOpponentScore = 0
         botSimulationJob?.cancel()
+        heartbeatJob?.cancel()
+        connectionCheckJob?.cancel()
     }
 
     override fun restartGame() {
@@ -278,16 +334,16 @@ class DuelViewModel @Inject constructor(
     }
 
     fun resetMatchmaking() {
-        // ✅ 1. Cancelar todos los procesos activos
         roomListenerJob?.cancel()
         balanceJob?.cancel()
         loadingJob?.cancel()
         matchmakingTimerJob?.cancel()
         botSimulationJob?.cancel()
+        heartbeatJob?.cancel()
+        connectionCheckJob?.cancel()
         
         val currentRoomId = _room.value?.roomId
         
-        // ✅ 2. Limpiar estados de duelo locales
         _room.value = null
         _opponent.value = null
         isShowingVS = false
@@ -296,21 +352,27 @@ class DuelViewModel @Inject constructor(
         showRankAnimation = false
         showDuelResults = false
         isMatchEndingHandled = false
+        incomingAttackNotice = null
+        incomingAttackDetail = null
         
-        // ✅ 3. RESETEAR EL JUEGO (Crucial para no volver a entrar con estado WON/LOST)
         restartGameLocal() 
         
-        // ✅ 4. Salir de la sala en Firebase
         if (currentRoomId != null) {
-            viewModelScope.launch {
-                matchmakingManager.leaveRoom(currentRoomId)
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val myId = authManager.currentUser?.uid
+            if (myId != null) {
+                db.collection("gameRooms").document(currentRoomId)
+                    .update("players.$myId", com.google.firebase.firestore.FieldValue.delete())
             }
         }
     }
 
     private fun handleIncomingAttack(attack: String?) {
         if (attack == null || gameState != GameState.PLAYING) return
-        val type = attack.split("_").firstOrNull() ?: return
+        val parts = attack.split("_")
+        val type = parts.firstOrNull() ?: return
+        val reason = parts.find { it.startsWith("COMBO") }?.replace("COMBO", "Combo x") ?: "Gran Jugada"
+        
         val rowsToAdd = when (type) {
             "ROW_1" -> 1
             "ROW_2" -> 2
@@ -318,12 +380,15 @@ class DuelViewModel @Inject constructor(
         }
         if (rowsToAdd > 0) {
             addRows(rowsToAdd)
-            triggerShake(rowsToAdd * 4f)
+            triggerShake(rowsToAdd * 5f)
+            vibrationEvent = true 
             
             viewModelScope.launch {
-                incomingAttackNotice = if (rowsToAdd == 1) "¡RIVAL ATACA! +1 FILA" else "¡ATAQUE BRUTAL! +2 FILAS"
-                delay(2000)
+                incomingAttackNotice = if (rowsToAdd == 1) "¡RIVAL ATACA!" else "¡ATAQUE BRUTAL!"
+                incomingAttackDetail = "Causa: $reason (+${rowsToAdd} filas)"
+                delay(2500)
                 incomingAttackNotice = null
+                incomingAttackDetail = null
             }
         }
     }
@@ -336,17 +401,18 @@ class DuelViewModel @Inject constructor(
             val dangerLevel = (lowestRow.toFloat() / dynamicDangerRow).coerceIn(0f, 1f)
 
             val attackType = when {
-                comboMultiplier >= 4 -> {
-                    attacksSentInMatch += 2
-                    "ROW_2"
-                }
-                comboMultiplier >= 2 -> {
-                    attacksSentInMatch += 1
-                    "ROW_1"
-                }
+                comboMultiplier >= 4 -> "ROW_2"
+                comboMultiplier >= 2 -> "ROW_1"
                 else -> null
             }
-            val attackUnique = if (attackType != null) "${attackType}_${System.currentTimeMillis()}" else null
+            
+            val attackString = if (attackType != null) {
+                "${attackType}_COMBO${comboMultiplier}_${System.currentTimeMillis()}"
+            } else null
+            
+            if (attackType != null) {
+                attacksSentInMatch += if (attackType == "ROW_2") 2 else 1
+            }
             
             val myId = authManager.currentUser?.uid ?: return@launch
             val updates = mutableMapOf<String, Any>(
@@ -358,7 +424,7 @@ class DuelViewModel @Inject constructor(
                 "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
             )
             
-            attackUnique?.let { updates["players.$myId.lastAttack"] = it }
+            attackString?.let { updates["players.$myId.lastAttack"] = it }
             
             com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 .collection("gameRooms").document(roomId).update(updates)
@@ -370,11 +436,6 @@ class DuelViewModel @Inject constructor(
         super.checkGameConditions(m)
         
         if (gameState != GameState.PLAYING && prevGameState == GameState.PLAYING) {
-            if (gameState == GameState.WON || gameState == GameState.LOST) {
-                lastEloChange = if (gameState == GameState.WON) 25 else -20
-                showRankAnimation = true
-                showDuelResults = false
-            }
             clearSoundEvent()
         }
 
@@ -411,7 +472,11 @@ class DuelViewModel @Inject constructor(
         isMatchEndingHandled = true
         
         gameState = if (isWin) GameState.WON else GameState.LOST
-        lastEloChange = if (isWin) 25 else -20
+        
+        val myElo = previousElo
+        val oppElo = _opponent.value?.elo ?: 1000 
+        lastEloChange = calculateEloChange(isWin, myElo, oppElo)
+
         showRankAnimation = true
         showDuelResults = false
 
@@ -421,7 +486,10 @@ class DuelViewModel @Inject constructor(
         
         botSimulationJob?.cancel()
         balanceJob?.cancel()
+        heartbeatJob?.cancel()
+        connectionCheckJob?.cancel()
         incomingAttackNotice = null
+        incomingAttackDetail = null
         
         val user = authManager.currentUser
         if (user != null) {
@@ -439,12 +507,33 @@ class DuelViewModel @Inject constructor(
                     userId = user.uid,
                     username = user.displayName ?: "Jugador",
                     avatarUrl = user.photoUrl?.toString(),
-                    isWin = isWin
+                    finalElo = newElo
                 )
+
+                // ✅ GUARDAR EN HISTORIAL
+                val match = DuelMatch(
+                    matchId = roomId,
+                    opponentName = _opponent.value?.displayName ?: "Oponente",
+                    opponentAvatar = _opponent.value?.avatarUrl,
+                    result = if (isWin) "WIN" else "LOSS",
+                    eloChange = lastEloChange,
+                    score = score,
+                    opponentScore = if (_opponent.value?.score == -1) 0 else (_opponent.value?.score ?: 0)
+                )
+                matchHistoryManager.saveMatch(user.uid, match)
                 
                 syncUserDataUseCase.uploadProgress()
             }
         }
+    }
+
+    private fun calculateEloChange(isWin: Boolean, myElo: Int, opponentElo: Int): Int {
+        val kFactor = 32
+        val expectedScore = 1.0 / (1.0 + Math.pow(10.0, (opponentElo - myElo).toDouble() / 400.0))
+        val actualScore = if (isWin) 1.0 else 0.0
+        val change = (kFactor * (actualScore - expectedScore)).toInt()
+        
+        return if (isWin) change.coerceAtLeast(15) else change.coerceAtMost(-10)
     }
 
     fun sendReaction(emoji: String) {
@@ -455,7 +544,13 @@ class DuelViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        val currentRoomId = _room.value?.roomId
+        val myId = authManager.currentUser?.uid
+        if (currentRoomId != null && myId != null) {
+            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("gameRooms").document(currentRoomId)
+                .update("players.$myId", com.google.firebase.firestore.FieldValue.delete())
+        }
         super.onCleared()
-        resetMatchmaking()
     }
 }

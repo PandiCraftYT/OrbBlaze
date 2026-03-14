@@ -1,9 +1,9 @@
 package com.example.orbblaze.data
 
+import android.util.Log
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -15,7 +15,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
     private val db = FirebaseFirestore.getInstance()
     private val roomsCollection = db.collection("gameRooms")
 
-    fun findOrCreateRoom(targetRoomId: String? = null): Flow<GameRoom?> = callbackFlow {
+    fun findOrCreateRoom(targetRoomId: String? = null, userElo: Int = 1000): Flow<GameRoom?> = callbackFlow {
         val currentUser = authManager.currentUser
         var roomListener: ListenerRegistration? = null
 
@@ -23,10 +23,15 @@ class MatchmakingManager(private val authManager: AuthManager) {
             trySend(null)
             close()
         } else {
-            val myPlayerState = GameRoom(
-                userId = currentUser.uid,
-                displayName = currentUser.displayName ?: "Jugador",
-                avatarUrl = currentUser.photoUrl?.toString()
+            val myPlayerMap = mapOf(
+                "userId" to currentUser.uid,
+                "displayName" to (currentUser.displayName ?: "Jugador"),
+                "avatarUrl" to currentUser.photoUrl?.toString(),
+                "elo" to userElo,
+                "score" to 0,
+                "dangerLevel" to 0f,
+                "ready" to true,
+                "reactionTimestamp" to System.currentTimeMillis()
             )
 
             try {
@@ -42,7 +47,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
 
                             val currentCount = roomSnap.getLong("playerCount") ?: 0
                             if (currentCount == 1L) {
-                                transaction.update(roomRef, "players.${currentUser.uid}", myPlayerState)
+                                transaction.update(roomRef, "players.${currentUser.uid}", myPlayerMap)
                                 transaction.update(roomRef, "playerCount", 2)
                                 transaction.update(roomRef, "status", "PLAYING")
                                 transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
@@ -54,107 +59,108 @@ class MatchmakingManager(private val authManager: AuthManager) {
                 }
 
                 if (roomId == null && targetRoomId == null) {
-                    val openRoomsQuery = roomsCollection
-                        .whereEqualTo("status", "WAITING")
-                        .whereEqualTo("playerCount", 1)
-                        .limit(1)
+                    val querySnapshot = try {
+                        roomsCollection
+                            .whereEqualTo("status", "WAITING")
+                            .whereEqualTo("playerCount", 1)
+                            .whereLessThanOrEqualTo("minElo", userElo)
+                            .limit(5)
+                            .get().await()
+                    } catch (e: Exception) {
+                        roomsCollection
+                            .whereEqualTo("status", "WAITING")
+                            .whereEqualTo("playerCount", 1)
+                            .limit(5)
+                            .get().await()
+                    }
 
-                    val querySnapshot = openRoomsQuery.get().await()
+                    val suitableDoc = querySnapshot.documents.firstOrNull { doc ->
+                        val maxElo = doc.getLong("maxElo") ?: 9999
+                        userElo <= maxElo
+                    } ?: querySnapshot.documents.firstOrNull()
 
-                    if (querySnapshot.documents.isNotEmpty()) {
-                        val doc = querySnapshot.documents.first()
-                        val targetId = doc.id
-
+                    if (suitableDoc != null) {
                         val joined = db.runTransaction { transaction ->
-                            val roomRef = roomsCollection.document(targetId)
+                            val roomRef = roomsCollection.document(suitableDoc.id)
                             val roomSnap = transaction.get(roomRef)
-                            if (roomSnap.exists()) {
-                                val players = roomSnap.get("players") as? Map<*, *>
-                                if (players?.containsKey(currentUser.uid) == true) return@runTransaction false
-
-                                val currentCount = roomSnap.getLong("playerCount") ?: 0
-                                if (currentCount == 1L) {
-                                    transaction.update(roomRef, "players.${currentUser.uid}", myPlayerState)
-                                    transaction.update(roomRef, "playerCount", 2)
-                                    transaction.update(roomRef, "status", "PLAYING")
-                                    transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
-                                    true
-                                } else false
+                            val currentCount = roomSnap.getLong("playerCount") ?: 0
+                            if (currentCount == 1L) {
+                                transaction.update(roomRef, "players.${currentUser.uid}", myPlayerMap)
+                                transaction.update(roomRef, "playerCount", 2)
+                                transaction.update(roomRef, "status", "PLAYING")
+                                transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
+                                true
                             } else false
                         }.await()
-                        if (joined) roomId = targetId
+                        if (joined) roomId = suitableDoc.id
                     }
                 }
 
                 if (roomId == null) {
-                    val newRoomId = targetRoomId ?: UUID.randomUUID().toString()
-                    val newRoom = GameRoom(
-                        roomId = newRoomId,
-                        players = mapOf(currentUser.uid to myPlayerState),
-                        playerCount = 1,
-                        status = "WAITING"
+                    val newId = targetRoomId ?: UUID.randomUUID().toString()
+                    val eloRange = 250
+                    val newRoom = mapOf(
+                        "roomId" to newId,
+                        "players" to mapOf(currentUser.uid to myPlayerMap),
+                        "playerCount" to 1,
+                        "status" to "WAITING",
+                        "minElo" to (userElo - eloRange).coerceAtLeast(0),
+                        "maxElo" to userElo + eloRange,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
                     )
-                    roomsCollection.document(newRoomId).set(newRoom).await()
-                    roomId = newRoomId
+                    roomsCollection.document(newId).set(newRoom).await()
+                    roomId = newId
                 }
 
-                val finalRoomId = roomId
-                if (finalRoomId != null) {
-                    roomListener = roomsCollection.document(finalRoomId)
-                        .addSnapshotListener { snapshot, error ->
-                            if (error != null) {
-                                trySend(null)
-                                return@addSnapshotListener
-                            }
-                            if (snapshot != null && snapshot.exists()) {
-                                val updatedRoom = snapshot.toObject(GameRoom::class.java)
-                                trySend(updatedRoom)
-                            } else {
-                                trySend(null)
-                                close()
-                            }
+                roomListener = roomsCollection.document(roomId!!)
+                    .addSnapshotListener { snapshot, _ ->
+                        if (snapshot != null && snapshot.exists()) {
+                            trySend(snapshot.toObject(GameRoom::class.java))
                         }
-                }
+                    }
 
             } catch (e: Exception) {
-                e.printStackTrace()
                 trySend(null)
             }
         }
-
         awaitClose { roomListener?.remove() }
     }
 
     suspend fun addBotToRoom(roomId: String) {
-        val botId = "BOT_${UUID.randomUUID().toString().take(8)}"
-        val botNames = listOf("OrbMaster", "PandaBot", "BlazeRunner", "BubbleGhost", "NeoPlayer", "ZenShot")
-        val botAvatars = listOf(
-            "https://api.dicebear.com/7.x/bottts/png?seed=B1",
-            "https://api.dicebear.com/7.x/bottts/png?seed=B2",
-            "https://api.dicebear.com/7.x/bottts/png?seed=B3"
-        )
-
-        val botState = GameRoom(
-            userId = botId,
-            displayName = botNames.random(),
-            avatarUrl = botAvatars.random(),
-            bot = true
+        val botId = "BOT_${UUID.randomUUID().toString().take(6)}"
+        val botMap = mapOf(
+            "userId" to botId,
+            "displayName" to listOf("OrbMaster", "BlazeBot", "NeoPanda").random(),
+            "avatarUrl" to "https://api.dicebear.com/7.x/bottts/png?seed=$botId",
+            "bot" to true,
+            "elo" to 1000,
+            "score" to 0,
+            "dangerLevel" to 0f,
+            "reactionTimestamp" to System.currentTimeMillis()
         )
 
         try {
             db.runTransaction { transaction ->
                 val roomRef = roomsCollection.document(roomId)
                 val roomSnap = transaction.get(roomRef)
-                if (roomSnap.exists() && roomSnap.getLong("playerCount") == 1L) {
-                    transaction.update(roomRef, "players.$botId", botState)
+                if (roomSnap.exists() && (roomSnap.getLong("playerCount") ?: 0) == 1L) {
+                    transaction.update(roomRef, "players.$botId", botMap)
                     transaction.update(roomRef, "playerCount", 2)
                     transaction.update(roomRef, "status", "PLAYING")
                     transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
                 }
             }.await()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("Matchmaking", "Error BOT: ${e.message}")
         }
+    }
+
+    suspend fun updateHeartbeat(roomId: String) {
+        val myId = authManager.currentUser?.uid ?: return
+        try {
+            roomsCollection.document(roomId).update("players.$myId.reactionTimestamp", System.currentTimeMillis()).await()
+        } catch (e: Exception) { }
     }
 
     suspend fun leaveRoom(roomId: String) {
@@ -165,63 +171,38 @@ class MatchmakingManager(private val authManager: AuthManager) {
                 val roomSnap = transaction.get(roomRef)
                 if (!roomSnap.exists()) return@runTransaction
 
-                val currentStatus = roomSnap.getString("status") ?: "WAITING"
-                val currentCount = roomSnap.getLong("playerCount") ?: 0
+                val players = roomSnap.get("players") as? Map<*, *> ?: emptyMap<String, Any>()
+                val remainingPlayers = players.filterKeys { it != myId }
                 
-                if (currentCount <= 1L) {
+                if (remainingPlayers.isEmpty() || remainingPlayers.values.any { 
+                    (it as? Map<*, *>)?.get("bot") == true || (it as? Map<*, *>)?.get("userId")?.toString()?.startsWith("BOT_") == true 
+                }) {
                     transaction.delete(roomRef)
                 } else {
-                    if (currentStatus == "PLAYING") {
-                        val players = roomSnap.get("players") as? Map<*, *>
-                        val remainingPlayerId = players?.keys?.firstOrNull { it != myId } as? String
-                        
-                        transaction.update(roomRef, "status", "FINISHED")
-                        transaction.update(roomRef, "winnerId", remainingPlayerId)
-                    }
-                    
                     transaction.update(roomRef, "players.$myId", FieldValue.delete())
-                    transaction.update(roomRef, "playerCount", currentCount - 1)
-
-                    @Suppress("UNCHECKED_CAST")
-                    val playersSnap = roomSnap.get("players") as? Map<String, Any>
-                    val remainingPlayers = playersSnap?.keys?.filter { it != myId }
-                    
-                    if (remainingPlayers?.size == 1 && remainingPlayers.first().startsWith("BOT_")) {
-                        transaction.delete(roomRef)
-                    }
+                    transaction.update(roomRef, "playerCount", remainingPlayers.size)
+                    transaction.update(roomRef, "status", "FINISHED")
                 }
             }.await()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("Matchmaking", "Error al salir: ${e.message}")
         }
     }
 
     suspend fun endGame(roomId: String, winnerId: String) {
         try {
-            roomsCollection.document(roomId).update(
-                mapOf(
-                    "status" to "FINISHED",
-                    "winnerId" to winnerId,
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            ).await()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    suspend fun updatePlayerState(roomId: String, score: Int, attack: String?) {
-        val myId = authManager.currentUser?.uid ?: return
-        val updates = mutableMapOf(
-            "players.$myId.score" to score,
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
-        attack?.let { updates["players.$myId.lastAttack"] = it }
-        try {
-            roomsCollection.document(roomId).update(updates).await()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+            db.runTransaction { transaction ->
+                val roomRef = roomsCollection.document(roomId)
+                val snap = transaction.get(roomRef)
+                if (snap.exists() && snap.getString("status") != "FINISHED") {
+                    transaction.update(roomRef, mapOf(
+                        "status" to "FINISHED",
+                        "winnerId" to winnerId,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    ))
+                }
+            }.await()
+        } catch (e: Exception) { }
     }
 
     suspend fun updatePlayerRematchStatus(roomId: String, ready: Boolean) {
@@ -229,53 +210,29 @@ class MatchmakingManager(private val authManager: AuthManager) {
         try {
             db.runTransaction { transaction ->
                 val roomRef = roomsCollection.document(roomId)
-                val roomSnap = transaction.get(roomRef)
-                if (!roomSnap.exists()) return@runTransaction
+                val roomObj = transaction.get(roomRef).toObject(GameRoom::class.java) ?: return@runTransaction
                 
-                val roomObj = roomSnap.toObject(GameRoom::class.java) ?: return@runTransaction
-
                 transaction.update(roomRef, "players.$myId.rematchReady", ready)
-
-                val otherPlayer = roomObj.players.values.firstOrNull { it.userId != myId }
-                // Reforzamos detección de bot por ID además del campo boolean
-                val isOtherBot = otherPlayer?.bot == true || otherPlayer?.userId?.startsWith("BOT_") == true
-
-                if (ready && (otherPlayer?.rematchReady == true || isOtherBot)) {
+                
+                val other = roomObj.players.values.firstOrNull { it.userId != myId }
+                if (ready && (other?.rematchReady == true || other?.bot == true)) {
                     transaction.update(roomRef, "status", "PLAYING")
                     transaction.update(roomRef, "winnerId", FieldValue.delete())
-                    transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
-
                     roomObj.players.keys.forEach { uid ->
                         transaction.update(roomRef, "players.$uid.score", 0)
                         transaction.update(roomRef, "players.$uid.rematchReady", false)
-                        transaction.update(roomRef, "players.$uid.lastAttack", FieldValue.delete())
-                        transaction.update(roomRef, "players.$uid.currentReaction", FieldValue.delete())
                         transaction.update(roomRef, "players.$uid.dangerLevel", 0f)
-                        transaction.update(roomRef, "players.$uid.bubblesPopped", 0)
-                        transaction.update(roomRef, "players.$uid.maxCombo", 0)
-                        transaction.update(roomRef, "players.$uid.attacksSent", 0)
                     }
-                } else if (ready) {
-                    transaction.update(roomRef, "status", "REMATCH_REQUESTED")
-                    transaction.update(roomRef, "updatedAt", FieldValue.serverTimestamp())
                 }
             }.await()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { }
     }
 
     suspend fun sendReaction(roomId: String, emoji: String) {
         val myId = authManager.currentUser?.uid ?: return
-        try {
-            roomsCollection.document(roomId).update(
-                mapOf(
-                    "players.$myId.currentReaction" to emoji,
-                    "players.$myId.reactionTimestamp" to System.currentTimeMillis()
-                )
-            ).await()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        roomsCollection.document(roomId).update(
+            "players.$myId.currentReaction", emoji,
+            "players.$myId.reactionTimestamp", System.currentTimeMillis()
+        )
     }
 }

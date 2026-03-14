@@ -22,6 +22,8 @@ fun rememberGoogleSignInHandler(
 ): () -> Unit {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    
+    // Usamos el ID de cliente WEB (Tipo 3) de tu google-services.json
     val webClientId = "16414219373-43f70abac7dp5v3tbvvq6lndspdcsh0i.apps.googleusercontent.com"
 
     val launcher = rememberLauncherForActivityResult(
@@ -59,13 +61,21 @@ fun rememberGoogleSignInHandler(
                                     onSuccess()
                                 }
                             } else {
-                                Toast.makeText(context, "Error al vincular: ${linkResult.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "Error al vincular cuenta", Toast.LENGTH_LONG).show()
                             }
                         }
                     }
                 }
             } catch (e: Exception) {
-                Toast.makeText(context, "Error en Google Sign In: ${e.message}", Toast.LENGTH_SHORT).show()
+                val statusCode = (e as? ApiException)?.statusCode
+                val message = when(statusCode) {
+                    7 -> "Error 7: Red (Revisa conexión)"
+                    8 -> "Error 8: Error interno"
+                    10 -> "Error 10: SHA-1 o Paquete NO coinciden en Firebase"
+                    12500 -> "Error 12500: Revisa Correo de Soporte en Firebase"
+                    else -> "Error login: $statusCode"
+                }
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
             }
         }
     }

@@ -31,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.orbblaze.data.AuthManager
 import com.example.orbblaze.data.LeaderboardManager
+import com.example.orbblaze.data.MatchHistoryManager
 import com.example.orbblaze.data.SettingsManager
 import com.example.orbblaze.domain.usecase.SyncUserDataUseCase
 import com.example.orbblaze.ui.game.*
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var authManager: AuthManager
     @Inject lateinit var syncUserDataUseCase: SyncUserDataUseCase
     @Inject lateinit var leaderboardManager: LeaderboardManager
+    @Inject lateinit var matchHistoryManager: MatchHistoryManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,9 +77,6 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
                 
-                val isLevel = currentRoute in listOf("game", "time_attack", "adventure_game", "game_adventure", "duel")
-                val showBanner = currentRoute != "splash" && currentRoute != null
-
                 LaunchedEffect(Unit) {
                     syncUserDataUseCase.processInitialSync()
                 }
@@ -106,7 +105,6 @@ class MainActivity : ComponentActivity() {
                     val sharedViewModel: GameViewModel = hiltViewModel()
 
                     Column(modifier = Modifier.fillMaxSize()) {
-                        
                         Box(modifier = Modifier.weight(1f)) {
                             AppNavigation(
                                 navController = navController,
@@ -115,41 +113,16 @@ class MainActivity : ComponentActivity() {
                                 settingsManager = settingsManager, 
                                 authManager = authManager, 
                                 leaderboardManager = leaderboardManager,
+                                matchHistoryManager = matchHistoryManager,
                                 sharedViewModel = sharedViewModel
                             )
 
-                            // Feedback overlays
                             AchievementNotification(sharedViewModel.activeAchievement)
                             SyncIndicator(syncUserDataUseCase)
-
-                            // Banner removido de aquí (pantallas de nivel)
                         }
-
-                        // Banner removido de aquí (menú y otras pantallas)
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun AdBannerCapsule(adsManager: AdsManager) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .navigationBarsPadding(),
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White,
-        shadowElevation = 8.dp,
-        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.2f))
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            adsManager.BannerAd()
         }
     }
 }
@@ -162,6 +135,7 @@ fun AppNavigation(
     settingsManager: SettingsManager,
     authManager: AuthManager,
     leaderboardManager: LeaderboardManager,
+    matchHistoryManager: MatchHistoryManager,
     sharedViewModel: GameViewModel
 ) {
     val context = LocalContext.current
@@ -173,7 +147,6 @@ fun AppNavigation(
     val adventureVm: AdventureViewModel = hiltViewModel()
     val duelVm: DuelViewModel = hiltViewModel() 
 
-    // ✅ Sistema de Notificación de Invitación de Duelo
     val duelInvites by authManager.getDuelInvitations().collectAsState(initial = emptyList())
     
     if (duelInvites.isNotEmpty()) {
@@ -186,7 +159,6 @@ fun AppNavigation(
                     val inviteId = invite["id"] as? String ?: ""
                     authManager.deleteDuelInvitation(inviteId)
                     if (roomId != null) {
-                        // ✅ Sincronizamos el ViewModel antes de navegar
                         duelVm.findMatch(roomId)
                         navController.navigate("duel")
                     }
@@ -232,6 +204,7 @@ fun AppNavigation(
                 settingsManager = settingsManager,
                 adsManager = adsManager,
                 soundManager = soundManager,
+                matchHistoryManager = matchHistoryManager,
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -239,6 +212,7 @@ fun AppNavigation(
             FriendsScreen(
                 authManager = authManager,
                 soundManager = soundManager,
+                matchHistoryManager = matchHistoryManager,
                 onBackClick = { navController.popBackStack() }
             )
         }
@@ -329,6 +303,8 @@ fun AppNavigation(
                 soundManager = soundManager,
                 settingsManager = settingsManager,
                 leaderboardManager = leaderboardManager,
+                matchHistoryManager = matchHistoryManager,
+                authManager = authManager,
                 onBackClick = { navController.popBackStack() }
             )
         }

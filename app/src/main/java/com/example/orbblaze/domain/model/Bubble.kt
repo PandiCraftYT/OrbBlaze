@@ -37,14 +37,6 @@ data class GameParticle(
     val life: Float
 )
 
-data class FloatingText(
-    val id: Long,
-    val x: Float,
-    val y: Float,
-    val text: String,
-    val life: Float
-)
-
 data class BoardMetricsPx(
     val bubbleDiameter: Float,
     val horizontalSpacing: Float,

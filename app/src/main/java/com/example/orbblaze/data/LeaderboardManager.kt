@@ -18,20 +18,13 @@ class LeaderboardManager @Inject constructor() {
     private val firestore = FirebaseFirestore.getInstance()
     private val COLLECTION_NAME = "leaderboards"
 
-    /**
-     * Obtiene el ranking de un modo específico.
-     * Ahora busca en campos como 'score_CLASSIC', 'score_DUEL', etc.
-     */
     fun getLeaderboard(mode: String): Flow<List<LeaderboardEntry>> = callbackFlow {
-        val scoreField = "score_$mode" // Campo dinámico según el modo
-        Log.d("LeaderboardManager", "Obteniendo ranking unificado. Ordenando por: $scoreField")
-
+        val scoreField = "score_$mode"
         val listener = firestore.collection(COLLECTION_NAME)
             .orderBy(scoreField, Query.Direction.DESCENDING)
             .limit(20)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("LeaderboardManager", "Error: ${error.message}")
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -39,7 +32,6 @@ class LeaderboardManager @Inject constructor() {
                 val entries = snapshot?.documents?.mapNotNull { doc ->
                     try {
                         val scoreValue = doc.getLong(scoreField)?.toInt() ?: 0
-                        // Solo incluimos si el puntaje es mayor a 0 (para no mostrar gente que no ha jugado ese modo)
                         if (scoreValue > 0 || mode == "DUEL") {
                             LeaderboardEntry(
                                 userId = doc.id,
@@ -63,7 +55,7 @@ class LeaderboardManager @Inject constructor() {
             "username" to username,
             "avatarUrl" to avatarUrl,
             "timestamp" to FieldValue.serverTimestamp(),
-            scoreField to score // Actualiza solo el campo del modo correspondiente
+            scoreField to score
         )
 
         try {
@@ -75,37 +67,10 @@ class LeaderboardManager @Inject constructor() {
         }
     }
 
-    suspend fun updateDuelRating(userId: String, username: String, avatarUrl: String?, isWin: Boolean) {
-        val scoreField = "score_DUEL"
-        val docRef = firestore.collection(COLLECTION_NAME).document(userId)
-
-        try {
-            firestore.runTransaction { transaction ->
-                val snapshot = transaction.get(docRef)
-                val currentScore = if (snapshot.exists()) {
-                    snapshot.getLong(scoreField)?.toInt() ?: 1000
-                } else {
-                    1000
-                }
-
-                val pointsChange = if (isWin) 25 else -20
-                val newScore = (currentScore + pointsChange).coerceAtLeast(0)
-
-                val entry = mapOf(
-                    "userId" to userId,
-                    "username" to username,
-                    "avatarUrl" to avatarUrl,
-                    "timestamp" to FieldValue.serverTimestamp(),
-                    scoreField to newScore
-                )
-                transaction.set(docRef, entry, SetOptions.merge())
-            }.await()
-        } catch (e: Exception) {
-            Log.e("LeaderboardManager", "Error en Rating Duelo: ${e.message}")
-        }
-    }
-
-    suspend fun syncDuelRating(userId: String, username: String, avatarUrl: String?, currentElo: Int) {
+    /**
+     * ✅ MEJORADO: Ahora acepta el ELO final calculado dinámicamente
+     */
+    suspend fun updateDuelRating(userId: String, username: String, avatarUrl: String?, finalElo: Int) {
         val scoreField = "score_DUEL"
         try {
             val entry = mapOf(
@@ -113,13 +78,13 @@ class LeaderboardManager @Inject constructor() {
                 "username" to username,
                 "avatarUrl" to avatarUrl,
                 "timestamp" to FieldValue.serverTimestamp(),
-                scoreField to currentElo
+                scoreField to finalElo
             )
             firestore.collection(COLLECTION_NAME).document(userId)
                 .set(entry, SetOptions.merge())
                 .await()
         } catch (e: Exception) {
-            Log.e("LeaderboardManager", "Error sync Duelo: ${e.message}")
+            Log.e("LeaderboardManager", "Error en Rating Duelo: ${e.message}")
         }
     }
 }

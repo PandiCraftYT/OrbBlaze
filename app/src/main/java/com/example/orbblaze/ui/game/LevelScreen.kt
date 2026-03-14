@@ -113,8 +113,8 @@ fun LevelScreen(
     val myId = viewModel.authManager.currentUser?.uid ?: ""
     val myPlayerState = roomState?.players?.get(myId)
 
-    // ✅ Aviso de Ataque
     val incomingAttackNotice = duelViewModel?.incomingAttackNotice
+    val incomingAttackDetail = duelViewModel?.incomingAttackDetail
 
     var showQuickShop by remember { mutableStateOf(false) }
     var isAiming by remember { mutableStateOf(false) }
@@ -434,17 +434,18 @@ fun LevelScreen(
                     floatingTexts.forEach { ft ->
                         val alpha = (ft.life * 255).toInt().coerceIn(0, 255)
                         val isCombo = ft.text.contains("COMBO")
+                        val isOpponentText = ft.isOpponent
                         
                         val paintOutline = android.graphics.Paint().apply {
-                            textSize = if(isCombo) 95f else 70f
+                            textSize = if(isCombo) 95f else (if(isOpponentText) 50f else 70f)
                             textAlign = android.graphics.Paint.Align.CENTER
                             typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
                             color = android.graphics.Color.BLACK; this.alpha = (alpha * 0.7f).toInt()
-                            style = android.graphics.Paint.Style.STROKE; strokeWidth = if(isCombo) 10f else 6f
+                            style = android.graphics.Paint.Style.STROKE; strokeWidth = if(isCombo) 10f else (if(isOpponentText) 4f else 6f)
                         }
                         
                         val paintFill = android.graphics.Paint().apply {
-                            textSize = if(isCombo) 95f else 70f
+                            textSize = if(isCombo) 95f else (if(isOpponentText) 50f else 70f)
                             textAlign = android.graphics.Paint.Align.CENTER
                             typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
                             this.alpha = alpha
@@ -459,6 +460,8 @@ fun LevelScreen(
                                     ),
                                     null, android.graphics.Shader.TileMode.MIRROR
                                 )
+                            } else if (isOpponentText) {
+                                color = android.graphics.Color.RED
                             } else {
                                 color = android.graphics.Color.WHITE
                             }
@@ -483,7 +486,6 @@ fun LevelScreen(
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().onGloballyPositioned { scoreRect = it.boundsInRoot() }
             )
         } else {
-            // REDISEÑO DUELO: TODA LA PANTALLA
             DuelTopBar(
                 myScore = score,
                 myDanger = (bubbles.keys.maxOfOrNull { it.row }?.toFloat() ?: 0f) / dangerRow.toFloat(),
@@ -494,7 +496,6 @@ fun LevelScreen(
             )
         }
 
-        // Reacción del oponente
         if (opponentState?.currentReaction != null) {
             PlayerReactionDisplay(
                 emoji = opponentState?.currentReaction,
@@ -505,7 +506,6 @@ fun LevelScreen(
             )
         }
         
-        // Mi propia reacción
         if (myPlayerState?.currentReaction != null) {
             PlayerReactionDisplay(
                 emoji = myPlayerState.currentReaction,
@@ -516,7 +516,6 @@ fun LevelScreen(
             )
         }
 
-        // Selector de emojis
         if (duelViewModel != null && gameState == GameState.PLAYING && !isPaused) {
             EmojiReactionPicker(
                 onEmojiSelected = { emoji -> duelViewModel.sendReaction(emoji) },
@@ -535,8 +534,7 @@ fun LevelScreen(
             )
         }
 
-        // ✅ Notificación de Ataque Recibido
-        AttackWarningOverlay(incomingAttackNotice)
+        AttackWarningOverlay(incomingAttackNotice, incomingAttackDetail)
 
         if (gameState == GameState.IDLE && !isShowingVS) {
             if (viewModel.gameMode == GameMode.ADVENTURE) {
@@ -570,7 +568,6 @@ fun LevelScreen(
             )
         }
 
-        // ✅ LÓGICA DE SECUENCIA MEJORADA: Esperar a que la animación de rango termine para mostrar el menú
         val isShowingRankAnim = duelViewModel?.showRankAnimation == true
         
         if ((gameState == GameState.WON || gameState == GameState.LOST) && !isShowingRankAnim) {
@@ -631,7 +628,6 @@ fun LevelScreen(
             )
         }
 
-        // ✅ Nueva Presentación VS con Barra de Carga
         if (isShowingVS) {
             VSPresentationOverlay(
                 myName = viewModel.authManager.currentUser?.displayName ?: "Tú",
@@ -644,7 +640,6 @@ fun LevelScreen(
             )
         }
 
-        // ✅ Animación de Rango (Aparece primero y bloquea el OverlayMenu)
         if (isShowingRankAnim) {
             RankUpdateOverlay(
                 previousElo = duelViewModel?.previousElo ?: 1000,
@@ -659,7 +654,7 @@ fun LevelScreen(
 }
 
 @Composable
-fun AttackWarningOverlay(notice: String?) {
+fun AttackWarningOverlay(notice: String?, detail: String?) {
     AnimatedVisibility(
         visible = notice != null,
         enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
@@ -673,19 +668,30 @@ fun AttackWarningOverlay(notice: String?) {
                 shadowElevation = 8.dp,
                 border = BorderStroke(2.dp, Color.White.copy(alpha = 0.5f))
             ) {
-                Row(
+                Column(
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.Whatshot, null, tint = Color.White, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = notice ?: "",
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 18.sp,
-                        letterSpacing = 1.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Whatshot, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = notice ?: "",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 18.sp,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    if (detail != null) {
+                        Text(
+                            text = detail,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -772,7 +778,6 @@ fun RankUpdateOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Medalla Animada
             val medalScale by animateFloatAsState(
                 targetValue = 1.2f,
                 animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse),
@@ -815,7 +820,6 @@ fun RankUpdateOverlay(
                 fontWeight = FontWeight.Black
             )
 
-            // Indicador de cambio (+25 / -20)
             AnimatedVisibility(
                 visible = true,
                 enter = fadeIn() + slideInVertically()
@@ -858,10 +862,9 @@ fun VSPresentationOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0B1E)), // Fondo oscuro premium
+            .background(Color(0xFF0A0B1E)), 
         contentAlignment = Alignment.Center
     ) {
-        // Elementos decorativos de fondo (rayos/luces)
         Box(modifier = Modifier.fillMaxSize()) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val diagonalPath = Path().apply {
@@ -881,16 +884,13 @@ fun VSPresentationOverlay(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // CABECERA VERSUS
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // MI JUGADOR
                 VSPlayerLargeCard(name = myName, avatar = myAvatar, elo = myElo, color = Color(0xFF2196F3), isLeft = true)
 
-                // TEXTO VS CENTRAL
                 Box(contentAlignment = Alignment.Center) {
                     val infiniteTransition = rememberInfiniteTransition(label = "vs_anim")
                     val vsScale by infiniteTransition.animateFloat(
@@ -910,13 +910,11 @@ fun VSPresentationOverlay(
                     )
                 }
 
-                // OPONENTE
                 VSPlayerLargeCard(name = opponentName, avatar = opponentAvatar, elo = opponentElo, color = Color(0xFFF44336), isLeft = false)
             }
 
             Spacer(Modifier.height(80.dp))
 
-            // BARRA DE CARGA REFINADA
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth(0.7f)) {
                 Text(
                     text = "PREPARANDO ARENA...",
@@ -963,9 +961,7 @@ fun VSPlayerLargeCard(name: String, avatar: String?, elo: Int, color: Color, isL
     val rank = Rank.fromElo(elo)
     
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Marco de Avatar con Rango
         Box(contentAlignment = Alignment.Center) {
-            // Resplandor de Rango
             Box(
                 modifier = Modifier
                     .size(115.dp)
@@ -988,7 +984,6 @@ fun VSPlayerLargeCard(name: String, avatar: String?, elo: Int, color: Color, isL
                 )
             }
             
-            // Medalla de Rango
             Box(
                 modifier = Modifier
                     .size(34.dp)
@@ -1028,35 +1023,6 @@ fun VSPlayerLargeCard(name: String, avatar: String?, elo: Int, color: Color, isL
                 letterSpacing = 1.sp
             )
         }
-    }
-}
-
-@Composable
-fun VSPlayerInfo(name: String, avatar: String?, isLeft: Boolean) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            modifier = Modifier.size(100.dp),
-            shape = CircleShape,
-            border = BorderStroke(4.dp, if (isLeft) Color(0xFF2196F3) else Color(0xFFF44336)),
-            shadowElevation = 12.dp
-        ) {
-            AsyncImage(
-                model = avatar,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                contentScale = ContentScale.Crop,
-                error = painterResource(R.drawable.ic_launcher_background)
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = name.uppercase(),
-            color = Color.White,
-            fontWeight = FontWeight.Black,
-            fontSize = 16.sp,
-            maxLines = 1,
-            style = TextStyle(shadow = Shadow(Color.Black, offset = Offset(2f, 2f)))
-        )
     }
 }
 
@@ -1336,7 +1302,6 @@ fun OverlayMenu(
     val appearScale by animateFloatAsState(targetValue = 1f, animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f), label = "pop")
     val resplandorAlpha by animateFloatAsState(targetValue = 0.4f, animationSpec = tween(1000), label = "aura")
 
-    // PUNTUACIÓN ANIMADA
     var animatedScore by remember { mutableIntStateOf(0) }
     LaunchedEffect(score) {
         if (score != null) {
@@ -1352,7 +1317,6 @@ fun OverlayMenu(
     Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         if (isWin) ConfettiView()
 
-        // Resplandor de fondo
         Box(
             modifier = Modifier
                 .size(500.dp)
@@ -1377,7 +1341,6 @@ fun OverlayMenu(
                 modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // ICONO DE ESTADO
                 Box(
                     modifier = Modifier.size(80.dp).clip(CircleShape).background(if (isWin) Color(0xFFFFF9C4) else Color(0xFFFEE2E2)),
                     contentAlignment = Alignment.Center
@@ -1440,7 +1403,6 @@ fun OverlayMenu(
                     Spacer(Modifier.height(24.dp))
                 }
 
-                // BOTONES CON ANIMACIÓN
                 val infinitePulse = rememberInfiniteTransition(label = "btn_pulse")
                 val pulseScale by infinitePulse.animateFloat(initialValue = 1f, targetValue = 1.05f, animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "p")
 
@@ -1507,7 +1469,6 @@ fun DuelResultsTable(my: GameRoom, opp: GameRoom, isWin: Boolean) {
             .padding(horizontal = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Cabecera de Mini Perfiles
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1520,7 +1481,6 @@ fun DuelResultsTable(my: GameRoom, opp: GameRoom, isWin: Boolean) {
 
         Spacer(Modifier.height(8.dp))
 
-        // Filas de Estadísticas
         ResultRow(
             icon = Icons.Default.EmojiEvents,
             label = "PUNTUACIÓN",
@@ -1613,7 +1573,6 @@ fun ResultRow(icon: ImageVector, label: String, myVal: String, oppVal: String, m
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Valor Mío
             Text(
                 text = myVal,
                 modifier = Modifier.weight(1f),
@@ -1625,7 +1584,6 @@ fun ResultRow(icon: ImageVector, label: String, myVal: String, oppVal: String, m
                 )
             )
 
-            // Etiqueta Central con Icono
             Column(
                 modifier = Modifier.weight(1.5f),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -1643,7 +1601,6 @@ fun ResultRow(icon: ImageVector, label: String, myVal: String, oppVal: String, m
                 )
             }
 
-            // Valor Oponente
             Text(
                 text = oppVal,
                 modifier = Modifier.weight(1f),
@@ -1684,4 +1641,3 @@ fun FireballRenderer(modifier: Modifier = Modifier) {
         drawCircle(brush = Brush.radialGradient(colorStops = arrayOf(0.0f to Color.White, 0.4f to Color(0xFFFFEB3B), 1.0f to Color(0xFFFF5722)), center = center, radius = r * 0.9f))
     }
 }
-
