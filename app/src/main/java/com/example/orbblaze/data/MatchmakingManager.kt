@@ -31,6 +31,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
                 "score" to 0,
                 "dangerLevel" to 0f,
                 "ready" to true,
+                "lastHeartbeat" to System.currentTimeMillis(),
                 "reactionTimestamp" to System.currentTimeMillis()
             )
 
@@ -137,6 +138,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
             "elo" to 1000,
             "score" to 0,
             "dangerLevel" to 0f,
+            "lastHeartbeat" to System.currentTimeMillis(),
             "reactionTimestamp" to System.currentTimeMillis()
         )
 
@@ -159,7 +161,7 @@ class MatchmakingManager(private val authManager: AuthManager) {
     suspend fun updateHeartbeat(roomId: String) {
         val myId = authManager.currentUser?.uid ?: return
         try {
-            roomsCollection.document(roomId).update("players.$myId.reactionTimestamp", System.currentTimeMillis()).await()
+            roomsCollection.document(roomId).update("players.$myId.lastHeartbeat", System.currentTimeMillis()).await()
         } catch (e: Exception) { }
     }
 

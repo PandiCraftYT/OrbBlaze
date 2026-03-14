@@ -12,8 +12,8 @@ data class GameRoom(
     val userId: String = "",
     val displayName: String = "Jugador",
     val avatarUrl: String? = null,
-    val score: Int = 0, // Puntos en la partida actual
-    val elo: Int = 1000, // Rango competitivo
+    val score: Int = 0,
+    val elo: Int = 1000,
     val dangerLevel: Float = 0f,
     
     @get:PropertyName("ready")
@@ -28,12 +28,12 @@ data class GameRoom(
     
     val currentReaction: String? = null,
     val reactionTimestamp: Long = 0L,
+    val lastHeartbeat: Long = 0L, // ✅ Nuevo campo para separar del emote
     
     @get:PropertyName("bot")
     @set:PropertyName("bot")
     var bot: Boolean = false,
     
-    // Estadísticas detalladas
     val bubblesPopped: Int = 0,
     val maxCombo: Int = 0,
     val attacksSent: Int = 0,
@@ -42,10 +42,8 @@ data class GameRoom(
     val roomId: String = "",
     val players: Map<String, GameRoom> = emptyMap(),
     val playerCount: Int = 0, 
-    val status: String = "WAITING", // WAITING, PLAYING, FINISHED, REMATCH_REQUESTED
+    val status: String = "WAITING", 
     val winnerId: String? = null,
-    
-    // Rango de ELO de la sala (para matchmaking)
     val minElo: Int = 0,
     val maxElo: Int = 9999,
 

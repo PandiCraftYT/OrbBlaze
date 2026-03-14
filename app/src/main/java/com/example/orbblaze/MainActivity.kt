@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
                     val sharedViewModel: GameViewModel = hiltViewModel()
 
                     Column(modifier = Modifier.fillMaxSize()) {
+                        
                         Box(modifier = Modifier.weight(1f)) {
                             AppNavigation(
                                 navController = navController,

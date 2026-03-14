@@ -73,6 +73,10 @@ class DuelViewModel @Inject constructor(
     private var isMatchEndingHandled = false
     private var secondsSinceLastShot = 0
 
+    // ✅ UX: Conteo regresivo
+    var countdownValue by mutableIntStateOf(0)
+        private set
+
     var incomingAttackNotice by mutableStateOf<String?>(null)
         private set
     var incomingAttackDetail by mutableStateOf<String?>(null)
@@ -214,6 +218,7 @@ class DuelViewModel @Inject constructor(
         showRankAnimation = false
         showDuelResults = false
         isMatchEndingHandled = false 
+        countdownValue = 0 // Reset
         
         loadingJob = viewModelScope.launch {
             previousElo = settingsManager.duelEloFlow.first()
@@ -226,6 +231,20 @@ class DuelViewModel @Inject constructor(
                 matchLoadingProgress = i.toFloat() / steps
             }
             isShowingVS = false
+            
+            // ✅ Iniciar Conteo Regresivo antes de empezar
+            startCountdown()
+        }
+    }
+
+    private fun startCountdown() {
+        viewModelScope.launch {
+            for (i in 3 downTo 1) {
+                countdownValue = i
+                soundEvent = SoundType.POP
+                delay(1000)
+            }
+            countdownValue = 0 // 0 significa "¡YA!" o oculto
             startGame()
         }
     }
@@ -279,7 +298,7 @@ class DuelViewModel @Inject constructor(
                 val opp = _opponent.value
                 val roomId = _room.value?.roomId
                 if (opp != null && roomId != null && !opp.bot) {
-                    val lastHeartbeat = opp.reactionTimestamp
+                    val lastHeartbeat = opp.lastHeartbeat
                     if (System.currentTimeMillis() - lastHeartbeat > 20000) { 
                         handleMatchEnd(isWin = true, roomId)
                         spawnFloatingText(metrics?.screenWidth?.div(2) ?: 0f, 200f, "RIVAL DESCONECTADO")
@@ -301,6 +320,7 @@ class DuelViewModel @Inject constructor(
         incomingAttackNotice = null
         incomingAttackDetail = null
         lastOpponentScore = 0
+        countdownValue = 0
         botSimulationJob?.cancel()
         heartbeatJob?.cancel()
         connectionCheckJob?.cancel()
@@ -354,6 +374,7 @@ class DuelViewModel @Inject constructor(
         isMatchEndingHandled = false
         incomingAttackNotice = null
         incomingAttackDetail = null
+        countdownValue = 0
         
         restartGameLocal() 
         
@@ -510,7 +531,6 @@ class DuelViewModel @Inject constructor(
                     finalElo = newElo
                 )
 
-                // ✅ GUARDAR EN HISTORIAL
                 val match = DuelMatch(
                     matchId = roomId,
                     opponentName = _opponent.value?.displayName ?: "Oponente",

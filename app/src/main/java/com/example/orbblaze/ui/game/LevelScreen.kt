@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.orbblaze.R
@@ -118,6 +119,7 @@ fun LevelScreen(
 
     var showQuickShop by remember { mutableStateOf(false) }
     var isAiming by remember { mutableStateOf(false) }
+    var showRankInfo by remember { mutableStateOf(false) }
 
     var shopRect by remember { mutableStateOf<Rect?>(null) }
     var cannonRect by remember { mutableStateOf<Rect?>(null) }
@@ -649,6 +651,26 @@ fun LevelScreen(
                     duelViewModel?.showRankAnimation = false
                 }
             )
+        }
+
+        // ✅ UX: Conteo Regresivo Visual
+        val countdown = duelViewModel?.countdownValue ?: 0
+        if (countdown > 0 && gameState == GameState.IDLE && !isShowingVS) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (countdown == 0) "¡YA!" else "$countdown",
+                    style = TextStyle(
+                        fontSize = 120.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        shadow = Shadow(Color.Black, blurRadius = 20f)
+                    ),
+                    modifier = Modifier.animateContentSize()
+                )
+            }
         }
     }
 }
@@ -1413,9 +1435,9 @@ fun OverlayMenu(
 
                 if (onNextLevel != null) {
                     ReferenceButton(
-                        text = stringResource(id = R.string.game_next_level), 
-                        backgroundColor = SageGreen, 
-                        contentColor = Color.White, 
+                        text = stringResource(id = R.string.game_next_level),
+                        backgroundColor = SageGreen,
+                        contentColor = Color.White,
                         modifier = Modifier.graphicsLayer { scaleX = pulseScale; scaleY = pulseScale },
                         onClick = onNextLevel
                     )
@@ -1531,7 +1553,7 @@ fun PlayerMiniProfile(name: String, avatar: String?, isLeft: Boolean, isWinner: 
                 modifier = Modifier.weight(1f).padding(end = 8.dp)
             )
         }
-        
+
         Box(contentAlignment = Alignment.Center) {
             AsyncImage(
                 model = avatar,
@@ -1639,5 +1661,75 @@ fun FireballRenderer(modifier: Modifier = Modifier) {
         )
         drawCircle(brush = Brush.radialGradient(colors = listOf(Color(0xFFFF5722).copy(alpha = 0.6f), Color.Transparent), center = center, radius = r * 1.5f * pulse))
         drawCircle(brush = Brush.radialGradient(colorStops = arrayOf(0.0f to Color.White, 0.4f to Color(0xFFFFEB3B), 1.0f to Color(0xFFFF5722)), center = center, radius = r * 0.9f))
+    }
+}
+
+@Composable
+fun RankInfoDialog(onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = Color.White,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "SISTEMA DE RANGOS",
+                    style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = NavyDark, letterSpacing = 1.sp)
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Rank.entries.forEach { rank ->
+                        RankInfoRow(rank)
+                    }
+                }
+
+                Spacer(Modifier.height(32.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("ENTENDIDO", fontWeight = FontWeight.Black)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RankInfoRow(rank: Rank) {
+    val eloRange = when(rank) {
+        Rank.BRONZE -> "0 - 1199"
+        Rank.SILVER -> "1200 - 1499"
+        Rank.GOLD -> "1500 - 1799"
+        Rank.PLATINUM -> "1800 - 2099"
+        Rank.DIAMOND -> "2100 - 2399"
+        Rank.MASTER -> "2400+"
+    }
+
+    Surface(
+        color = rank.color.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, rank.color.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(rank.medalName, fontSize = 24.sp)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(text = rank.title, color = rank.color, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                Text(text = "Rating ELO: $eloRange", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
